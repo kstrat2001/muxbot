@@ -19,7 +19,7 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 - **No third-party dependencies.** Apple frameworks only (SwiftUI, SwiftData, FoundationModels, ...).
 - **Swift 6, strict concurrency complete.** UI state types are `@MainActor @Observable`.
 - **Only bots act, and only after Approve.** Work starts in conversation: the one chat bar (`BotBar`) follows navigation and talks to the bot on screen (the lead bot, `LeadBot`, on Home). Handoffs, new bots and, later, dispatch and darkmux config changes are proposed as Approve / Cancel cards. The Fleet tab is read-only: no action buttons, only "Ask <bot> about this".
-- **The lead bot's name is a placeholder** (`LeadBot.name`, currently "Mux"); change it there only.
+- **The lead bot's name is a placeholder** (`LeadBot.name`, currently "Mux Bot"); change it there only.
 - **The app owns its role store.** The UI calls roles **bots** (Mux Bot); code and darkmux call them roles (`MuxRole`). Roles live in the app's SwiftData store (`MuxRole`, `RoleTask`, mutated through `RoleStore`), not as a mirror of darkmux config. First launch seeds Coder, Reviewer, Eval runner and Researcher.
 - **American English** in all copy, comments and docs.
 - No networking or darkmux calls exist yet. Bots answer on device (`BotBrain`: Foundation Models guided generation over the bots and the fleet briefing; `FallbackBrain` keyword matching, labeled in the UI, when the model is unavailable). The fleet is `FleetSnapshot.sample`, labeled as sample data.

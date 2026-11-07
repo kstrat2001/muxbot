@@ -7,7 +7,7 @@ import FoundationModels
 /// The lead bot on Home that orchestrates the others. Placeholder name:
 /// rename it here and only here.
 enum LeadBot {
-    static let name = "Mux"
+    static let name = "Mux Bot"
     static let systemImage = "crown"
     static let persona = "You orchestrate the other bots: hand work to the right bot, set up new bots, and answer questions about the darkmux fleet. Short, confident, friendly."
 }
