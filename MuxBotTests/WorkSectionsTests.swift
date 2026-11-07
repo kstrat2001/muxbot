@@ -38,3 +38,48 @@ struct WorkSectionsTests {
         #expect(WorkSections(runs: []).isEmpty)
     }
 }
+
+struct WorkTimeTextTests {
+    let now = Date(timeIntervalSince1970: 1_794_000_000)   // fixed clock
+
+    @Test func startedIsRelativeToday() {
+        #expect(WorkTime.started(now.addingTimeInterval(-5 * 60), now: now, calendar: .init(identifier: .gregorian)) == "5 min ago")
+        #expect(WorkTime.started(now.addingTimeInterval(-20), now: now, calendar: .init(identifier: .gregorian)) == "just now")
+    }
+
+    @Test func startedOnEarlierDaysShowsTheDate() {
+        let text = WorkTime.started(now.addingTimeInterval(-3 * 86_400), now: now, calendar: .init(identifier: .gregorian))
+        #expect(!text.contains("ago"))
+        #expect(text.count > 5)
+    }
+
+    @Test func durations() {
+        #expect(WorkTime.duration(seconds: 42) == "0:42")
+        #expect(WorkTime.duration(seconds: 3 * 60 + 5) == "3:05")
+        #expect(WorkTime.duration(seconds: 2 * 3600 + 7 * 60) == "2h 7m")
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct WorkSortTests {
+    @Test func statusRankPutsNeedsYouThenRunningThenFinished() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "b", instructions: "", modelName: "")
+        let a = store.proposeRun(task: "a", crew: .coder, on: bot); a.phase = .done
+        let b = store.proposeRun(task: "b", crew: .coder, on: bot); b.phase = .running
+        let c = store.proposeRun(task: "c", crew: .coder, on: bot); c.phase = .result
+        #expect([a, b, c].sorted { $0.statusRank < $1.statusRank }.map(\.task) == ["c", "b", "a"])
+    }
+
+    @Test func approveAndFinishStampTheRunsTimes() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "b", instructions: "", modelName: "")
+        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
+        #expect(run.startedAt == nil)
+        store.apply(.approve, to: run)
+        #expect(run.startedAt != nil)
+        store.apply(.finish(summary: "s"), to: run)
+        #expect(run.finishedAt != nil)
+        #expect(run.durationSeconds != nil)
+    }
+}

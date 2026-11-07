@@ -132,6 +132,8 @@ struct BotStore {
     func apply(_ event: RunEvent, to run: BotRun) -> Bool {
         guard let next = run.phase.next(on: event), let bot = run.bot else { return false }
         let thread = conversation(for: .bot(bot.id))
+        if next == .running { run.startedAt = run.startedAt ?? .now; run.finishedAt = nil }
+        if run.phase == .running && next != .running { run.finishedAt = .now }
         run.phase = next
         switch event {
         case .approve:

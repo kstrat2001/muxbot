@@ -17,11 +17,15 @@ struct WorkView: View {
                 EmptyStateView(systemImage: "checklist", title: "Nothing running",
                                message: "Ask a bot to start something.")
             } else {
+                #if os(macOS)
+                WorkTable(sections: sections)
+                #else
                 List {
                     section(sections.needsYou, kind: .needsYou)
                     section(sections.running, kind: .running)
                     section(sections.finished, kind: .done)
                 }
+                #endif
             }
         }
         .navigationTitle("Work")
@@ -41,6 +45,85 @@ struct WorkView: View {
     }
 }
 
+#if os(macOS)
+/// Mac: a sortable table. Default order: needs you, running, finished,
+/// newest first in each.
+private struct WorkTable: View {
+    let sections: WorkSections
+
+    @Environment(AppRouter.self) private var router
+    @State private var selection: BotRun.ID?
+    @State private var sortOrder: [KeyPathComparator<BotRun>] = [
+        KeyPathComparator(\.statusRank), KeyPathComparator(\.createdAt, order: .reverse),
+    ]
+
+    private var rows: [BotRun] {
+        (sections.needsYou + sections.running + sections.finished).sorted(using: sortOrder)
+    }
+
+    var body: some View {
+        Table(rows, selection: $selection, sortOrder: $sortOrder) {
+            TableColumn("", value: \.statusRank) { run in StatusBadge(kind: WorkRow.kind(of: run)) }
+                .width(28)
+            TableColumn("Task", value: \.task) { run in Text(run.task).lineLimit(1) }
+            TableColumn("Bot", value: \.botName) { run in Text(run.botName) }
+                .width(min: 90, ideal: 130)
+            TableColumn("Role", value: \.crewName) { run in
+                Label(run.crew.name, systemImage: run.crew.systemImage)
+            }
+            .width(min: 90, ideal: 110)
+            TableColumn("Machine") { _ in Text(WorkRow.machine).foregroundStyle(.secondary) }
+                .width(min: 80, ideal: 110)
+            TableColumn("Started", value: \.createdAt) { run in
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(WorkTime.started(run.startedAt ?? run.createdAt, now: context.date))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .help((run.startedAt ?? run.createdAt).formatted(date: .complete, time: .standard))
+            }
+            .width(min: 100, ideal: 130)
+            TableColumn("Duration", value: \.durationSort) { run in
+                if run.phase == .running {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(run.durationSeconds.map(WorkTime.duration) ?? "").monospacedDigit()
+                    }
+                } else {
+                    Text(run.durationSeconds.map(WorkTime.duration) ?? "").monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            .width(min: 60, ideal: 70)
+            TableColumn("") { run in
+                if run.phase == .running { StopButton(run: run) }
+            }
+            .width(28)
+        }
+        .onChange(of: selection) {
+            guard let id = selection, let run = rows.first(where: { $0.id == id }) else { return }
+            router.open(run)
+            selection = nil
+        }
+    }
+}
+
+private struct StopButton: View {
+    let run: BotRun
+    @Environment(\.modelContext) private var context
+    @Environment(BotBrain.self) private var brain
+    @State private var confirm = false
+
+    var body: some View {
+        Button("Stop this run", systemImage: "stop.circle") { confirm = true }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .confirmationDialog("Stop this run?", isPresented: $confirm) {
+                Button("Stop", role: .destructive) { Task { await brain.stop(run, store: BotStore(context: context)) } }
+                Button("Keep running", role: .cancel) {}
+            }
+    }
+}
+#endif
+
 private struct WorkRow: View {
     let run: BotRun
 
@@ -59,7 +142,7 @@ private struct WorkRow: View {
                 HStack(spacing: Spacing.xs) {
                     Text(run.bot?.name ?? "")
                     Text("·")
-                    Text(Self.machine)
+                    Text(WorkTime.started(run.startedAt ?? run.createdAt))
                     if run.phase == .running {
                         Text("·")
                         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -85,7 +168,9 @@ private struct WorkRow: View {
         .contentShape(Rectangle())
     }
 
-    private var kind: StatusKind {
+    private var kind: StatusKind { Self.kind(of: run) }
+
+    static func kind(of run: BotRun) -> StatusKind {
         switch run.phase {
         case .running: .running
         case .proposed, .result, .kept: .needsYou

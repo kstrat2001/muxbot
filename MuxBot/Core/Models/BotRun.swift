@@ -53,6 +53,9 @@ final class BotRun {
     /// The live preview URL, once the run has one.
     var previewURL: String?
     var tweaks: Int = 0
+    /// When you approved it, and when it stopped running.
+    var startedAt: Date?
+    var finishedAt: Date?
     /// Set when the run was sent to darkmux for real (not simulated).
     var darkmuxWorkId: String?
     /// The crew's full report (markdown), shown collapsed.
@@ -67,6 +70,19 @@ final class BotRun {
     var isSimulated: Bool = false
     var createdAt: Date = Date()
     var bot: Bot?
+
+    /// Needs you (0), running (1), finished (2): the Work table's default order.
+    var statusRank: Int { phase.awaitsYou ? 0 : phase.isActive ? 1 : 2 }
+
+    var durationSeconds: Double? {
+        guard let startedAt else { return nil }
+        return (finishedAt ?? Date()).timeIntervalSince(startedAt)
+    }
+
+    /// Sort keys for the Work table (Optional isn't Comparable).
+    var botName: String { bot?.name ?? "" }
+    var crewName: String { crew.name }
+    var durationSort: Double { durationSeconds ?? -1 }
 
     init(task: String, crew: CrewRole) {
         self.task = task
