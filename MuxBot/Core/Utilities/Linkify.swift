@@ -81,6 +81,13 @@ enum Linkify {
             return GitHubRef(repo: repo, number: n, url: url)
         }
 
+        // 0. Links to a run's card: "open card".
+        if let re = try? NSRegularExpression(pattern: #"muxbot://run/[0-9A-Fa-f-]{36}"#) {
+            for m in re.matches(in: text, range: all) {
+                guard let r = Range(m.range, in: text), !inCode(r), let url = URL(string: ns.substring(with: m.range)) else { continue }
+                add(Match(range: r, url: url, label: "open card"))
+            }
+        }
         // 1. URLs (also inside code, where they keep their text).
         if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
             for m in detector.matches(in: text, range: all) {

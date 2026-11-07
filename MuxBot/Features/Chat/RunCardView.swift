@@ -50,6 +50,9 @@ struct RunCardView: View {
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
+                } else if case let .pendingChanges(waitingId)? = brain.runs.blocker(for: run),
+                          let waiting = BotStore(context: context).run(id: waitingId) {
+                    pendingChangesAsk(waiting, before: run)
                 } else if let reason = brain.runs.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
                     HStack {
@@ -93,60 +96,13 @@ struct RunCardView: View {
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
-            RefChips(refs: refs(run))
-            if run.phase == .failed || (run.phase == .canceled && message.content.hasPrefix("darkmux reported")) {
-                Label(run.phase == .failed ? run.summary : "Stopped",
-                      systemImage: run.phase == .failed ? "exclamationmark.triangle" : "stop.circle")
-                    .font(AppFont.body())
-                if let details = run.details, !details.isEmpty {
-                    DisclosureGroup("Details") {
-                        Text(details)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(AppFont.footnote())
-                }
+            if RunCardState.isReplaced(run) {
+                Label("Replaced by the next run", systemImage: "arrow.turn.down.right")
+                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+            } else if run.phase == .result && run.changedFiles.isEmpty {
+                questionCard(run)
             } else {
-                Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
-                if !run.changedFiles.isEmpty {
-                    DisclosureGroup {
-                        DiffView(diff: run.diff ?? "No diff available.")
-                    } label: {
-                        Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
-                            .font(AppFont.footnote(.semibold))
-                    }
-                }
-                if let notes = run.notes {
-                    DisclosureGroup("\(run.crew.name)'s notes") {
-                        Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
-                                           repo: repo(run), linkPaths: true))
-                            .font(AppFont.footnote())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(AppFont.footnote())
-                }
-                if isLatest && run.phase == .result {
-                    HStack {
-                        Button("Discard", systemImage: "trash", role: .destructive) { brain.runs.decide(.discard, on: run, store: store) }
-                            .buttonStyle(.bordered)
-                            .help("Put the changed files back as they were")
-                        Button("Tweak", systemImage: "pencil") {
-                            brain.runs.tweakRunId = run.id
-                            router.barDraft = ""
-                        }
-                        .buttonStyle(.bordered)
-                        Spacer()
-                        if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
-                        Button("Keep", systemImage: "checkmark") { brain.runs.decide(.keep, on: run, store: store) }
-                            .buttonStyle(.borderedProminent)
-                            .help("Commit these changes to the work copy's branch")
-                    }
-                    .disabled(brain.runs.deciding.contains(run.id))
-                } else {
-                    outcome(isLatest && run.phase == .discarded ? .failed : .done)
-                }
+                resultCard(run)
             }
         case .prCard:
             Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
@@ -168,6 +124,128 @@ struct RunCardView: View {
             }
         case .text, .bugCard, .actionCard:
             EmptyView()
+        }
+    }
+
+    /// A finished run: summary, diff, notes, Keep / Tweak / Discard.
+    @ViewBuilder private func resultCard(_ run: BotRun) -> some View {
+        RefChips(refs: refs(run))
+        if run.phase == .failed || (run.phase == .canceled && message.content.hasPrefix("darkmux reported")) {
+            Label(run.phase == .failed ? run.summary : "Stopped",
+                  systemImage: run.phase == .failed ? "exclamationmark.triangle" : "stop.circle")
+                .font(AppFont.body())
+            if let details = run.details, !details.isEmpty {
+                DisclosureGroup("Details") {
+                    Text(details)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(AppFont.footnote())
+            }
+        } else {
+            Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
+            if !run.changedFiles.isEmpty {
+                DisclosureGroup {
+                    DiffView(diff: run.diff ?? "No diff available.")
+                } label: {
+                    Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
+                        .font(AppFont.footnote(.semibold))
+                }
+            }
+            if let notes = run.notes {
+                DisclosureGroup("\(run.crew.name)'s notes") {
+                    Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
+                                       repo: repo(run), linkPaths: true))
+                        .font(AppFont.footnote())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(AppFont.footnote())
+            }
+            if isLatest && run.phase == .result {
+                HStack {
+                    Button("Discard", systemImage: "trash", role: .destructive) { brain.runs.decide(.discard, on: run, store: store) }
+                        .buttonStyle(.bordered)
+                        .help("Put the changed files back as they were")
+                    Button("Tweak", systemImage: "pencil") {
+                        brain.runs.tweakRunId = run.id
+                        router.barDraft = ""
+                    }
+                    .buttonStyle(.bordered)
+                    Spacer()
+                    if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
+                    Button("Keep", systemImage: "checkmark") { brain.runs.decide(.keep, on: run, store: store) }
+                        .buttonStyle(.borderedProminent)
+                        .help("Commit these changes to the work copy's branch")
+                }
+                .disabled(brain.runs.deciding.contains(run.id))
+            } else {
+                outcome(isLatest && run.phase == .discarded ? .failed : .done)
+            }
+        }
+        decisionError(run)
+    }
+
+    /// A finished run that changed nothing (it stopped to ask): its question,
+    /// one-tap answers for numbered options (sent as a Tweak), a free answer,
+    /// and Close. Never Keep or Discard: there's nothing to keep.
+    @ViewBuilder private func questionCard(_ run: BotRun) -> some View {
+        RefChips(refs: refs(run))
+        Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
+            .font(AppFont.headline())
+        if let notes = run.notes {
+            Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
+                               repo: repo(run), linkPaths: true))
+                .font(AppFont.body())
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(message.content).font(AppFont.body())
+        }
+        if isLatest {
+            let options = AgentQuestion.options(in: run.notes ?? "")
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button { brain.runs.tweak("Go with option \(index + 1): \(option)", run: run, store: store) } label: {
+                    Text("\(index + 1). \(option)").frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+            }
+            HStack {
+                Button("Answer…", systemImage: "pencil") {
+                    brain.runs.tweakRunId = run.id
+                    router.barDraft = ""
+                    router.focusBarRequest += 1
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+                Button("Close") { brain.runs.decide(.discard, on: run, store: store) }
+                    .buttonStyle(.bordered)
+                    .help("Nothing changed, so closing undoes nothing")
+            }
+            decisionError(run)
+        }
+    }
+
+    /// Another run's changes still wait in this work copy: decide them first,
+    /// so two runs never share uncommitted files.
+    @ViewBuilder private func pendingChangesAsk(_ waiting: BotRun, before run: BotRun) -> some View {
+        Text("The last run's changes (“\(waiting.task)”) are still waiting. Keep or Discard them first?")
+            .font(AppFont.footnote()).foregroundStyle(.secondary)
+        HStack {
+            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+            Spacer()
+            if brain.runs.deciding.contains(waiting.id) { ProgressView().controlSize(.small) }
+            Button("Discard them", role: .destructive) { brain.runs.decide(.discard, on: waiting, store: store) }.buttonStyle(.bordered)
+            Button("Keep them") { brain.runs.decide(.keep, on: waiting, store: store) }.buttonStyle(.borderedProminent)
+        }
+        .disabled(brain.runs.deciding.contains(waiting.id))
+        decisionError(waiting)
+    }
+
+    @ViewBuilder private func decisionError(_ run: BotRun) -> some View {
+        if let why = brain.runs.decisionErrors[run.id] {
+            Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
         }
     }
 

@@ -148,7 +148,7 @@ struct LeadBotIssueTests {
         #expect(reply.hasSuffix("I'll hand it over."))
     }
 
-    @Test func leadBotAsksWhichRepoWhenItCannotTell() async {
+    @Test func leadBotReadsEveryRepoWhenItCannotTell() async {
         let store = TestStore.fresh()
         let a = store.add(name: "darkmux", instructions: "CLI")
         store.addResource(.repo, "https://github.com/kstrat2001/darkmux", to: a)
@@ -159,7 +159,7 @@ struct LeadBotIssueTests {
         brain.github = MockGitHub()
         await brain.send("zzz bug tickets?", in: .lead, store: store)
         let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant }.last?.content ?? ""
-        #expect(reply.hasPrefix("Which bot's repo should I check?"))
+        #expect(reply.contains("darkmux (kstrat2001/darkmux)") && reply.contains("humancodereader (kstrat2001/hcr)"), "\(reply)")
     }
 }
 

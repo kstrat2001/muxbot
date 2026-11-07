@@ -96,6 +96,7 @@ struct BotStore {
         case let .createBot(draft): "New bot: \(draft.name)"
         case let .dispatch(crew, task): "Dispatch to \(crew.name): \(task)"
         case let .addResource(kind, value): "Add \(kind.label.lowercased()): \(value)"
+        case let .tweak(_, change): "Tweak: \(change)"
         }
     }
 

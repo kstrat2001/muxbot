@@ -18,6 +18,8 @@ final class RunCoordinator {
     var github: any GitHubClient = RESTGitHubClient()
     /// Off in tests: summaries use the plain template.
     var useOnDeviceModel = true
+    /// Whether this device can start runs (the Mac app; tests set it).
+    var deviceRuns = RunBlocker.deviceRuns
 
     /// The run a Tweak is aimed at; the next message in its bot's thread
     /// goes to that run instead of starting a new conversation turn.
@@ -29,6 +31,17 @@ final class RunCoordinator {
         // Nothing fake ever runs: a run that can't go to darkmux isn't started.
         if event == .approve, let reason = whyRunCannotStart(run) {
             if let bot = run.bot { store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id))) }
+            return
+        }
+        // A run that changed nothing: there's nothing to keep, and closing it
+        // needs no darkmux (there's nothing to undo).
+        if event == .keep || event == .discard, run.phase == .result, run.changedFiles.isEmpty {
+            if event == .keep {
+                decisionErrors[run.id] = "Nothing changed, so there's nothing to keep."
+            } else {
+                decisionErrors[run.id] = nil
+                store.apply(.discard, to: run)
+            }
             return
         }
         // Keep and Discard act on the files first; the card moves only when
@@ -43,13 +56,13 @@ final class RunCoordinator {
 
     /// Runs with Keep or Discard in flight (their buttons wait).
     var deciding: Set<UUID> = []
+    /// Why the last Keep or Discard didn't happen, shown on the card.
+    var decisionErrors: [UUID: String] = [:]
 
     private func applyOnDisk(_ event: RunEvent, to run: BotRun, store: BotStore) async {
         guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
               let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
-            if let bot = run.bot, connection?.token == nil {
-                store.append(.system, "Can't do that yet: \(RunBlocker.unpaired.message).", to: store.conversation(for: .bot(bot.id)))
-            }
+            if connection?.token == nil { decisionErrors[run.id] = "Can't do that yet: \(RunBlocker.unpaired.message)." }
             return
         }
         let thread = store.conversation(for: .bot(bot.id))
@@ -65,9 +78,17 @@ final class RunCoordinator {
                 let put = try await connection.client.discardWork(token: token, workId: workId)
                 store.append(.system, RunResultText.discarded(restored: put.restored, removed: put.removed), to: thread)
             }
+            decisionErrors[run.id] = nil
             store.apply(event, to: run)
+        } catch let error as DarkmuxClient.ClientError
+                    where event == .discard && (error.status == 404 || error.message.hasPrefix("already decided")) {
+            // darkmux no longer has this run's changes to put back (it restarted,
+            // or a later run took them over): nothing to undo here, so close it.
+            decisionErrors[run.id] = nil
+            store.append(.system, "Closed. darkmux no longer has this run's changes, so there was nothing to put back.", to: thread)
+            store.apply(.discard, to: run)
         } catch {
-            store.append(.system, "Couldn't \(event == .keep ? "keep" : "discard") it: \(error.localizedDescription)", to: thread)
+            decisionErrors[run.id] = "Couldn't \(event == .keep ? "keep" : "discard") it: \(error.localizedDescription)"
         }
     }
 
@@ -227,7 +248,8 @@ final class RunCoordinator {
     /// What stops a run going to darkmux right now, or nil when it can.
     func blocker(for run: BotRun) -> RunBlocker? {
         guard let bot = run.bot else { return .noCode }
-        return RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot)
+        return RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot,
+                                deviceRuns: deviceRuns, excluding: run.id)
     }
 
     /// Why a run can't go to darkmux right now, or nil when it can.
@@ -373,7 +395,7 @@ final class RunCoordinator {
     /// Sends the run to darkmux when this app is paired, the crew role maps
     /// to a darkmux role, and the bot has a workspace on this Mac.
     /// Returns false otherwise.
-    private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
+    private func startRealRun(_ run: BotRun, message: String, store: BotStore, continues: String? = nil) -> Bool {
         guard let connection, let token = connection.token,
               let role = run.crew.darkmuxRole, let bot = run.bot,
               let workspace = bot.workspaceName else { return false }
@@ -384,7 +406,7 @@ final class RunCoordinator {
                 // the default) and checks it against what the owner granted.
                 let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
                                                                                message: Self.workBrief(message, recipe: recipes.recipe(for: bot)),
-                                                                               profile: nil, workspace: workspace)
+                                                                               profile: nil, workspace: workspace, continues: continues)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, token: token, client: connection.client, store: store)
@@ -396,17 +418,19 @@ final class RunCoordinator {
     }
 
     /// Sends a follow-up to the same run (and, once wired, the same worktree).
-    func tweak(_ request: String, run: BotRun, store: BotStore) {
+    func tweak(_ request: String, run: BotRun, store: BotStore, echo: Bool = true) {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let bot = run.bot else { return }
-        store.append(.user, text, to: store.conversation(for: .bot(bot.id)))
+        if echo { store.append(.user, text, to: store.conversation(for: .bot(bot.id))) }
         tweakRunId = nil
         if let reason = whyRunCannotStart(run) {
             store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id)))
             return
         }
         guard store.apply(.tweak, to: run) else { return }
-        _ = startRealRun(run, message: Self.tweakMessage(for: run, change: text), store: store)
+        // darkmux keeps a Tweak's changes together with the run it continues.
+        let continues = run.darkmuxWorkId
+        _ = startRealRun(run, message: Self.tweakMessage(for: run, change: text), store: store, continues: continues)
     }
 
 
