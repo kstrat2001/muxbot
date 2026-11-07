@@ -32,6 +32,7 @@ struct MuxBotApp: App {
                 .task {
                     brain.pageInspector = preview
                     brain.connection = connection
+                    brain.resumeFollowing(store: BotStore(context: container.mainContext))
                     BackgroundTaskService.scheduleRefresh()
                 }
         }

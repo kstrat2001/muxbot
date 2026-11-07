@@ -81,6 +81,10 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(Reply.self, from: data).recipe
     }
 
+    func cancelWork(token: String, workId: String) async throws {
+        _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
+    }
+
     func workStatus(token: String, workId: String) async throws -> WorkStatus {
         let data = try await send("GET", "/client/work/\(workId)", headers: ["Authorization": "Bearer \(token)"])
         return try JSONDecoder().decode(WorkStatus.self, from: data)

@@ -13,6 +13,7 @@ struct RunCardView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Query private var runs: [BotRun]
+    @State private var confirmStop = false
 
     init(message: ChatMessage, isLatest: Bool) {
         self.message = message
@@ -64,10 +65,20 @@ struct RunCardView: View {
             }
         case .runCard:
             HStack(spacing: Spacing.sm) {
-                StatusBadge(kind: isLatest && run.phase == .running ? .running : .done)
+                StatusBadge(kind: isLatest && run.phase == .running ? .running : run.phase == .canceled ? .failed : .done)
                 Label(run.crew.name, systemImage: run.crew.systemImage).font(AppFont.headline())
                 if run.isSimulated { SimulationBadge() }
                 Spacer()
+                if isLatest && run.phase == .running {
+                    Button("Stop this run", systemImage: "stop.circle") { confirmStop = true }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Stop this run")
+                        .confirmationDialog("Stop this run?", isPresented: $confirmStop) {
+                            Button("Stop", role: .destructive) { Task { await brain.stop(run, store: store) } }
+                            Button("Keep running", role: .cancel) {}
+                        }
+                }
                 if run.previewURL.flatMap(URL.init(string:)) != nil {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
                 } else {

@@ -121,3 +121,23 @@ struct RunLoopStoreTests {
     }
 
 }
+
+@Suite(.serialized) @MainActor
+struct StopRunTests {
+    @Test func stoppingARunningRunCancelsItAndSaysSo() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
+        store.apply(.approve, to: run)
+        await BotBrain().stop(run, store: store)
+        #expect(run.phase == .canceled)
+        #expect(bot.state == .ready)
+        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content == "Stopped." })
+    }
+
+    @Test func stopOnlyAppliesToRunningRuns() {
+        #expect(RunPhase.running.next(on: .stop) == .canceled)
+        #expect(RunPhase.result.next(on: .stop) == nil)
+        #expect(RunPhase.proposed.next(on: .stop) == nil)
+    }
+}

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -625,6 +626,48 @@ final class BotBrain {
             """
     }
 
+    /// Polls a darkmux run until it ends, then posts its result (or notes
+    /// that it was stopped).
+    private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
+        while run.phase == .running, run.darkmuxWorkId == workId {
+            try? await Task.sleep(for: .seconds(3))
+            guard let status = try? await client.workStatus(token: token, workId: workId) else { continue }
+            switch status.status {
+            case "running": continue
+            case "cancelled": store.apply(.stop, to: run); return
+            case "done": store.apply(.finish(summary: String((status.finalAssistant ?? "\(run.crew.name) finished.").prefix(800))), to: run); return
+            default: store.apply(.finish(summary: "darkmux reported an error: \(status.error ?? "unknown")"), to: run); return
+            }
+        }
+    }
+
+    /// After a relaunch, pick up runs that were still going on darkmux.
+    func resumeFollowing(store: BotStore) {
+        guard let connection, let token = connection.token else { return }
+        let runs = (try? store.context.fetch(FetchDescriptor<BotRun>())) ?? []
+        for run in runs where run.phase == .running {
+            guard let workId = run.darkmuxWorkId else { continue }
+            Task { await follow(run, workId: workId, token: token, client: connection.client, store: store) }
+        }
+    }
+
+    /// Stops a running run: darkmux cancels it (TERM, then KILL, and its
+    /// container); the card shows it stopped.
+    func stop(_ run: BotRun, store: BotStore) async {
+        guard run.phase == .running else { return }
+        if let workId = run.darkmuxWorkId, let connection, let token = connection.token {
+            do {
+                try await connection.client.cancelWork(token: token, workId: workId)
+            } catch {
+                if let bot = run.bot {
+                    store.append(.system, "Couldn't stop it on darkmux: \(error.localizedDescription)", to: store.conversation(for: .bot(bot.id)))
+                }
+                return
+            }
+        }
+        store.apply(.stop, to: run)
+    }
+
     /// Why a run can't go to darkmux right now, or nil when it can.
     func whyRunCannotStart(_ run: BotRun) -> String? {
         guard connection?.isPaired == true, connection?.token != nil else { return "this app isn't paired with darkmux" }
@@ -651,16 +694,7 @@ final class BotBrain {
                                                                                profile: nil, workdir: workdir)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
-                while true {
-                    try await Task.sleep(for: .seconds(3))
-                    let status = try await connection.client.workStatus(token: token, workId: workId)
-                    if status.status == "running" { continue }
-                    let summary = status.status == "done"
-                        ? String((status.finalAssistant ?? "\(run.crew.name) finished.").prefix(800))
-                        : "darkmux reported an error: \(status.error ?? "unknown")"
-                    store.apply(.finish(summary: summary), to: run)
-                    return
-                }
+                await follow(run, workId: workId, token: token, client: connection.client, store: store)
             } catch {
                 store.apply(.finish(summary: "Couldn't run on darkmux: \(error.localizedDescription)"), to: run)
             }

@@ -144,6 +144,8 @@ struct BotStore {
             append(.system, "Tweak \(run.tweaks) sent to \(run.crew.name).", kind: .runCard, runId: run.id, to: thread)
         case .keep:
             append(.assistant, "Kept. Open a pull request for it?", kind: .prCard, runId: run.id, to: thread)
+        case .stop:
+            append(.system, "Stopped.", to: thread)
         case .cancel, .discard, .openPR, .skipPR, .closeSimulation:
             try? context.save()
         }

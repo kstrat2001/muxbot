@@ -14,7 +14,7 @@ enum RunPhase: String, Codable, Sendable {
 }
 
 enum RunEvent: Equatable, Sendable {
-    case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR, closeSimulation
+    case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR, closeSimulation, stop
 }
 
 extension RunPhase {
@@ -30,6 +30,7 @@ extension RunPhase {
         case (.kept, .openPR): .prOpened
         case (.kept, .skipPR): .done
         case (.result, .closeSimulation): .done
+        case (.running, .stop): .canceled
         default: nil
         }
     }
