@@ -71,6 +71,34 @@ struct SchemaMigrationTests {
         _ = try SharedModelContainer.open(storeURL: url, local: local, cloudSync: false)
     }
 
+    @Test func aV2StoreOpensAsV3AndBotsKeepASuggestedLook() throws {
+        let dir = tempDir()
+        let url = dir.appendingPathComponent("MuxBot.store")
+        let schema = Schema(versionedSchema: SchemaV2.self)
+        let v2 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let writer = ModelContext(v2)
+        let old = SchemaV2.Bot(name: "darkmux", instructions: "CLI")
+        writer.insert(old)
+        try writer.save()
+        let id = old.id
+
+        let container = try SharedModelContainer.open(storeURL: url, local: LocalBotState(fileURL: dir.appendingPathComponent("local.json")), cloudSync: false)
+        let bot = try #require(try ModelContext(container).fetch(FetchDescriptor<Bot>()).first { $0.id == id })
+        #expect(bot.avatarAnimal.isEmpty && bot.bodyColorHex.isEmpty && bot.eyeColorHex.isEmpty)
+        #expect(bot.look == BotLook.suggested(for: "darkmux"))
+        #expect(bot.look.animal == .raccoon)
+    }
+
+    @Test func renamingKeepsTheLookAndPickedLooksStick() {
+        let bot = Bot(name: "humancodereader", instructions: "")
+        let suggested = bot.look
+        bot.look = suggested
+        bot.name = "hcr"
+        #expect(bot.look == suggested)
+        bot.look = BotLook(animal: .dog, bodyHex: "3d9a4a", eyeHex: "ffc23d")
+        #expect(bot.look.animal == .dog && bot.look.eyeHex == "ffc23d")
+    }
+
     @Test func localStatePersistsPerMachineNotInTheSyncedStore() throws {
         let file = tempDir().appendingPathComponent("local.json")
         let id = UUID()
@@ -108,14 +136,14 @@ struct SchemaMigrationTests {
     @Test func theSyncedModelsAreCloudKitSafe() {
         // No unique constraints, every attribute optional or defaulted, every
         // relationship optional: what CloudKit sync requires.
-        for entity in Schema(versionedSchema: SchemaV2.self).entities {
+        for entity in Schema(versionedSchema: SchemaV3.self).entities {
             #expect(entity.uniquenessConstraints.isEmpty, "\(entity.name)")
             for rel in entity.relationships { #expect(rel.isOptional, "\(entity.name).\(rel.name)") }
             for attr in entity.attributes where !attr.isOptional {
                 #expect(attr.defaultValue != nil, "\(entity.name).\(attr.name) needs a default")
             }
         }
-        let bot = Schema(versionedSchema: SchemaV2.self).entities.first { $0.name == "Bot" }
+        let bot = Schema(versionedSchema: SchemaV3.self).entities.first { $0.name == "Bot" }
         let names = Set(bot?.attributes.map(\.name) ?? [])
         #expect(names.isDisjoint(with: ["workspaceName", "workspaceMachine", "folderBookmark", "folderName", "modelName"]))
     }

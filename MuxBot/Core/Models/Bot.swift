@@ -50,6 +50,11 @@ final class Bot {
     var instructions: String = ""
     var systemImage: String = "sparkles"
     @Attribute(.externalStorage) var avatarImageData: Data?
+    /// The bot's character (`BotLook`): animal, main color and LED eye
+    /// color. Empty means "suggest one from the name" (`Bot.look`).
+    var avatarAnimal: String = ""
+    var bodyColorHex: String = ""
+    var eyeColorHex: String = ""
     var state: BotState = BotState.ready
     var createdAt: Date = Date()
 

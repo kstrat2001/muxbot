@@ -7,7 +7,7 @@ import SwiftData
 enum SharedModelContainer {
     static let appGroupIdentifier = "group.com.darklyenergized.darkmuxapp"
 
-    static let schema = Schema(versionedSchema: SchemaV2.self)
+    static let schema = Schema(versionedSchema: SchemaV3.self)
     static let cloudContainer = "iCloud.com.darklyenergized.darkmuxapp"
 
     /// Whether this build syncs through iCloud: `MUXBOT_CLOUD_SYNC = YES` in

@@ -113,7 +113,7 @@ struct RoleTile: View {
     }
 }
 
-/// The role's avatar image if it has one, else its SF Symbol.
+/// The bot's photo if it has one, else its animal character.
 struct RoleAvatar: View {
     let role: Bot
     let tint: Color
@@ -125,10 +125,7 @@ struct RoleAvatar: View {
                     .frame(width: 32, height: 32)
                     .clipShape(Circle())
             } else {
-                Image(systemName: role.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(tint)
-                    .symbolEffect(.pulse, isActive: role.state == .working)
+                BotAvatarView(look: role.look, mood: AvatarMood(role.state), size: 36)
             }
         }
         .accessibilityHidden(true)
@@ -156,10 +153,7 @@ struct LeadBotCard: View {
     var body: some View {
         CardView {
             HStack(alignment: .top, spacing: Spacing.md) {
-                Image(systemName: LeadBot.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(Color.brandGreen)
-                    .accessibilityHidden(true)
+                BotAvatarView(look: .lead, size: 44)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(LeadBot.name).font(AppFont.headline())
                     Text(latest)

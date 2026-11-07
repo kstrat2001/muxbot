@@ -17,11 +17,34 @@ struct BotInfoView: View {
     @State private var folderProblem: String?
     @State private var branch: String?
 
+    /// Renaming keeps the bot's look: a look still suggested from the old
+    /// name is saved first, so the animal doesn't change with the name.
+    private var nameBinding: Binding<String> {
+        Binding(get: { bot.name }, set: { newName in
+            let look = bot.look
+            bot.name = newName
+            bot.look = look
+            try? context.save()
+        })
+    }
+
+    private var aboutBinding: Binding<String> {
+        Binding(get: { bot.instructions }, set: { bot.instructions = $0; try? context.save() })
+    }
+
     var body: some View {
         Form {
             Section("About") {
-                Label(bot.name, systemImage: bot.systemImage).font(AppFont.headline())
-                Text(bot.instructions).foregroundStyle(.secondary)
+                HStack(spacing: Spacing.md) {
+                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44)
+                    TextField("Name", text: nameBinding).font(AppFont.headline())
+                }
+                TextField("What this bot is about", text: aboutBinding, axis: .vertical)
+                    .lineLimit(2...6)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Look") {
+                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
             }
             workCopySection
             Section("Resources") {
