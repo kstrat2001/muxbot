@@ -11,6 +11,7 @@ struct BotThreadView: View {
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
     @State private var showInfo = false
+    @State private var chatWidth: CGFloat = 440
 
     init(context: ChatContext) {
         self.context = context
@@ -45,30 +46,31 @@ struct BotThreadView: View {
     var body: some View {
         Group {
             if let url = previewURL, router.showPreview {
+                // One layout per size class whose structure never changes:
+                // the preview stays at the same place in the tree, so its
+                // web view is never rebuilt. (Swapping layouts made SwiftUI
+                // build a second WebView for the same WebPage, which traps.)
+                let full = router.previewFullScreen
                 let panel = PreviewPanel(url: url, recipeViewports: recipeViewports) {
                     router.showPreview = false
                     router.previewFullScreen = false
                 }
-                if router.previewFullScreen {
-                    panel.safeAreaInset(edge: .bottom) { BotBar() }
-                } else if isWide {
-                    #if os(macOS)
-                    HSplitView {
-                        chat.frame(minWidth: 320, idealWidth: 480)
-                        panel.frame(minWidth: 360, maxWidth: .infinity)
-                    }
-                    #else
+                .safeAreaInset(edge: .bottom) { if full { BotBar() } }
+                if isWide {
                     HStack(spacing: 0) {
-                        chat.frame(minWidth: 320)
-                        Divider()
+                        if !full {
+                            chat.frame(width: chatWidth)
+                            SplitHandle(width: $chatWidth)
+                        }
                         panel.frame(minWidth: 360, maxWidth: .infinity)
                     }
-                    #endif
                 } else {
                     VStack(spacing: 0) {
-                        panel.frame(height: 340)
-                        Divider()
-                        chat
+                        panel.frame(maxHeight: full ? .infinity : 340)
+                        if !full {
+                            Divider()
+                            chat
+                        }
                     }
                 }
             } else {
@@ -95,6 +97,18 @@ struct BotThreadView: View {
         }
         .onAppear { markRead() }
         .onChange(of: conversations.first?.messages?.count) { markRead() }
+        #if DEBUG
+        .task {
+            // `-toggleFullWindowAfter 2`: flip the preview's full-window mode
+            // twice, for reproducing layout switches without clicking.
+            let delay = UserDefaults.standard.double(forKey: "toggleFullWindowAfter")
+            guard delay > 0 else { return }
+            for _ in 0..<2 {
+                try? await Task.sleep(for: .seconds(delay))
+                router.previewFullScreen.toggle()
+            }
+        }
+        #endif
         .task {
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
@@ -136,5 +150,30 @@ struct BotThreadView: View {
         let hello = bot.map { "Hi, I'm \($0.name). \($0.instructions)" }
             ?? "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it."
         store.append(.assistant, hello, to: conversation)
+    }
+}
+
+/// The draggable divider between the chat and the preview.
+struct SplitHandle: View {
+    @Binding var width: CGFloat
+    @State private var start: CGFloat?
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.25))
+            .frame(width: 1)
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
+            #if os(macOS)
+            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+            #endif
+            .gesture(DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    let base = start ?? width
+                    start = base
+                    width = min(max(base + value.translation.width, 280), 900)
+                }
+                .onEnded { _ in start = nil })
+            .accessibilityLabel("Resize chat and preview")
     }
 }
