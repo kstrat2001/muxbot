@@ -10,6 +10,7 @@ struct BugCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @Environment(PreviewController.self) private var preview
+    @Environment(FleetConnection.self) private var connection
 
     private var draft: BugDraft? {
         try? JSONDecoder().decode(BugDraft.self, from: Data(message.content.utf8))
@@ -31,7 +32,7 @@ struct BugCardView: View {
                         Button("Fix it now", systemImage: "hammer") { fix(draft) }
                             .buttonStyle(.borderedProminent)
                     }
-                    Text("Fixes run as a simulation until the fleet is connected.")
+                    Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Fixes run as a simulation until you pair with darkmux.")
                         .font(AppFont.caption()).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

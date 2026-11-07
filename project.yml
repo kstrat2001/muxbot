@@ -41,9 +41,12 @@ targets:
         # Temporary live-preview server for the humancodereader seed bot;
         # set MUXBOT_TEST_PREVIEW_URL in the gitignored Config/Local.xcconfig.
         MuxBotTestPreviewURL: $(MUXBOT_TEST_PREVIEW_URL)
+        MuxBotTestWorkdir: $(MUXBOT_TEST_WORKDIR)
         # Tailnet previews are plain http until tailnet HTTPS certificates
         # are enabled; allow it for *.ts.net only.
         NSAppTransportSecurity:
+          # darkmux's local client endpoint on this Mac (127.0.0.1).
+          NSAllowsLocalNetworking: true
           NSExceptionDomains:
             ts.net:
               NSIncludesSubdomains: true

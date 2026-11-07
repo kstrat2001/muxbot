@@ -47,6 +47,8 @@ final class BotRun {
     /// The live preview URL, once the run has one.
     var previewURL: String?
     var tweaks: Int = 0
+    /// Set when the run was sent to darkmux for real (not simulated).
+    var darkmuxWorkId: String?
     var createdAt: Date = Date()
     var bot: Bot?
 

@@ -6,6 +6,7 @@ struct MuxBotApp: App {
     @State private var router = AppRouter()
     @State private var brain = BotBrain()
     @State private var preview = PreviewController()
+    @State private var connection = FleetConnection()
     @State private var notifications = NotificationService()
 
     private let container: ModelContainer
@@ -26,9 +27,11 @@ struct MuxBotApp: App {
                 .environment(router)
                 .environment(brain)
                 .environment(preview)
+                .environment(connection)
                 .environment(notifications)
                 .task {
                     brain.pageInspector = preview
+                    brain.connection = connection
                     BackgroundTaskService.scheduleRefresh()
                 }
         }

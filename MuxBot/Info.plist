@@ -30,8 +30,12 @@
 	<string>public.app-category.developer-tools</string>
 	<key>MuxBotTestPreviewURL</key>
 	<string>$(MUXBOT_TEST_PREVIEW_URL)</string>
+	<key>MuxBotTestWorkdir</key>
+	<string>$(MUXBOT_TEST_WORKDIR)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
 			<key>ts.net</key>

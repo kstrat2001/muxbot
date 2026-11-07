@@ -60,7 +60,18 @@ struct BotStore {
         try? context.save()
     }
 
+    /// A darkmux work folder for the humancodereader seed, from
+    /// `MUXBOT_TEST_WORKDIR` in Config/Local.xcconfig (under ~/.darkmux/worktrees).
+    nonisolated static var testWorkdir: String? {
+        let value = Bundle.main.object(forInfoDictionaryKey: "MuxBotTestWorkdir") as? String
+        return value?.contains("/.darkmux/worktrees/") == true ? value : nil
+    }
+
     private func addTestPreviewURL() {
+        if let dir = Self.testWorkdir, let bot = allBots().first(where: { $0.name == "humancodereader" }),
+           !bot.sortedResources.contains(where: { $0.value == dir }) {
+            addResource(.folder, dir, to: bot)
+        }
         guard let url = Self.testPreviewURL,
               let bot = allBots().first(where: { $0.name == "humancodereader" }),
               !bot.sortedResources.contains(where: { $0.kind == .previewURL }) else { return }

@@ -26,6 +26,9 @@ struct ContentView: View {
         .sheet(isPresented: $router.showNewBot) {
             NavigationStack { NewBotView() }
         }
+        .sheet(isPresented: $router.showPairing) {
+            NavigationStack { FleetPairingView() }
+        }
     }
 
     #if DEBUG

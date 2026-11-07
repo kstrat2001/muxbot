@@ -278,6 +278,9 @@ final class BotBrain {
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true
     var github: any GitHubClient = RESTGitHubClient()
+    /// The pairing with darkmux on this Mac; when paired, approved runs go
+    /// to darkmux for real instead of being simulated.
+    weak var connection: FleetConnection?
     /// Reads facts and snapshots from the live preview, when one is open.
     weak var pageInspector: (any PageInspecting)?
     /// Threads already told that the on-device model isn't working here.
@@ -509,7 +512,38 @@ final class BotBrain {
     /// Open PR, Not now. Approve starts the (simulated) run.
     func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
         guard store.apply(event, to: run) else { return }
-        if event == .approve { simulateFinish(run, store: store) }
+        if event == .approve, !startRealRun(run, message: run.task, store: store) { simulateFinish(run, store: store) }
+    }
+
+    /// Sends the run to darkmux when this app is paired, the crew role maps
+    /// to a darkmux role, and the bot has a folder under ~/.darkmux/worktrees.
+    /// Returns false (so the run is simulated) otherwise.
+    private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
+        guard let connection, let token = connection.token, let profile = connection.profile,
+              let role = run.crew.darkmuxRole, let bot = run.bot,
+              let workdir = FleetConnection.workdir(for: bot) else { return false }
+        let thread = store.conversation(for: .bot(bot.id))
+        Task { @MainActor in
+            do {
+                let workId = try await connection.client.submitWork(token: token, role: role, message: message,
+                                                                    profile: profile, workdir: workdir)
+                run.darkmuxWorkId = workId
+                store.append(.system, "Running on darkmux: \(role) on \(profile).", to: thread)
+                while true {
+                    try await Task.sleep(for: .seconds(3))
+                    let status = try await connection.client.workStatus(token: token, workId: workId)
+                    if status.status == "running" { continue }
+                    let summary = status.status == "done"
+                        ? String((status.finalAssistant ?? "\(run.crew.name) finished.").prefix(800))
+                        : "darkmux reported an error: \(status.error ?? "unknown")"
+                    store.apply(.finish(summary: summary), to: run)
+                    return
+                }
+            } catch {
+                store.apply(.finish(summary: "Couldn't run on darkmux: \(error.localizedDescription)"), to: run)
+            }
+        }
+        return true
     }
 
     /// Sends a follow-up to the same run (and, once wired, the same worktree).
@@ -519,7 +553,8 @@ final class BotBrain {
         store.append(.user, text, to: store.conversation(for: .bot(bot.id)))
         tweakRunId = nil
         guard store.apply(.tweak, to: run) else { return }
-        simulateFinish(run, store: store)
+        let followUp = "Follow-up on: \(run.task)\nChange: \(text)"
+        if !startRealRun(run, message: followUp, store: store) { simulateFinish(run, store: store) }
     }
 
     private func simulateFinish(_ run: BotRun, store: BotStore) {

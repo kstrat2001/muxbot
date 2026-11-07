@@ -5,6 +5,7 @@ import SwiftData
 /// Working / Ready from stored state. The bar at the bottom talks to the lead bot.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(FleetConnection.self) private var connection
     @Query(sort: \Bot.createdAt) private var roles: [Bot]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
@@ -49,7 +50,9 @@ struct HomeView: View {
         .navigationTitle("Your bots")
         .safeAreaInset(edge: .bottom) { BotBar() }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("darkmux", systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
+                    .help(connection.isPaired ? "Paired with darkmux" : "Pair with darkmux")
                 Button("New bot", systemImage: "plus") { router.showNewBot = true }
             }
         }

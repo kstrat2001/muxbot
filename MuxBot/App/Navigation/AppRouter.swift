@@ -9,6 +9,7 @@ final class AppRouter {
     var tab: AppTab = .bots
     var path: [Route] = []
     var showNewBot = false
+    var showPairing = false
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".
     var barDraft = ""
     /// The live preview panel beside (or above) the thread on screen.

@@ -5,3 +5,5 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 // (for example a dev server behind `tailscale serve`). xcconfig treats "//"
 // as a comment, so write the scheme as http:/$()/ .
 // MUXBOT_TEST_PREVIEW_URL = http:/$()/your-mac.your-tailnet.ts.net:8445/
+// Optional: the darkmux work folder for that bot (must be under ~/.darkmux/worktrees).
+// MUXBOT_TEST_WORKDIR = ~/.darkmux/worktrees/hcr-preview
