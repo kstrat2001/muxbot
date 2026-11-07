@@ -356,3 +356,39 @@ struct MeasuredBriefLeadTests {
         #expect(!text.contains("Start here"))
     }
 }
+
+
+/// With a switching CSS rule found, the stylesheet is the file to check
+/// first; the recipe's page file is only "Also look at" (the 5-minute
+/// replay of #10 still read home.tsx twice because it was listed first).
+@Suite(.serialized) @MainActor
+struct LikelyFileOrderTests {
+    private func brief(_ facts: [Int: LayoutFacts]) async throws -> String {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe(facts)
+        brain.runs.recipes.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        return try #require(bot.runs?.first?.brief)
+    }
+
+    @Test func aSwitchingRuleMakesTheStylesheetTheLikelyFile() async throws {
+        let lines = try await brief([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)]).components(separatedBy: "\n")
+        let likely = try #require(lines.firstIndex(of: "Likely file: inertia/css/app.css (check it first)"), "\(lines)")
+        let also = try #require(lines.firstIndex(of: "Also look at: inertia/pages/home.tsx"))
+        #expect(likely < also)
+        #expect(!lines.contains { $0.hasPrefix("Likely file: inertia/pages/home.tsx") })
+        #expect(!lines.contains { $0.hasPrefix("Also likely:") })
+    }
+
+    @Test func withoutASwitchThePageFileStaysFirst() async throws {
+        let text = try await brief([820: overflowingAt820(), 1440: fitsAt(1440)])
+        #expect(text.contains("Likely file: inertia/pages/home.tsx (check it first)"), "\(text)")
+        #expect(text.contains("Also likely: inertia/css/app.css (its @media rules)"))
+    }
+}

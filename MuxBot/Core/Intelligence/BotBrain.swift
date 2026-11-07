@@ -738,7 +738,17 @@ final class BotBrain {
         var lines = brief.components(separatedBy: "\n")
         var insert = [LayoutMeasure.block(m)]
         if let file = m.likelyFile {
-            insert.append(lines.contains { $0.hasPrefix("Likely file:") } ? "Also likely: \(file) (its @media rules)" : "Likely file: \(file) (its @media rules)")
+            if m.switchLead != nil, let i = lines.firstIndex(where: { $0.hasPrefix("Likely file:") }) {
+                // The switching rule is in the stylesheet: check that first;
+                // the page component is only somewhere else to look.
+                let page = lines[i].dropFirst("Likely file: ".count).replacingOccurrences(of: " (check it first)", with: "")
+                lines[i] = "Likely file: \(file) (check it first)"
+                insert.append("Also look at: \(page)")
+            } else if m.switchLead != nil {
+                insert.append("Likely file: \(file) (check it first)")
+            } else {
+                insert.append(lines.contains { $0.hasPrefix("Likely file:") } ? "Also likely: \(file) (its @media rules)" : "Likely file: \(file) (its @media rules)")
+            }
         }
         let at = lines.firstIndex { $0.hasPrefix("Expected:") } ?? lines.endIndex
         lines.insert(contentsOf: insert, at: at)
