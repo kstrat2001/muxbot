@@ -154,8 +154,12 @@ struct RunCardView: View {
                     Spacer()
                     Button("Pass to \(LeadBot.name)") { brain.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
                 }
+            case .prOpened:
+                // Older builds showed a placeholder here; nothing was opened.
+                Text("No pull request was opened. Earlier versions showed a placeholder here.")
+                    .font(AppFont.footnote()).foregroundStyle(.secondary)
             default:
-                outcome(.done)
+                Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)
             }
         case .text, .bugCard:
             EmptyView()
