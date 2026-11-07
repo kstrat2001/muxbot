@@ -472,14 +472,18 @@ struct AvatarPainter {
 /// Choose a bot's animal, main color and eye color, with a live preview.
 struct BotLookPicker: View {
     @Binding var look: BotLook
+    /// Off when the screen shows its own big preview (New bot).
+    var showsPreview = true
     private let columns = [GridItem(.adaptive(minimum: 52), spacing: Spacing.sm)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack {
-                Spacer()
-                BotAvatarView(look: look, mood: .idle, size: 120)
-                Spacer()
+            if showsPreview {
+                HStack {
+                    Spacer()
+                    BotAvatarView(look: look, mood: .idle, size: 120)
+                    Spacer()
+                }
             }
             LazyVGrid(columns: columns, spacing: Spacing.sm) {
                 ForEach(BotAnimal.allCases) { animal in
