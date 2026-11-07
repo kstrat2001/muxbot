@@ -18,6 +18,9 @@ struct FleetPairingView: View {
             case .unpaired, .failed:
                 #if os(iOS)
                 Section {
+                    NavigationLink { GitHubSignInView() } label: { Label("GitHub sign-in", systemImage: "person.badge.key") }
+                }
+                Section {
                     Label("On iPhone and iPad, runs start from the Mac app for now.", systemImage: "laptopcomputer")
                     Text("Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later.")
                         .foregroundStyle(.secondary)

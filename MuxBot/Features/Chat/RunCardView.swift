@@ -104,6 +104,9 @@ struct RunCardView: View {
             } else {
                 resultCard(run)
             }
+        case .prCard where message.content.hasPrefix("Opened PR"):
+            Label("Pull request opened", systemImage: "arrow.triangle.pull").font(AppFont.headline())
+            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.body())
         case .prCard:
             Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
             RefChips(refs: refs(run))
@@ -147,9 +150,16 @@ struct RunCardView: View {
             // The bot's reply: what changed, in plain words. darkmux already
             // committed it to the bot's branch.
             Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
-            if let bot = run.bot, brain.runs.canPreview(bot) {
-                Button("See it in the preview", systemImage: "play.rectangle") { router.showPreview = true }
-                    .buttonStyle(.borderless)
+            HStack(spacing: Spacing.md) {
+                if let bot = run.bot, brain.runs.canPreview(bot) {
+                    Button("See it in the preview", systemImage: "play.rectangle") { router.showPreview = true }
+                        .buttonStyle(.borderless)
+                }
+                // The PR this run went into, once one is open.
+                if let pr = prURL(after: run) {
+                    Link(destination: pr) { Label("PR #\(pr.lastPathComponent)", systemImage: "arrow.triangle.pull") }
+                        .buttonStyle(.borderless)
+                }
             }
             DisclosureGroup("Details") {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -222,6 +232,13 @@ struct RunCardView: View {
     }
 
     private var store: BotStore { BotStore(context: context) }
+
+    /// A PR opened in this thread after the run finished (so it carries it).
+    private func prURL(after run: BotRun) -> URL? {
+        let done = run.finishedAt ?? run.createdAt
+        let later = (message.conversation?.messages ?? []).filter { $0.kind == .prCard && $0.timestamp >= done }
+        return PRLinks.latest(in: later)
+    }
 
     /// The bot has code but no work copy on this Mac: offer to set one up
     /// (Approve), then the card becomes the usual dispatch card.

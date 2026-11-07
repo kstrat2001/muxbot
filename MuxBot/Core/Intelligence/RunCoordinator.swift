@@ -440,4 +440,57 @@ final class RunCoordinator {
 
 
 
+
+    // MARK: Pull requests
+
+    /// Bots with a PR being opened (their button waits).
+    var openingPR: Set<UUID> = []
+
+    /// The bot's committed runs not yet in a PR from this thread.
+    func unshippedRuns(_ bot: Bot, store: BotStore) -> [BotRun] {
+        let lastPR = (store.conversation(for: .bot(bot.id)).messages ?? [])
+            .filter { $0.kind == .prCard }.map(\.timestamp).max() ?? .distantPast
+        return (bot.runs ?? []).filter { $0.keptCommit != nil && $0.phase == .result && ($0.finishedAt ?? $0.createdAt) > lastPR }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// Open PR shows when you're signed in to GitHub and the bot's branch has
+    /// committed runs that aren't in a PR yet.
+    func canOpenPR(_ bot: Bot, store: BotStore, github: GitHubAuth) -> Bool {
+        github.token != nil && bot.workspaceName != nil && !bot.repoSlugs.isEmpty && !unshippedRuns(bot, store: store).isEmpty
+    }
+
+    /// Opens (or updates) the PR for the bot's branch: darkmux hands over the
+    /// committed changes; the app creates the branch and PR with your GitHub
+    /// sign-in. The link goes in the thread.
+    func openPR(for bot: Bot, store: BotStore, github: GitHubAuth) async {
+        let thread = store.conversation(for: .bot(bot.id))
+        guard let token = github.token else {
+            store.append(.system, "Sign in with GitHub (Settings › GitHub) to open pull requests.", to: thread); return
+        }
+        guard let workspace = bot.workspaceName, let repo = bot.repoSlugs.first, let connection, let darkmux = connection.token else {
+            store.append(.system, "This bot needs a work copy and a GitHub repo to open a pull request.", to: thread); return
+        }
+        openingPR.insert(bot.id)
+        defer { openingPR.remove(bot.id) }
+        do {
+            let changes = try await connection.client.changes(token: darkmux, workspace: workspace)
+            guard !changes.files.isEmpty else {
+                store.append(.system, "Nothing to open a PR with: \(changes.branch) has no changes against \(changes.baseBranch).", to: thread); return
+            }
+            let runs = unshippedRuns(bot, store: store)
+            let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
+            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body)
+            store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
+        } catch GitHubPR.Failure.cantWrite(let repo) {
+            let install = await github.installState(for: repo)
+            if case let .notInstalled(url) = install {
+                store.append(.system, "Install Mux Bot on \(repo) to open pull requests: \(url.absoluteString)", to: thread)
+            } else {
+                store.append(.system, GitHubPR.Failure.cantWrite(repo).localizedDescription, to: thread)
+            }
+        } catch {
+            store.append(.system, "Couldn't open the PR: \(error.localizedDescription)", to: thread)
+        }
+    }
 }

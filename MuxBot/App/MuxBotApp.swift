@@ -9,6 +9,7 @@ struct MuxBotApp: App {
     @State private var connection = FleetConnection()
     @State private var notifications = NotificationService()
     @State private var store = StoreLoader()
+    @State private var github = GitHubAuth()
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -19,6 +20,7 @@ struct MuxBotApp: App {
                     .environment(preview)
                     .environment(connection)
                     .environment(notifications)
+                    .environment(github)
                     .modelContainer(container)
                     .task {
                         brain.pageInspector = preview
@@ -39,6 +41,7 @@ struct MuxBotApp: App {
                 .environment(brain)
                 .environment(connection)
                 .environment(notifications)
+                .environment(github)
         }
 
         MenuBarExtra {

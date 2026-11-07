@@ -186,6 +186,29 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(KeepResult.self, from: data)
     }
 
+    /// What a bot's branch holds that the repo's default branch doesn't
+    /// (committed changes only), for opening a PR with your GitHub sign-in.
+    struct Changes: Decodable, Sendable, Equatable {
+        struct File: Decodable, Sendable, Equatable {
+            var path: String
+            var mode: String?
+            /// Base64 file content; nil when deleted.
+            var content: String?
+            var deleted: Bool?
+        }
+        var base: String
+        var baseBranch: String
+        var head: String
+        var branch: String
+        var files: [File]
+        enum CodingKeys: String, CodingKey { case base, head, branch, files; case baseBranch = "base_branch" }
+    }
+
+    func changes(token: String, workspace: String) async throws -> Changes {
+        let data = try await send("GET", "/client/workspaces/\(workspace)/changes", headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(Changes.self, from: data)
+    }
+
     struct UndoResult: Decodable, Sendable, Equatable {
         var revert: String
         var files: [String]

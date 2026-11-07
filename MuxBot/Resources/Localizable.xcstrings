@@ -121,6 +121,9 @@
     "Approve" : {
 
     },
+    "Approve on GitHub" : {
+
+    },
     "Approve this app on your Mac" : {
 
     },
@@ -280,6 +283,16 @@
     "Duration" : {
 
     },
+    "Enter this code at %@%@:" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Enter this code at %1$@%2$@:"
+          }
+        }
+      }
+    },
     "File on GitHub" : {
 
     },
@@ -293,6 +306,9 @@
 
     },
     "Full window" : {
+
+    },
+    "GitHub" : {
 
     },
     "GitHub URL or link (optional)" : {
@@ -418,16 +434,28 @@
     "Open Activity" : {
 
     },
+    "Open GitHub" : {
+
+    },
     "Open Mux Bot" : {
 
     },
+    "Open PR" : {
+
+    },
     "Open Terminal" : {
+
+    },
+    "Open a pull request with this bot's committed changes" : {
 
     },
     "Opens %@" : {
 
     },
     "Opens your conversation with %@" : {
+
+    },
+    "PR #%@" : {
 
     },
     "Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later." : {
@@ -479,6 +507,9 @@
 
     },
     "Pull request" : {
+
+    },
+    "Pull request opened" : {
 
     },
     "Put the changed files back as they were" : {
@@ -561,6 +592,18 @@
     "Show preview" : {
 
     },
+    "Sign in so bots can read your private repos and open pull requests. The sign-in stays on this device." : {
+
+    },
+    "Sign in with GitHub" : {
+
+    },
+    "Sign out" : {
+
+    },
+    "Signed in as %@" : {
+
+    },
     "Start" : {
 
     },
@@ -641,6 +684,9 @@
       }
     },
     "Waiting for your Approve: %@" : {
+
+    },
+    "Waiting for your approval…" : {
 
     },
     "What %@ gets" : {

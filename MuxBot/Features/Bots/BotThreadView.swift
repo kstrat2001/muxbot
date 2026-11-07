@@ -8,6 +8,7 @@ struct BotThreadView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(BotBrain.self) private var brain
+    @Environment(GitHubAuth.self) private var github
     @Environment(FleetConnection.self) private var connection
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
@@ -113,6 +114,16 @@ struct BotThreadView: View {
                         }
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
+                    }
+                    if let bot, brain.runs.canOpenPR(bot, store: BotStore(context: modelContext), github: github) {
+                        if brain.runs.openingPR.contains(bot.id) {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Button("Open PR", systemImage: "arrow.triangle.pull") {
+                                Task { await brain.runs.openPR(for: bot, store: BotStore(context: modelContext), github: github) }
+                            }
+                            .help("Open a pull request with this bot's committed changes")
+                        }
                     }
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
                         .help("Bot info and resources")

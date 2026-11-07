@@ -1,0 +1,118 @@
+import Foundation
+
+/// Opens a pull request from a bot's branch with your GitHub sign-in:
+/// darkmux hands over the branch's changes (`/changes`), and this creates
+/// the blobs, a tree on the base commit, a commit and the branch ref through
+/// GitHub's Git Data API, then the PR. darkmux never authors PRs.
+struct GitHubPR: Sendable {
+    struct PR: Equatable, Sendable { var number: Int; var url: URL }
+
+    enum Failure: Error, Equatable, LocalizedError {
+        /// The Mux Bot GitHub App can't write to this repo (not installed there).
+        case cantWrite(String)
+        case github(String)
+        var errorDescription: String? {
+            switch self {
+            case let .cantWrite(repo): "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it."
+            case let .github(why): "GitHub said: \(why)"
+            }
+        }
+    }
+
+    var session: URLSession = .shared
+    let token: String
+
+    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String) async throws -> PR {
+        let api = "https://api.github.com/repos/\(repo)"
+        struct SHA: Decodable { var sha: String }
+        struct Commit: Decodable { struct Tree: Decodable { var sha: String }; var tree: Tree }
+
+        var entries: [[String: Any]] = []
+        for file in changes.files {
+            if file.deleted == true {
+                entries.append(["path": file.path, "mode": "100644", "type": "blob", "sha": NSNull()])
+            } else {
+                let blob: SHA = try await send("POST", "\(api)/git/blobs", ["content": file.content ?? "", "encoding": "base64"], repo: repo)
+                entries.append(["path": file.path, "mode": file.mode ?? "100644", "type": "blob", "sha": blob.sha])
+            }
+        }
+        let base: Commit = try await send("GET", "\(api)/git/commits/\(changes.base)", nil, repo: repo)
+        let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
+        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": title, "tree": tree.sha, "parents": [changes.base]], repo: repo)
+        do {
+            let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(changes.branch)", "sha": commit.sha], repo: repo)
+        } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
+            // The branch is there from an earlier PR: move it to this commit.
+            let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(changes.branch)", ["sha": commit.sha, "force": true], repo: repo)
+        }
+        struct Pull: Decodable { var number: Int; var html_url: String }
+        do {
+            let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": changes.branch, "base": changes.baseBranch, "body": body], repo: repo)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!)
+        } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
+            // The PR is already open for this branch; it now shows the new commit.
+            let owner = repo.split(separator: "/").first.map(String.init) ?? ""
+            let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(changes.branch)&state=open", nil, repo: repo)
+            guard let pull = open.first else { throw Failure.github(why) }
+            return PR(number: pull.number, url: URL(string: pull.html_url)!)
+        }
+    }
+
+    private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String) async throws -> T {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            if status == 403 || status == 404 { throw Failure.cantWrite(repo) }
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let detail = ((json?["errors"] as? [[String: Any]])?.first?["message"] as? String) ?? (json?["message"] as? String) ?? "status \(status)"
+            throw Failure.github(detail)
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+}
+
+/// Decodes any JSON value (for replies whose content we don't need).
+struct AnyCodable: Decodable {
+    init(from decoder: any Decoder) throws {}
+}
+
+/// A PR's title and body, from the runs it carries.
+enum PRText {
+    @MainActor
+    static func make(bot: Bot, runs: [BotRun], machine: String) -> (title: String, body: String) {
+        let clean = { (task: String) in task.replacingOccurrences(of: #"\s*\([\w.-]+/[\w.-]+\)\s*$"#, with: "", options: .regularExpression) }
+        let title = runs.count == 1 ? clean(runs[0].task) : "\(bot.name): \(runs.count) changes"
+        var lines = ["## What changed"]
+        for run in runs {
+            lines.append("- **\(clean(run.task))**: \(run.summary)")
+        }
+        let issues = runs.flatMap { run -> [Int] in
+            guard let m = run.task.range(of: #"^(?i:fix|fixes)\s+#(\d+)"#, options: .regularExpression) else { return [] }
+            return Int(run.task[m].filter(\.isNumber)).map { [$0] } ?? []
+        }
+        if !issues.isEmpty { lines.append(""); lines += issues.map { "Fixes #\($0)" } }
+        lines.append("")
+        lines.append("Made on \(machine) by darkmux (a local model), through Mux Bot.")
+        return (title, lines.joined(separator: "\n"))
+    }
+}
+
+/// PRs opened from a thread (its "Opened PR" lines).
+enum PRLinks {
+    @MainActor
+    static func latest(in messages: [ChatMessage]) -> URL? {
+        messages.filter { $0.kind == .prCard }
+            .sorted { $0.timestamp < $1.timestamp }
+            .compactMap { m in m.content.range(of: #"https://github\.com/[^\s]+/pull/\d+"#, options: .regularExpression).map { URL(string: String(m.content[$0])) } ?? nil }
+            .last
+    }
+}

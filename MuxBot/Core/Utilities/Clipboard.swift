@@ -6,6 +6,17 @@ import AppKit
 #endif
 
 enum Clipboard {
+    /// Puts text on the clipboard.
+    @MainActor
+    static func copy(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
+    }
+
     /// Puts a PNG on the clipboard as an image. Returns false if it isn't one.
     @MainActor @discardableResult
     static func copyPNG(_ png: Data) -> Bool {

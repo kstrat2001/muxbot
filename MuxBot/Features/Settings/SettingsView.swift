@@ -13,6 +13,9 @@ struct SettingsView: View {
             Tab("darkmux", systemImage: "link") {
                 FleetPairingView()
             }
+            Tab("GitHub", systemImage: "person.badge.key") {
+                GitHubSignInView()
+            }
             Tab("Notifications", systemImage: "bell") {
                 Form {
                     Toggle("Tell me when a run has a result or didn't finish", isOn: $notify)
