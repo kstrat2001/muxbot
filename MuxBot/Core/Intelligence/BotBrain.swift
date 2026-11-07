@@ -272,7 +272,7 @@ final class BotBrain {
     var github: any GitHubClient = RESTGitHubClient()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
-    weak var connection: FleetConnection?
+    var connection: FleetConnection?
     /// Reads facts and snapshots from the live preview, when one is open.
     weak var pageInspector: (any PageInspecting)?
     /// Threads already told that the on-device model isn't working here.
