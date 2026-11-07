@@ -12,7 +12,15 @@ struct BotSidebar: View {
 
     var body: some View {
         @Bindable var router = router
-        List(selection: $router.sidebar) {
+        list
+        #if DEBUG && os(macOS)
+            .task { if UserDefaults.standard.bool(forKey: "renderSidebarRows") { Self.renderRows(bots) } }
+        #endif
+    }
+
+    private var list: some View {
+        @Bindable var router = router
+        return List(selection: $router.sidebar) {
             Section {
                 row(name: LeadBot.name, look: .lead, unread: unread(nil), state: nil)
                     .tag(SidebarItem.lead)
@@ -25,13 +33,13 @@ struct BotSidebar: View {
                         .botContextMenu(bot)
                 }
                 Button { router.showNewBot = true } label: {
-                    Label("New bot", systemImage: "plus")
+                    plainRow("New bot", systemImage: "plus")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 if bots.isEmpty {
                     Button { BotStore(context: modelContext).addExample() } label: {
-                        Label("Add an example bot", systemImage: "sparkles")
+                        plainRow("Add an example bot", systemImage: "sparkles")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
@@ -40,7 +48,7 @@ struct BotSidebar: View {
                 Text("Bots")
             }
             Section {
-                Label("Activity", systemImage: "waveform.path.ecg").tag(SidebarItem.activity)
+                plainRow("Activity", systemImage: "waveform.path.ecg").tag(SidebarItem.activity)
             }
         }
         .toolbar {
@@ -61,9 +69,19 @@ struct BotSidebar: View {
         return !selected && (threads.first { $0.roleId == botId }?.hasUnread ?? false)
     }
 
+    /// Avatar size in the sidebar: big enough on the Mac for the face to
+    /// read next to the name; iPad lists keep their compact size.
+    #if os(macOS)
+    static let avatarSize: CGFloat = 38
+    static let rowPadding: CGFloat = 4
+    #else
+    static let avatarSize: CGFloat = 26
+    static let rowPadding: CGFloat = 0
+    #endif
+
     private func row(name: String, look: BotLook, unread: Bool, state: BotState?) -> some View {
         HStack(spacing: Spacing.sm) {
-            BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: 26)
+            BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: Self.avatarSize)
             Text(name).lineLimit(1)
             Spacer(minLength: 0)
             if unread {
@@ -73,7 +91,53 @@ struct BotSidebar: View {
                 StatusBadge(kind: state.kind)
             }
         }
+        .padding(.vertical, Self.rowPadding)
     }
+
+    /// A non-bot row (New bot, Activity) with its symbol in an avatar-wide
+    /// slot, so its text lines up with the bot names.
+    private func plainRow(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: systemImage)
+                .frame(width: Self.avatarSize)
+            Text(title)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, Self.rowPadding)
+    }
+
+    #if DEBUG && os(macOS)
+    /// `-renderSidebarRows YES`: draws the sidebar's rows (at 2x) to
+    /// muxbot-sidebar-rows.png in the app's temp folder, for checking sizes
+    /// without a screen capture.
+    @MainActor
+    static func renderRows(_ bots: [Bot]) {
+        let rows = VStack(alignment: .leading, spacing: 2) {
+            ForEach([(LeadBot.name, BotLook.lead, BotState?.none)] + bots.map { ($0.name, $0.look, Optional($0.state)) }, id: \.0) { item in
+                HStack(spacing: Spacing.sm) {
+                    BotAvatarView(look: item.1, mood: item.2.map(AvatarMood.init) ?? .idle, size: avatarSize)
+                    Text(item.0)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, rowPadding)
+            }
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "waveform.path.ecg").frame(width: avatarSize)
+                Text("Activity")
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, rowPadding)
+        }
+        .padding(12)
+        .frame(width: 240, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: rows)
+        renderer.scale = 2
+        guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-sidebar-rows.png"))
+    }
+    #endif
 
     /// "1 result waiting for you", "2 things waiting for you", "Running".
     static func waitingText(_ bot: Bot) -> String? {
