@@ -64,6 +64,23 @@ struct DarkmuxClient: Sendable {
         return (reply.work_id, reply.profile)
     }
 
+    /// The preview recipe in a work folder darkmux lets this app use; nil
+    /// when the folder has none.
+    func recipe(token: String, workdir: String) async throws -> PreviewManifest? {
+        struct Reply: Decodable { var recipe: PreviewManifest }
+        var parts = URLComponents(url: baseURL.appending(path: "/client/recipe"), resolvingAgainstBaseURL: false)
+        parts?.queryItems = [URLQueryItem(name: "workdir", value: workdir)]
+        guard let url = parts?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard status == 200 else { throw ClientError(message: "darkmux answered \(status)") }
+        return try JSONDecoder().decode(Reply.self, from: data).recipe
+    }
+
     func workStatus(token: String, workId: String) async throws -> WorkStatus {
         let data = try await send("GET", "/client/work/\(workId)", headers: ["Authorization": "Bearer \(token)"])
         return try JSONDecoder().decode(WorkStatus.self, from: data)

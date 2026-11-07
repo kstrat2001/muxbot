@@ -81,7 +81,9 @@ struct BotThreadView: View {
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         .task {
             greetIfNew()
-            for repo in bot?.repoSlugs ?? [] { await brain.loadRecipe(for: repo) }
+            for repo in bot?.repoSlugs ?? [] {
+                await brain.loadRecipe(for: repo, localWorkdir: bot.flatMap(FleetConnection.workdir(for:)))
+            }
         }
         .sheet(isPresented: $showInfo) {
             if let bot { NavigationStack { BotInfoView(bot: bot) } }

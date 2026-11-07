@@ -34,8 +34,9 @@ struct BotStoreTests {
         // A test preview URL may follow, from this machine's Local.xcconfig.
         // A test preview URL and work folder may follow, from this machine's Local.xcconfig.
         let hcr = bots[0].sortedResources.filter { $0.kind != .previewURL && $0.value != BotStore.testWorkdir }
-        #expect(hcr.map(\.kind) == [.repo, .folder])
-        #expect(bots[0].sortedResources.prefix(2).map(\.kind) == [.repo, .folder])
+        #expect(hcr.map(\.kind) == [.repo])
+        #expect(bots[0].sortedResources.first?.kind == .repo)
+        #expect(!bots[0].sortedResources.contains { $0.value == "~/de-projects/hcr" })
         #expect(hcr.first?.value == "https://github.com/kstrat2001/hcr")
     }
 

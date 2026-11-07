@@ -480,21 +480,27 @@ final class BotBrain {
     // MARK: Preview recipes
 
     enum RecipeState: Equatable {
-        case loading, ready(PreviewManifest), missing, failed(String)
+        case loading, ready(PreviewManifest, fromLocalCopy: Bool), missing, failed(String)
     }
 
-    /// `.darkmux/preview.json` per repo, fetched read-only from GitHub.
+    /// `.darkmux/preview.json` per repo: from the bot's local work copy when
+    /// darkmux lets this app read it, else read-only from GitHub.
     var recipes: [String: RecipeState] = [:]
 
-    func loadRecipe(for repo: String) async {
-        if case .ready = recipes[repo] { return }
+    func loadRecipe(for repo: String, localWorkdir: String? = nil) async {
+        if case .ready? = recipes[repo] { return }
         recipes[repo] = .loading
+        if let localWorkdir, let connection, let token = connection.token,
+           let local = try? await connection.client.recipe(token: token, workdir: localWorkdir) {
+            recipes[repo] = .ready(local, fromLocalCopy: true)
+            return
+        }
         do {
             guard let data = try await github.file(repo: repo, path: PreviewManifest.path) else {
                 recipes[repo] = .missing
                 return
             }
-            recipes[repo] = .ready(try JSONDecoder().decode(PreviewManifest.self, from: data))
+            recipes[repo] = .ready(try JSONDecoder().decode(PreviewManifest.self, from: data), fromLocalCopy: false)
         } catch {
             recipes[repo] = .failed(error.localizedDescription)
         }

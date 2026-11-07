@@ -11,7 +11,7 @@ struct BotStore {
     nonisolated static let defaults: [(name: String, systemImage: String, instructions: String, resources: [(ResourceKind, String)])] = [
         ("humancodereader", "eyeglasses",
          "The humancodereader.com website: a humorous AI code-review site. Site changes, previews and reviews.",
-         [(.repo, "https://github.com/kstrat2001/hcr"), (.folder, "~/de-projects/hcr")]),
+         [(.repo, "https://github.com/kstrat2001/hcr")]),
         ("darkmux", "square.stack.3d.up",
          "darkmux, the local-LLM orchestration CLI: features, fixes, evals and releases.",
          [(.repo, "https://github.com/kstrat2001/darkmux")]),
@@ -68,9 +68,10 @@ struct BotStore {
     }
 
     private func addTestPreviewURL() {
-        if let dir = Self.testWorkdir, let bot = allBots().first(where: { $0.name == "humancodereader" }),
-           !bot.sortedResources.contains(where: { $0.value == dir }) {
-            addResource(.folder, dir, to: bot)
+        if let dir = Self.testWorkdir, let bot = allBots().first(where: { $0.name == "humancodereader" }) {
+            if !bot.sortedResources.contains(where: { $0.value == dir }) { addResource(.folder, dir, to: bot) }
+            // One folder: the darkmux work copy replaces the older seeded checkout path.
+            bot.sortedResources.filter { $0.kind == .folder && $0.value == "~/de-projects/hcr" }.forEach(remove)
         }
         guard let url = Self.testPreviewURL,
               let bot = allBots().first(where: { $0.name == "humancodereader" }),

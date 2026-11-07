@@ -24,6 +24,11 @@ struct BotInfoView: View {
                     Label {
                         VStack(alignment: .leading, spacing: Spacing.xs) {
                             Text(resource.value).textSelection(.enabled)
+                            if resource.kind == .folder, resource.value.contains("/.darkmux/worktrees/") {
+                                Text("Work copy · darkmux runs here")
+                                    .font(AppFont.caption())
+                                    .foregroundStyle(.secondary)
+                            }
                             if resource.kind == .previewURL {
                                 Text("Temporary test server, until darkmux reports each run's live URL.")
                                     .font(AppFont.caption())
@@ -68,7 +73,9 @@ struct BotInfoView: View {
             }
         }
         .formStyle(.grouped)
-        .task { for repo in bot.repoSlugs { await brain.loadRecipe(for: repo) } }
+        .task {
+            for repo in bot.repoSlugs { await brain.loadRecipe(for: repo, localWorkdir: FleetConnection.workdir(for: bot)) }
+        }
         .navigationTitle(bot.name)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
@@ -77,9 +84,10 @@ struct BotInfoView: View {
 
     @ViewBuilder private func recipeRow(_ repo: String) -> some View {
         switch brain.recipes[repo] {
-        case .ready(let manifest)?:
+        case let .ready(manifest, fromLocalCopy)?:
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Label("Preview ready", systemImage: "checkmark.circle.fill").foregroundStyle(Color.brandGreen)
+                Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Color.brandGreen)
                 Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(.secondary)
                 Text(repo).font(AppFont.caption()).foregroundStyle(.secondary)
             }

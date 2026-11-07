@@ -172,8 +172,9 @@ struct PreviewRecipeTests {
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(files: ["kstrat2001/hcr/.darkmux/preview.json": hcrDraft])
         await brain.loadRecipe(for: "kstrat2001/hcr")
-        guard case .ready(let m)? = brain.recipes["kstrat2001/hcr"] else { Issue.record("expected ready"); return }
+        guard case let .ready(m, fromLocal)? = brain.recipes["kstrat2001/hcr"] else { Issue.record("expected ready"); return }
         #expect(m.port == 3333)
+        #expect(!fromLocal)   // unpaired: GitHub only
     }
 
     @Test func recipeIsMissingWhenTheFileIsAbsent() async {
