@@ -5,7 +5,7 @@ import SwiftData
 /// Working / Ready from stored state. The bar at the bottom talks to the lead bot.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
-    @Query(sort: \MuxRole.createdAt) private var roles: [MuxRole]
+    @Query(sort: \Bot.createdAt) private var roles: [Bot]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
 
@@ -14,7 +14,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: Spacing.xl) {
                 Button { router.navigate(to: .lead) } label: { LeadBotCard() }
                     .buttonStyle(.plain)
-                ForEach(RoleState.allCases, id: \.self) { state in
+                ForEach(BotState.allCases, id: \.self) { state in
                     let group = roles.filter { $0.state == state }
                     if !group.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -48,14 +48,14 @@ struct HomeView: View {
         .navigationTitle("Your bots")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("New bot", systemImage: "plus") { router.showNewRole = true }
+                Button("New bot", systemImage: "plus") { router.showNewBot = true }
             }
         }
     }
 }
 
 struct RoleTile: View {
-    let role: MuxRole
+    let role: Bot
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -107,7 +107,7 @@ struct RoleTile: View {
 
 /// The role's avatar image if it has one, else its SF Symbol.
 struct RoleAvatar: View {
-    let role: MuxRole
+    let role: Bot
     let tint: Color
 
     var body: some View {

@@ -9,7 +9,8 @@ struct BotThreadView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(BotBrain.self) private var brain
     @Query private var conversations: [ChatConversation]
-    @Query private var matches: [MuxRole]
+    @Query private var matches: [Bot]
+    @State private var showInfo = false
 
     init(context: ChatContext) {
         self.context = context
@@ -17,10 +18,10 @@ struct BotThreadView: View {
         _conversations = Query(filter: #Predicate<ChatConversation> { $0.roleId == roleId })
         // The lead bot is not stored, so its lookup matches nothing.
         let botId = roleId ?? UUID()
-        _matches = Query(filter: #Predicate<MuxRole> { $0.id == botId })
+        _matches = Query(filter: #Predicate<Bot> { $0.id == botId })
     }
 
-    private var bot: MuxRole? { matches.first }
+    private var bot: Bot? { matches.first }
     private var title: String { context.botId == nil ? LeadBot.name : (bot?.name ?? "Bot") }
 
     var body: some View {
@@ -39,13 +40,19 @@ struct BotThreadView: View {
                 ToolbarItem(placement: .primaryAction) {
                     StatusBadge(kind: bot.state.kind)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Bot info", systemImage: "info.circle") { showInfo = true }
+                }
             }
         }
         .task { greetIfNew() }
+        .sheet(isPresented: $showInfo) {
+            if let bot { NavigationStack { BotInfoView(bot: bot) } }
+        }
     }
 
     private func greetIfNew() {
-        let store = RoleStore(context: modelContext)
+        let store = BotStore(context: modelContext)
         if context.botId != nil && bot == nil { return }
         let conversation = store.conversation(for: context)
         guard (conversation.messages ?? []).isEmpty else { return }

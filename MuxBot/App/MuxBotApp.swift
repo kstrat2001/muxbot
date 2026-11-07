@@ -15,7 +15,7 @@ struct MuxBotApp: App {
         } catch {
             fatalError("Could not create the model container: \(error)")
         }
-        RoleStore(context: container.mainContext).seedIfEmpty()
+        BotStore(context: container.mainContext).seedIfEmpty()
         BackgroundTaskService.register()
     }
 

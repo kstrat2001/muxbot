@@ -87,7 +87,7 @@ extension RunStatus {
     }
 }
 
-extension RoleState {
+extension BotState {
     var kind: StatusKind {
         switch self {
         case .needsYou: .needsYou

@@ -10,8 +10,9 @@ enum SharedModelContainer {
     static let schema = Schema([
         ChatConversation.self,
         ChatMessage.self,
-        MuxRole.self,
-        RoleTask.self,
+        Bot.self,
+        BotTask.self,
+        BotResource.self,
     ])
 
     /// The App Group directory if the sandbox lets us write there, else

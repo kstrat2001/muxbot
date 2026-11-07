@@ -9,7 +9,7 @@ import FoundationModels
 enum LeadBot {
     static let name = "Mux Bot"
     static let systemImage = "crown"
-    static let persona = "You orchestrate the other bots: hand work to the right bot, set up new bots, and answer questions about the darkmux fleet. Short, confident, friendly."
+    static let persona = "You orchestrate the other bots, which are the user's projects and themes: hand work to the right bot, set up new bots, and answer questions about the darkmux fleet. Short, confident, friendly."
 }
 
 /// Which conversation the user is in. Follows navigation.
@@ -27,7 +27,9 @@ struct BotSummary: Sendable, Equatable {
     var id: UUID
     var name: String
     var instructions: String
-    var state: RoleState
+    var state: BotState
+    /// Resource values (repo URLs, folders, links, notes). Routing reads them.
+    var resources: [String] = []
 }
 
 /// A new bot proposed in conversation. Saved only when the user approves.
@@ -40,8 +42,13 @@ struct BotDraft: Sendable, Equatable {
 
 /// Something a bot wants to do. Every action waits for Approve.
 enum BotAction: Sendable, Equatable {
+    /// Pass work to another bot's thread.
     case handOff(toId: UUID, toName: String, task: String)
     case createBot(BotDraft)
+    /// Send work to a darkmux crew role for the bot whose thread this is.
+    case dispatch(crew: CrewRole, task: String)
+    /// Give the bot whose thread this is a new resource.
+    case addResource(kind: ResourceKind, value: String)
 }
 
 /// One bot turn: what it says, and what it proposes to do.
@@ -52,8 +59,10 @@ struct BotTurn: Sendable, Equatable {
 
 // MARK: - Keyword fallback
 
-/// Answers without the on-device model: hands off by bot name or keyword,
-/// drafts new bots, and reads the fleet briefing. Used when Foundation
+/// Answers without the on-device model: the lead bot routes to a bot by
+/// name, theme or resources; a bot dispatches to a crew role by keyword or
+/// picks up a pasted repo, folder or link; anyone can draft a new bot or
+/// read the fleet briefing. Used when Foundation
 /// Models is unavailable or gives an unusable answer.
 enum FallbackBrain {
     private static let newBotPhrases = ["new bot", "create a bot", "add a bot", "make a bot",
@@ -77,14 +86,40 @@ enum FallbackBrain {
         if let named = others.first(where: { lower.contains($0.name.lowercased()) }) {
             return handOff(text, to: named)
         }
+        if let speaker, let value = resourceValue(in: text) {
+            let kind = ResourceKind.guess(for: value)
+            return BotTurn(reply: "Want me to keep that as a \(kind.label.lowercased()) for \(speaker.name)?",
+                           action: .addResource(kind: kind, value: value))
+        }
         if tokens(lower).contains(where: { word in fleetWords.contains { word.hasPrefix($0) } }) {
             return BotTurn(reply: fleetAnswer(fleet), action: nil)
         }
-        if speaker == nil {
+        guard speaker != nil else {
             if let best = bestMatch(for: lower, in: others) { return handOff(text, to: best) }
             return BotTurn(reply: "Which bot should take this? Name one, or ask me for a new bot.", action: nil)
         }
-        return BotTurn(reply: "Noted. Once the fleet is connected I'll send work like this to darkmux after you approve.", action: nil)
+        if let crew = crew(for: lower) {
+            return BotTurn(reply: "I'll send this to the \(crew.name) crew. Approve to dispatch.",
+                           action: .dispatch(crew: crew, task: text))
+        }
+        return BotTurn(reply: "Noted. Tell me what to build, review, evaluate or research and I'll line up the crew.", action: nil)
+    }
+
+    /// The crew role whose keywords the request mentions most.
+    static func crew(for lower: String) -> CrewRole? {
+        let words = tokens(lower)
+        let scored = CrewRole.allCases.map { role in
+            (role, words.filter { w in role.keywords.contains { w.hasPrefix($0) || $0.hasPrefix(w) } }.count)
+        }
+        guard let best = scored.max(by: { $0.1 < $1.1 }), best.1 > 0 else { return nil }
+        return best.0
+    }
+
+    /// The first URL or path in the text, if any.
+    static func resourceValue(in text: String) -> String? {
+        text.split(whereSeparator: \.isWhitespace)
+            .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)(\"'")) }
+            .first { $0.hasPrefix("http://") || $0.hasPrefix("https://") || $0.hasPrefix("~/") || ($0.hasPrefix("/") && $0.count > 1) }
     }
 
     static func fleetAnswer(_ fleet: FleetSnapshot) -> String {
@@ -108,7 +143,7 @@ enum FallbackBrain {
         let words = tokens(lower)
         var best: (bot: BotSummary, hits: Int)?
         for bot in bots {
-            let vocabulary = tokens("\(bot.name) \(bot.instructions)".lowercased())
+            let vocabulary = tokens("\(bot.name) \(bot.instructions) \(bot.resources.joined(separator: " "))".lowercased())
             let hits = words.filter { word in vocabulary.contains { $0.hasPrefix(word) || word.hasPrefix($0) } }.count
             if hits > (best?.hits ?? 0) { best = (bot, hits) }
         }
@@ -149,11 +184,13 @@ enum FallbackBrain {
 struct GeneratedTurn {
     @Guide(description: "Your reply to the user, one to three short sentences")
     var reply: String
-    @Guide(description: "none unless the user wants work handed to another bot (handOff) or a new bot set up (createBot)")
+    @Guide(description: "none to just reply; dispatch to send work to a crew role for this bot; handOff to pass work to another bot; createBot to set up a new bot; addResource to keep a repo, folder or link for this bot")
     var action: GeneratedAction
+    @Guide(description: "For dispatch: which crew role does the work")
+    var crew: GeneratedCrew
     @Guide(description: "For handOff: the exact name of the bot to send the work to")
     var targetBot: String
-    @Guide(description: "For handOff: the task for that bot. For createBot: one sentence on what the new bot does")
+    @Guide(description: "For handOff or dispatch: the task. For createBot: one sentence on what the new bot does. For addResource: the URL or path")
     var detail: String
     @Guide(description: "For createBot: a short name for the new bot")
     var newBotName: String
@@ -162,8 +199,24 @@ struct GeneratedTurn {
 @Generable
 enum GeneratedAction {
     case none
+    case dispatch
     case handOff
     case createBot
+    case addResource
+}
+
+@Generable
+enum GeneratedCrew {
+    case coder, reviewer, evalRunner, researcher
+
+    var role: CrewRole {
+        switch self {
+        case .coder: .coder
+        case .reviewer: .reviewer
+        case .evalRunner: .evalRunner
+        case .researcher: .researcher
+        }
+    }
 }
 #endif
 
@@ -190,10 +243,10 @@ final class BotBrain {
         #endif
     }
 
-    func send(_ request: String, in context: ChatContext, store: RoleStore) async {
+    func send(_ request: String, in context: ChatContext, store: BotStore) async {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        let bots = store.allRoles().map(\.summary)
+        let bots = store.allBots().map(\.summary)
         let speaker = context.botId.flatMap { id in bots.first { $0.id == id } }
         let conversation = store.conversation(for: context)
         store.append(.user, text, to: conversation)
@@ -220,18 +273,26 @@ final class BotBrain {
     }
 
     /// Carries out the pending action and notes it in the thread it came from.
-    func approve(in store: RoleStore) {
+    func approve(in store: BotStore) {
         guard let pending else { return }
-        let from = pending.context.botId.flatMap { store.role(id: $0)?.name } ?? LeadBot.name
+        let from = pending.context.botId.flatMap { store.bot(id: $0)?.name } ?? LeadBot.name
         let note: String
         switch pending.action {
         case let .handOff(toId, toName, task):
-            guard let target = store.role(id: toId) else { self.pending = nil; return }
+            guard let target = store.bot(id: toId) else { self.pending = nil; return }
             store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task)"
         case let .createBot(draft):
             store.add(name: draft.name, instructions: draft.instructions, modelName: draft.modelName, systemImage: draft.systemImage)
             note = "Added bot \(draft.name)."
+        case let .dispatch(crew, task):
+            guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
+            store.dispatch(task: task, crew: crew, on: bot)
+            note = "Dispatched to \(crew.name): \(task)"
+        case let .addResource(kind, value):
+            guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
+            store.addResource(kind, value, to: bot)
+            note = "Added \(kind.label.lowercased()): \(value)"
         }
         store.append(.system, note, to: store.conversation(for: pending.context))
         self.pending = nil
@@ -240,9 +301,11 @@ final class BotBrain {
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary]) async -> BotTurn? {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
-        let roster = others.map { "- \($0.name) (\($0.state.label)): \($0.instructions)" }.joined(separator: "\n")
-        let identity = speaker.map { "You are \($0.name), a bot in Mux Bot. \($0.instructions)" }
-            ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona)"
+        let roster = others.map { "- \($0.name): \($0.instructions)" }.joined(separator: "\n")
+        let crewList = CrewRole.allCases.map(\.name).joined(separator: ", ")
+        let identity = speaker.map {
+            "You are \($0.name), a bot in Mux Bot. \($0.instructions)\nYour resources: \($0.resources.isEmpty ? "none yet" : $0.resources.joined(separator: ", "))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
+        } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
         let session = LanguageModelSession(instructions: """
             \(identity)
             Hand work to another bot only when the user asks or it clearly belongs to that bot. \
@@ -266,6 +329,13 @@ final class BotBrain {
             case .createBot:
                 guard !g.newBotName.isEmpty else { return BotTurn(reply: g.reply, action: nil) }
                 return BotTurn(reply: g.reply, action: .createBot(BotDraft(name: g.newBotName, instructions: g.detail)))
+            case .dispatch:
+                guard speaker != nil else { return BotTurn(reply: g.reply, action: nil) }
+                return BotTurn(reply: g.reply, action: .dispatch(crew: g.crew.role, task: g.detail.isEmpty ? request : g.detail))
+            case .addResource:
+                let value = g.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard speaker != nil, !value.isEmpty else { return BotTurn(reply: g.reply, action: nil) }
+                return BotTurn(reply: g.reply, action: .addResource(kind: ResourceKind.guess(for: value), value: value))
             }
         } catch {
             return nil
@@ -276,8 +346,9 @@ final class BotBrain {
     }
 }
 
-extension MuxRole {
+extension Bot {
     var summary: BotSummary {
-        BotSummary(id: id, name: name, instructions: instructions, state: state)
+        BotSummary(id: id, name: name, instructions: instructions, state: state,
+                   resources: sortedResources.map(\.value))
     }
 }

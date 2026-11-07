@@ -1,26 +1,35 @@
 import SwiftUI
 
-struct NewRoleView: View {
+struct NewBotView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var instructions = ""
     @State private var modelName = ""
+    @State private var resource = ""
 
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         Form {
             Section("Name") {
-                TextField("e.g. Release helper", text: $name)
+                TextField("e.g. Life coach, my website, Daily update", text: $name)
             }
             Section {
-                TextField("What this bot does", text: $instructions, axis: .vertical)
+                TextField("What this bot is about", text: $instructions, axis: .vertical)
                     .lineLimit(3...6)
             } header: {
-                Text("Role")
+                Text("About")
             } footer: {
-                Text("Bots read this to decide who gets new work.")
+                Text("\(LeadBot.name) reads this to send the right work here.")
+            }
+            Section {
+                TextField("GitHub URL, folder or link (optional)", text: $resource)
+                    .autocorrectionDisabled()
+            } header: {
+                Text("Resource")
+            } footer: {
+                Text("Add more later from the bot's info.")
             }
             Section("Model") {
                 TextField("Default model", text: $modelName)
@@ -33,7 +42,10 @@ struct NewRoleView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    RoleStore(context: context).add(name: name, instructions: instructions, modelName: modelName)
+                    let store = BotStore(context: context)
+                    let bot = store.add(name: name, instructions: instructions, modelName: modelName)
+                    let value = resource.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty { store.addResource(ResourceKind.guess(for: value), value, to: bot) }
                     dismiss()
                 }
                 .disabled(!canSave)

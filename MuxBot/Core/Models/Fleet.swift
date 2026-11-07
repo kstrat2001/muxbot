@@ -43,6 +43,7 @@ struct FleetRun: Identifiable, Sendable, Equatable {
     var mission: String
     var title: String
     var botName: String
+    var crew: CrewRole
     var machine: String
     var model: String
     var status: RunStatus
@@ -69,7 +70,7 @@ struct FleetSnapshot: Sendable, Equatable {
                 ? "- \(m.name) (\(m.chip)): \(m.freeMemoryGB) of \(m.memoryGB) GB free, loaded: \(m.loadedModels.isEmpty ? "nothing" : m.loadedModels.joined(separator: ", "))"
                 : "- \(m.name): offline"
         }
-        let runLines = runs.map { "- \($0.title) [\($0.status.label)] by \($0.botName) on \($0.machine), \($0.model)" }
+        let runLines = runs.map { "- \($0.title) [\($0.status.label)] for \($0.botName), \($0.crew.name) on \($0.machine), \($0.model)" }
         return ([source + ":", "Machines:"] + machineLines + ["Runs:"] + runLines).joined(separator: "\n")
     }
 
@@ -84,14 +85,16 @@ struct FleetSnapshot: Sendable, Equatable {
                          loadedModels: [], isOnline: false),
         ],
         runs: [
-            FleetRun(id: "r1", mission: "Auth cleanup", title: "Refactor token refresh", botName: "Coder",
-                     machine: "MacBook Pro", model: "qwen3-coder-30b", status: .running, minutesElapsed: 14),
-            FleetRun(id: "r2", mission: "Auth cleanup", title: "Review token refresh diff", botName: "Reviewer",
-                     machine: "Mac mini", model: "gemma-3-27b", status: .queued, minutesElapsed: 0),
-            FleetRun(id: "r3", mission: "Model sweep", title: "Context-length eval, 8 of 10", botName: "Eval runner",
-                     machine: "Mac mini", model: "qwen3-8b", status: .needsYou, minutesElapsed: 42),
-            FleetRun(id: "r4", mission: "Model sweep", title: "Baseline eval", botName: "Eval runner",
-                     machine: "MacBook Pro", model: "qwen3-coder-30b", status: .done, minutesElapsed: 31),
+            FleetRun(id: "r1", mission: "Pricing page copy", title: "Rewrite the tier blurbs", botName: "humancodereader",
+                     crew: .coder, machine: "MacBook Pro", model: "qwen3-coder-30b", status: .running, minutesElapsed: 14),
+            FleetRun(id: "r2", mission: "Pricing page copy", title: "Review the copy diff", botName: "humancodereader",
+                     crew: .reviewer, machine: "Mac mini", model: "gemma-3-27b", status: .queued, minutesElapsed: 0),
+            FleetRun(id: "r3", mission: "Context-length sweep", title: "Eval 8 of 10", botName: "darkmux",
+                     crew: .evalRunner, machine: "Mac mini", model: "qwen3-8b", status: .needsYou, minutesElapsed: 42),
+            FleetRun(id: "r4", mission: "Context-length sweep", title: "Baseline eval", botName: "darkmux",
+                     crew: .evalRunner, machine: "MacBook Pro", model: "qwen3-coder-30b", status: .done, minutesElapsed: 31),
+            FleetRun(id: "r5", mission: "Local AI thread", title: "Research a week of local-model news", botName: "Personal brand",
+                     crew: .researcher, machine: "MacBook Pro", model: "qwen3-coder-30b", status: .done, minutesElapsed: 9),
         ]
     )
 }

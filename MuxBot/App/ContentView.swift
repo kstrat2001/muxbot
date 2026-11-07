@@ -16,12 +16,12 @@ struct ContentView: View {
                 .safeAreaInset(edge: .bottom) { BotBar() }
             }
             Tab("Work", systemImage: "checklist", value: AppTab.work) {
-                NavigationStack { FleetView() }
+                NavigationStack { WorkView() }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .sheet(isPresented: $router.showNewRole) {
-            NavigationStack { NewRoleView() }
+        .sheet(isPresented: $router.showNewBot) {
+            NavigationStack { NewBotView() }
         }
     }
 }

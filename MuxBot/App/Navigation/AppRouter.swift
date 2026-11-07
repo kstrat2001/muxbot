@@ -8,7 +8,7 @@ enum AppTab: Hashable {
 final class AppRouter {
     var tab: AppTab = .bots
     var path: [Route] = []
-    var showNewRole = false
+    var showNewBot = false
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".
     var barDraft = ""
 

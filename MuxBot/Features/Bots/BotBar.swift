@@ -9,7 +9,7 @@ struct BotBar: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(BotBrain.self) private var brain
-    @Query(sort: \MuxRole.createdAt) private var bots: [MuxRole]
+    @Query(sort: \Bot.createdAt) private var bots: [Bot]
 
     private var listenerName: String {
         router.context.botId.flatMap { id in bots.first { $0.id == id }?.name } ?? LeadBot.name
@@ -20,7 +20,7 @@ struct BotBar: View {
         VStack(spacing: Spacing.md) {
             if let pending = brain.pending, pending.context == router.context {
                 ActionCard(action: pending.action,
-                           approve: { brain.approve(in: RoleStore(context: context)) },
+                           approve: { brain.approve(in: BotStore(context: context)) },
                            cancel: { brain.cancel() })
             }
             if let note = brain.fallbackNote {
@@ -54,7 +54,7 @@ struct BotBar: View {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !brain.isThinking else { return }
         router.barDraft = ""
         let chat = router.context
-        let store = RoleStore(context: context)
+        let store = BotStore(context: context)
         Task { await brain.send(text, in: chat, store: store) }
     }
 }
@@ -74,6 +74,12 @@ private struct ActionCard: View {
                 case let .createBot(draft):
                     Text("New bot: \(draft.name)").font(AppFont.headline())
                     Text(draft.instructions).font(AppFont.body())
+                case let .dispatch(crew, task):
+                    Label("Dispatch to \(crew.name)", systemImage: crew.systemImage).font(AppFont.headline())
+                    Text(task).font(AppFont.body())
+                case let .addResource(kind, value):
+                    Label("Add \(kind.label.lowercased())", systemImage: kind.systemImage).font(AppFont.headline())
+                    Text(value).font(AppFont.body()).textSelection(.enabled)
                 }
                 HStack {
                     Button("Cancel", role: .cancel, action: cancel).buttonStyle(.bordered)
