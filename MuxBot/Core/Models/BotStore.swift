@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Reads and writes bots, their resources and their threads in the app's
@@ -13,13 +14,20 @@ struct BotStore {
     nonisolated static let example = (name: "My website", systemImage: "globe",
                                       instructions: "Your website: changes, fixes and reviews. Add its project folder or GitHub repo in this bot's info.")
 
+    private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "store")
+
+    /// Saves, and logs a failure instead of dropping it silently.
+    func save() {
+        do { try context.save() } catch { Self.log.error("Saving failed: \(error.localizedDescription, privacy: .public)") }
+    }
+
     func allBots() -> [Bot] {
         let descriptor = FetchDescriptor<Bot>(sortBy: [SortDescriptor(\.createdAt)])
         return (try? context.fetch(descriptor)) ?? []
     }
 
     func bot(id: UUID) -> Bot? {
-        allBots().first { $0.id == id }
+        (try? context.fetch(FetchDescriptor<Bot>(predicate: #Predicate { $0.id == id })))?.first
     }
 
     /// Adds the example bot, once.
@@ -44,7 +52,7 @@ struct BotStore {
                 remove(resource)
             }
         }
-        try? context.save()
+        save()
     }
 
     @discardableResult
@@ -55,7 +63,7 @@ struct BotStore {
             systemImage: systemImage
         )
         context.insert(role)
-        try? context.save()
+        save()
         return role
     }
 
@@ -78,7 +86,7 @@ struct BotStore {
         let message = append(.assistant, Self.cardTitle(for: action), kind: .actionCard, to: conversation(for: chat))
         message.actionJSON = (try? JSONEncoder().encode(action)).flatMap { String(data: $0, encoding: .utf8) }
         message.actionState = .waiting
-        try? context.save()
+        save()
         return message
     }
 
@@ -106,8 +114,7 @@ struct BotStore {
     }
 
     func run(id: UUID) -> BotRun? {
-        let all = (try? context.fetch(FetchDescriptor<BotRun>())) ?? []
-        return all.first { $0.id == id }
+        (try? context.fetch(FetchDescriptor<BotRun>(predicate: #Predicate { $0.id == id })))?.first
     }
 
     /// Moves a run through the loop and posts the next card. Returns false,
@@ -138,7 +145,7 @@ struct BotStore {
             run.summary = reason
             append(.assistant, reason, kind: .resultCard, runId: run.id, to: thread)
         case .cancel, .discard, .openPR, .skipPR:
-            try? context.save()
+            save()
         }
         refreshState(of: bot)
         return true
@@ -151,7 +158,7 @@ struct BotStore {
         bot.state = phases.contains(where: \.awaitsYou) ? .needsYou
             : phases.contains(where: \.isActive) ? .working
             : (bot.tasks ?? []).isEmpty ? .ready : bot.state
-        try? context.save()
+        save()
     }
 
     @discardableResult
@@ -159,7 +166,7 @@ struct BotStore {
         let resource = BotResource(kind: kind, value: value.trimmingCharacters(in: .whitespacesAndNewlines))
         context.insert(resource)
         resource.bot = bot
-        try? context.save()
+        save()
         return resource
     }
 
@@ -167,35 +174,36 @@ struct BotStore {
     /// machine-local state. darkmux's work copy is left alone.
     func delete(_ bot: Bot) {
         let id = bot.id
-        if let thread = (try? context.fetch(FetchDescriptor<ChatConversation>()))?.first(where: { $0.roleId == id }) {
+        let botId: UUID? = id
+        if let thread = (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == botId })))?.first {
             context.delete(thread)
         }
         context.delete(bot)
         LocalBotState.shared[id] = nil
-        try? context.save()
+        save()
     }
 
     /// Empties a thread. Runs stay (they're in Activity).
     func clearConversation(_ chat: ChatContext) {
         for message in conversation(for: chat).messages ?? [] { context.delete(message) }
-        try? context.save()
+        save()
     }
 
     func remove(_ resource: BotResource) {
         context.delete(resource)
-        try? context.save()
+        save()
     }
 
     /// The thread for a context, created on first use. The lead bot's
     /// thread has no role id.
     func conversation(for chat: ChatContext) -> ChatConversation {
         let roleId = chat.botId
-        let all = (try? context.fetch(FetchDescriptor<ChatConversation>())) ?? []
-        if let existing = all.first(where: { $0.roleId == roleId }) { return existing }
+        let matching = (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId }))) ?? []
+        if let existing = matching.first { return existing }
         let title = roleId.flatMap { bot(id: $0)?.name } ?? LeadBot.name
         let created = ChatConversation(title: title, roleId: roleId)
         context.insert(created)
-        try? context.save()
+        save()
         return created
     }
 
@@ -205,12 +213,12 @@ struct BotStore {
         message.conversation = conversation
         context.insert(message)
         conversation.updatedAt = .now
-        try? context.save()
+        save()
         return message
     }
 
     func setState(_ state: BotState, for role: Bot) {
         role.state = state
-        try? context.save()
+        save()
     }
 }

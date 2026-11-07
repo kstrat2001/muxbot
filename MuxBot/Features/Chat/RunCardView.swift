@@ -87,6 +87,10 @@ struct RunCardView: View {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
                 }
             }
+            if isLatest && brain.unreachableRuns.contains(run.id) {
+                Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
+                    .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+            }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
             RefChips(refs: refs(run))

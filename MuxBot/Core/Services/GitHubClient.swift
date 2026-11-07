@@ -114,34 +114,47 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
 /// Unauthenticated GitHub REST API: public repos only, 60 requests an hour
 /// per IP. A GitHub sign-in comes later.
 struct RESTGitHubClient: GitHubClient {
+    var session: URLSession = .shared
+    /// Responses by URL with their ETag: a 304 reply (unchanged) doesn't
+    /// count against the 60-an-hour limit.
+    private let cache = ETagCache()
+
     func openIssues(repo: String) async throws -> [GitHubIssue] {
         guard let url = URL(string: "https://api.github.com/repos/\(repo)/issues?state=open&per_page=30") else { return [] }
+        let data = try await get(url)
+        return try JSONDecoder().decode([GitHubIssue].self, from: data)
+    }
+
+    /// GET with If-None-Match; a 304 serves the cached body.
+    private func get(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw GitHubError(status: http.statusCode)
-        }
-        return try JSONDecoder().decode([GitHubIssue].self, from: data)
+        let cached = cache[url]
+        if let etag = cached?.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await session.data(for: request)
+        let http = response as? HTTPURLResponse
+        if http?.statusCode == 304, let body = cached?.body { return body }
+        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0) }
+        if let etag = http?.value(forHTTPHeaderField: "ETag") { cache[url] = (etag, data) }
+        return data
     }
 
     func issue(repo: String, number: Int) async throws -> GitHubIssue? {
         guard let url = URL(string: "https://api.github.com/repos/\(repo)/issues/\(number)") else { return nil }
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 404 { return nil }
-        guard status == 200 else { throw GitHubError(status: status) }
+        let data: Data
+        do {
+            data = try await get(url)
+        } catch let error as GitHubError where error.status == 404 {
+            return nil
+        }
         var found = try JSONDecoder().decode(GitHubIssue.self, from: data)
         // The issues endpoint doesn't say whether a PR merged; the pulls one does.
         if found.isPullRequest, found.state == "closed",
            let prURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)") {
             var pr = URLRequest(url: prURL)
             pr.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
-            if let (prData, _) = try? await URLSession.shared.data(for: pr),
+            if let (prData, _) = try? await session.data(for: pr),
                let marker = try? JSONDecoder().decode(GitHubIssue.PullRequestMarker.self, from: prData) {
                 found.pullRequest = marker
             }
@@ -155,11 +168,20 @@ extension RESTGitHubClient {
     /// doesn't count against the API rate limit).
     func file(repo: String, path: String) async throws -> Data? {
         guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard status == 200 else { throw GitHubError(status: status) }
         return data
+    }
+}
+
+/// ETag-validated GitHub responses, shared by copies of the client.
+final class ETagCache: Sendable {
+    private let entries = Mutex<[URL: (etag: String, body: Data)]>([:])
+    subscript(url: URL) -> (etag: String, body: Data)? {
+        get { entries.withLock { $0[url] } }
+        set { entries.withLock { $0[url] = newValue } }
     }
 }
 

@@ -190,7 +190,7 @@ struct BotThreadView: View {
     private func markRead() {
         guard let thread = conversations.first else { return }
         thread.lastReadAt = .now
-        try? modelContext.save()
+        BotStore(context: modelContext).save()
     }
 
     private func greetIfNew() {

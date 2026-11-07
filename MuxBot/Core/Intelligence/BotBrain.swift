@@ -431,7 +431,7 @@ final class BotBrain {
         }
         let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
         message.intentRaw = intent?.rawValue
-        try? store.context.save()
+        store.save()
 
         isThinking = true
         defer { isThinking = false }
@@ -459,9 +459,13 @@ final class BotBrain {
             var brief: String?
             // "fix #8" or an issue link: dispatch that issue, with its body as the brief.
             if let number = Intent.issueNumber(in: text), let repo = repos.first?.repo {
-                let issue = (try? await github.openIssues(repo: repo))?.first { $0.number == number }
+                let issue = try? await github.issue(repo: repo, number: number)
                 guard let issue else {
-                    store.append(.assistant, "I can't find an open issue #\(number) on \(repo).", to: conversation)
+                    store.append(.assistant, "I can't find #\(number) on \(repo).", to: conversation)
+                    return
+                }
+                guard issue.state != "closed" else {
+                    store.append(.assistant, "#\(number) is already closed on \(repo).", to: conversation)
                     return
                 }
                 guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
@@ -691,19 +695,29 @@ final class BotBrain {
 
     /// Polls a darkmux run until it ends, then posts its result (or notes
     /// that it was stopped).
+    /// Runs whose darkmux can't be reached right now (the card says so).
+    var unreachableRuns: Set<UUID> = []
+
     private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
+        var backoff = PollBackoff()
+        defer { unreachableRuns.remove(run.id) }
         while run.phase == .running, run.darkmuxWorkId == workId {
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(backoff.delay))
             let status: DarkmuxClient.WorkStatus
             do {
                 status = try await client.workStatus(token: token, workId: workId)
+                backoff.succeeded()
+                unreachableRuns.remove(run.id)
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
                 // darkmux no longer knows this run (restarted, or it ended long ago):
                 // show it as stopped rather than spinning forever.
                 store.apply(.stop, to: run)
                 return
             } catch {
-                continue   // darkmux briefly unreachable: keep checking
+                // darkmux unreachable: back off, say so after three misses, keep trying.
+                backoff.failed()
+                if backoff.isUnreachable { unreachableRuns.insert(run.id) }
+                continue
             }
             switch status.status {
             case "running", "cancelling": continue
@@ -885,7 +899,7 @@ final class BotBrain {
             if bot.repoSlugs.isEmpty, let repo = made.repo, let slug = GitHubIssue.repoSlug(from: repo) {
                 store.addResource(.repo, "https://github.com/\(slug)", to: bot)
             }
-            try? store.context.save()
+            store.save()
             workCopySetup[bot.id] = nil
             let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
             store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
@@ -940,7 +954,7 @@ final class BotBrain {
         if let slug = GitRemote.originSlug(of: url), !bot.repoSlugs.contains(slug) {
             store.addResource(.repo, "https://github.com/\(slug)", to: bot)
         }
-        try? store.context.save()
+        store.save()
         guard bookmark != nil else { return "I couldn't keep access to \(url.lastPathComponent). Pick it again." }
         if connection?.isPaired == true { await setUpWorkCopy(for: bot, store: store) }
         return nil
@@ -1005,7 +1019,7 @@ final class BotBrain {
         guard card.kind == .actionCard, card.actionState == .waiting, let action = card.action else { return }
         let chat: ChatContext = card.conversation?.roleId.map { .bot($0) } ?? .lead
         card.actionState = approve ? .approved : .canceled
-        defer { try? store.context.save() }
+        defer { store.save() }
         guard approve else { return }
         let from = chat.botId.flatMap { store.bot(id: $0)?.name } ?? LeadBot.name
         let note: String
