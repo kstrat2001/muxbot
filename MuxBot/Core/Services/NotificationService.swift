@@ -1,7 +1,7 @@
 import Foundation
 import UserNotifications
 
-/// Local notifications, e.g. "a role needs you". Nothing schedules them yet.
+/// Local notifications, e.g. "a bot needs you". Nothing schedules them yet.
 @MainActor @Observable
 final class NotificationService {
     private let center = UNUserNotificationCenter.current()

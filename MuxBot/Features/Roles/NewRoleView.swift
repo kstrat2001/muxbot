@@ -15,12 +15,12 @@ struct NewRoleView: View {
                 TextField("e.g. Release helper", text: $name)
             }
             Section {
-                TextField("What this role does", text: $instructions, axis: .vertical)
+                TextField("What this bot does", text: $instructions, axis: .vertical)
                     .lineLimit(3...6)
             } header: {
                 Text("Role")
             } footer: {
-                Text("Radio reads this to decide which role gets new work.")
+                Text("Radio reads this to decide which bot gets new work.")
             }
             Section("Model") {
                 TextField("Default model", text: $modelName)
@@ -28,7 +28,7 @@ struct NewRoleView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("New role")
+        .navigationTitle("New bot")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {

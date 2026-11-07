@@ -2,12 +2,11 @@ import SwiftUI
 import SwiftData
 
 /// One role's thread. Read, and answer when the role needs you; new work
-/// goes through Radio.
+/// goes through the Radio dock, which follows navigation to this role.
 struct RoleChatView: View {
     let roleId: UUID
 
     @Environment(\.modelContext) private var context
-    @Environment(AppRouter.self) private var router
     @Environment(OnDeviceLLMService.self) private var llm
     @Query private var matches: [MuxRole]
     @State private var conversation: ChatConversation?
@@ -32,19 +31,17 @@ struct RoleChatView: View {
                         if !role.modelName.isEmpty {
                             Text("Model: \(role.modelName)").font(AppFont.caption()).foregroundStyle(.secondary)
                         }
-                        Button("New work for \(role.name)? Ask Radio") { router.openRadio() }
-                            .font(AppFont.subheadline(.semibold))
                     }
                     .padding(Spacing.md)
                     .frame(maxWidth: .infinity)
                 }
             } else if role == nil {
-                EmptyStateView(systemImage: "questionmark.circle", title: "Role not found", message: "It may have been removed.")
+                EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
             } else {
                 ProgressView()
             }
         }
-        .navigationTitle(role?.name ?? "Role")
+        .navigationTitle(role?.name ?? "Bot")
         .task {
             guard conversation == nil, let role else { return }
             let convo = ChatService.conversation(for: role.id, title: role.name, context: context)
@@ -55,7 +52,7 @@ struct RoleChatView: View {
                 try? context.save()
             }
             conversation = convo
-            service = ChatService(llm: llm, instructions: "You are \(role.name), a darkmux role. \(role.instructions)")
+            service = ChatService(llm: llm, instructions: "You are \(role.name), a darkmux bot. \(role.instructions)")
         }
     }
 }

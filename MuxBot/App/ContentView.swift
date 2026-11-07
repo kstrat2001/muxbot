@@ -9,6 +9,7 @@ struct ContentView: View {
             HomeView()
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
         }
+        .safeAreaInset(edge: .bottom) { RadioDock() }
         .sheet(isPresented: $router.showNewRole) {
             NavigationStack { NewRoleView() }
         }

@@ -31,18 +31,27 @@ enum RadioPlan: Sendable, Equatable {
 /// Routes by word overlap with each role's name and instructions. Used when
 /// the on-device model is unavailable or returns an unusable plan.
 enum KeywordRouter {
-    private static let newRolePhrases = ["new role", "create a role", "add a role", "make a role"]
+    private static let newRolePhrases = ["new bot", "create a bot", "add a bot", "make a bot", "new role", "create a role", "add a role", "make a role"]
     private static let stopwords: Set<String> = [
         "the", "and", "for", "with", "this", "that", "from", "into", "about", "please",
         "can", "you", "our", "your", "some", "out", "all", "are", "was", "will", "what",
     ]
 
-    static func plan(for request: String, roles: [RoleSummary]) -> RadioPlan {
+    /// `focus` is the role whose screen the user is on: it gets the work
+    /// unless the request names another role or asks for a new one.
+    static func plan(for request: String, roles: [RoleSummary], focus: UUID? = nil) -> RadioPlan {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = text.lowercased()
 
         if roles.isEmpty || newRolePhrases.contains(where: lower.contains) {
-            return .newRole(draft(from: text), why: "You asked for a new role.")
+            return .newRole(draft(from: text), why: "You asked for a new bot.")
+        }
+
+        if let named = roles.first(where: { $0.id != focus && lower.contains($0.name.lowercased()) }) {
+            return .assign(roleId: named.id, roleName: named.name, task: text, why: "You named \(named.name).")
+        }
+        if let focus, let here = roles.first(where: { $0.id == focus }) {
+            return .assign(roleId: here.id, roleName: here.name, task: text, why: "You're on \(here.name)'s screen.")
         }
 
         let words = tokens(lower)
@@ -71,9 +80,9 @@ enum KeywordRouter {
             .filter { $0.count >= 4 && !stopwords.contains($0) }
     }
 
-    /// "New role called Release helper that tags releases" → name + instructions.
+    /// "New bot called Release helper that tags releases" → name + instructions.
     static func draft(from text: String) -> RoleDraft {
-        var name = "New role"
+        var name = "New bot"
         var instructions = text
         for marker in [" called ", " named "] {
             guard let range = text.range(of: marker, options: .caseInsensitive) else { continue }
@@ -86,7 +95,7 @@ enum KeywordRouter {
             if let cut { instructions = String(rest[cut.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines) }
             break
         }
-        return RoleDraft(name: name.isEmpty ? "New role" : name, instructions: instructions)
+        return RoleDraft(name: name.isEmpty ? "New bot" : name, instructions: instructions)
     }
 }
 
@@ -95,17 +104,17 @@ enum KeywordRouter {
 #if canImport(FoundationModels)
 @Generable(description: "Radio's plan for one request")
 struct GeneratedPlan {
-    @Guide(description: "assign to give the work to an existing role; newRole only if the user asks for a new role or no role fits at all")
+    @Guide(description: "assign to give the work to an existing bot; newRole only if the user asks for a new bot or no bot fits at all")
     var action: GeneratedAction
-    @Guide(description: "For assign: the exact name of the chosen role from the list")
+    @Guide(description: "For assign: the exact name of the chosen bot from the list")
     var roleName: String
-    @Guide(description: "The task for the role, one short imperative sentence")
+    @Guide(description: "The task for the bot, one short imperative sentence")
     var task: String
-    @Guide(description: "One short line on why this role or this new role")
+    @Guide(description: "One short line on why this bot or this new bot")
     var why: String
-    @Guide(description: "For newRole: a short name for the new role")
+    @Guide(description: "For newRole: a short name for the new bot")
     var newRoleName: String
-    @Guide(description: "For newRole: one sentence on what the new role does")
+    @Guide(description: "For newRole: one sentence on what the new bot does")
     var newRoleInstructions: String
 }
 
@@ -132,7 +141,7 @@ final class RadioPlanner {
         #endif
     }
 
-    func submit(_ request: String, roles: [RoleSummary]) async {
+    func submit(_ request: String, roles: [RoleSummary], focus: UUID? = nil) async {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isThinking = true
@@ -140,11 +149,11 @@ final class RadioPlanner {
         plan = nil
         fallbackNote = nil
 
-        if onDeviceAvailable, let generated = await onDevicePlan(for: text, roles: roles) {
+        if onDeviceAvailable, let generated = await onDevicePlan(for: text, roles: roles, focus: focus) {
             plan = generated
             return
         }
-        plan = KeywordRouter.plan(for: text, roles: roles)
+        plan = KeywordRouter.plan(for: text, roles: roles, focus: focus)
         fallbackNote = onDeviceAvailable
             ? "The on-device model couldn't make a plan, so Radio used simple keyword matching."
             : "Apple Intelligence isn't available here, so Radio used simple keyword matching."
@@ -167,14 +176,15 @@ final class RadioPlanner {
         cancel()
     }
 
-    private func onDevicePlan(for request: String, roles: [RoleSummary]) async -> RadioPlan? {
+    private func onDevicePlan(for request: String, roles: [RoleSummary], focus: UUID?) async -> RadioPlan? {
         #if canImport(FoundationModels)
         let roster = roles.map { "- \($0.name) (\($0.state.label)): \($0.instructions)" }.joined(separator: "\n")
         let session = LanguageModelSession(instructions: """
-            You are Radio, the dispatcher in Mux Bot. Pick which role should do the user's request. \
-            Prefer an existing role. Only propose a new role if the user asks for one or nothing fits.
-            Roles:
+            You are Radio, the dispatcher in Mux Bot. Pick which bot should do the user's request. \
+            Prefer an existing bot. Only propose a new bot if the user asks for one or nothing fits.
+            Bots:
             \(roster.isEmpty ? "(none yet)" : roster)
+            \(roles.first { $0.id == focus }.map { "The user is on \($0.name)'s screen. Assign the request to \($0.name) unless it clearly names a different bot or asks for a new bot." } ?? "")
             """)
         do {
             let result = try await session.respond(to: request, generating: GeneratedPlan.self).content

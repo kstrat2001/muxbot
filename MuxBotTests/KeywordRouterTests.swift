@@ -39,8 +39,37 @@ struct KeywordRouterTests {
         #expect(draft.instructions == "tags releases")
     }
 
+    @Test func newBotRequestDraftsABot() {
+        guard case let .newRole(draft, _) = KeywordRouter.plan(for: "add a bot called Writer", roles: roles) else {
+            Issue.record("expected newRole"); return
+        }
+        #expect(draft.name == "Writer")
+    }
+
     @Test func emptyRosterDraftsARole() {
         guard case .newRole = KeywordRouter.plan(for: "fix a bug", roles: []) else {
+            Issue.record("expected newRole"); return
+        }
+    }
+
+    // Radio follows navigation: on a role's screen, work goes to that role
+    // unless the request names another one.
+    @Test func focusedRoleGetsTheWork() {
+        let coder = roles[0]
+        let plan = KeywordRouter.plan(for: "research long context papers", roles: roles, focus: coder.id)
+        guard case let .assign(id, _, _, why) = plan else { Issue.record("expected assign"); return }
+        #expect(id == coder.id)
+        #expect(why.contains("Coder"))
+    }
+
+    @Test func namingAnotherRoleOverridesFocus() {
+        let plan = KeywordRouter.plan(for: "ask the reviewer to check this", roles: roles, focus: roles[0].id)
+        guard case let .assign(_, name, _, _) = plan else { Issue.record("expected assign"); return }
+        #expect(name == "Reviewer")
+    }
+
+    @Test func newRoleRequestWinsOverFocus() {
+        guard case .newRole = KeywordRouter.plan(for: "add a role called Writer", roles: roles, focus: roles[0].id) else {
             Issue.record("expected newRole"); return
         }
     }

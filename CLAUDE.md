@@ -18,8 +18,8 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 
 - **No third-party dependencies.** Apple frameworks only (SwiftUI, SwiftData, FoundationModels, ...).
 - **Swift 6, strict concurrency complete.** UI state types are `@MainActor @Observable`.
-- **Radio is the only way to start work.** Role screens never get a task input; they link back to Radio ("New work? Ask Radio").
-- **The app owns its role store.** Roles live in the app's SwiftData store (`MuxRole`, `RoleTask`, mutated through `RoleStore`), not as a mirror of darkmux config. First launch seeds Coder, Reviewer, Eval runner and Researcher.
+- **Radio is the only way to start work.** Role screens never get their own task input; the one Radio dock stays on screen everywhere and, on a role's chat, defaults new work to that role.
+- **The app owns its role store.** The UI calls roles **bots** (Mux Bot); code and darkmux call them roles (`MuxRole`). Roles live in the app's SwiftData store (`MuxRole`, `RoleTask`, mutated through `RoleStore`), not as a mirror of darkmux config. First launch seeds Coder, Reviewer, Eval runner and Researcher.
 - **American English** in all copy, comments and docs.
 - No networking or darkmux calls exist yet. Radio plans on device (`RadioPlanner`: Foundation Models guided generation, keyword fallback labeled in the UI); Approve only records a local task.
 
@@ -27,5 +27,5 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 
 - `MuxBot/App`: entry point, `ContentView`, typed navigation (`AppRouter`, `Route`).
 - `MuxBot/Core`: design system, on-device LLM + generic `ChatService`, models, notification/background services, keychain, SwiftData container.
-- `MuxBot/Features`: Home (role tiles + Radio dock), RoleChat, Roles (new role form), Chat (shared transcript UI).
+- `MuxBot/Features`: Home (bot tiles), Radio (the one dock, owned by `ContentView`, follows navigation via `AppRouter.context`), RoleChat, Roles (New bot form), Chat (shared transcript UI).
 - `MuxBotTests`: Swift Testing suites (`xcodebuild ... -destination 'platform=macOS' test`).

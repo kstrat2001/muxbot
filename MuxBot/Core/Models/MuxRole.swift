@@ -16,6 +16,7 @@ enum RoleState: String, Codable, CaseIterable, Sendable {
 
 /// A role in the app's own role store. Named `MuxRole` to avoid clashing
 /// with `ChatRole`. Persisted with SwiftData; not a mirror of darkmux config.
+/// The UI calls it a "bot" (Mux Bot); in code it stays a role, as in darkmux.
 @Model
 final class MuxRole {
     var id: UUID = UUID()

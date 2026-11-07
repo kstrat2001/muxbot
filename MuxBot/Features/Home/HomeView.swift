@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// "Your roles": tiles grouped Needs you / Working / Ready from stored state,
+/// "Your bots": tiles grouped Needs you / Working / Ready from stored state,
 /// with the Radio dock pinned to the bottom.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
@@ -29,19 +29,18 @@ struct HomeView: View {
                     }
                 }
                 if roles.isEmpty {
-                    EmptyStateView(systemImage: "person.3", title: "No roles yet",
+                    EmptyStateView(systemImage: "person.3", title: "No bots yet",
                                    message: "Tap + to add one, or ask Radio to draft one.")
                 }
             }
             .padding(Spacing.lg)
         }
-        .navigationTitle("Your roles")
+        .navigationTitle("Your bots")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("New role", systemImage: "plus") { router.showNewRole = true }
+                Button("New bot", systemImage: "plus") { router.showNewRole = true }
             }
         }
-        .safeAreaInset(edge: .bottom) { RadioDock() }
     }
 }
 
