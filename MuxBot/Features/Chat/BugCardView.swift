@@ -32,7 +32,7 @@ struct BugCardView: View {
                         Button("Fix it now", systemImage: "hammer") { fix(draft) }
                             .buttonStyle(.borderedProminent)
                     }
-                    Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Fixes run as a simulation until you pair with darkmux.")
+                    Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Pair with darkmux to run fixes.")
                         .font(AppFont.caption()).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

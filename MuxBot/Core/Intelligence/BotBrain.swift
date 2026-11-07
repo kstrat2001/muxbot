@@ -511,22 +511,27 @@ final class BotBrain {
     /// The run a Tweak is aimed at; the next message in its bot's thread
     /// goes to that run instead of starting a new conversation turn.
     var tweakRunId: UUID?
-    /// How long a simulated run takes until the fleet is connected.
-    var simulatedRunSeconds: Double = 4
 
     /// A person's decision on a run card: Approve, Cancel, Keep, Discard,
     /// Open PR, Not now. Approve starts the (simulated) run.
     func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
-        guard store.apply(event, to: run) else { return }
-        if event == .approve, !startRealRun(run, message: run.task, store: store) {
-            if let bot = run.bot {
-                let why = connection?.isPaired == true
-                    ? "this bot has no work folder under ~/.darkmux/worktrees, or \(run.crew.name) has no darkmux role yet"
-                    : "this app isn't paired with darkmux (link button on Home)"
-                store.append(.system, "Simulated run: \(why).", to: store.conversation(for: .bot(bot.id)))
-            }
-            simulateFinish(run, store: store)
+        // Nothing fake ever runs: a run that can't go to darkmux isn't started.
+        if event == .approve, let reason = whyRunCannotStart(run) {
+            if let bot = run.bot { store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id))) }
+            return
         }
+        guard store.apply(event, to: run) else { return }
+        if event == .approve { _ = startRealRun(run, message: run.task, store: store) }
+    }
+
+    /// Why a run can't go to darkmux right now, or nil when it can.
+    func whyRunCannotStart(_ run: BotRun) -> String? {
+        guard connection?.isPaired == true, connection?.token != nil else { return "this app isn't paired with darkmux" }
+        guard run.crew.darkmuxRole != nil else { return "\(run.crew.name) has no darkmux role yet" }
+        guard let bot = run.bot, FleetConnection.workdir(for: bot) != nil else {
+            return "this bot has no work copy under ~/.darkmux/worktrees"
+        }
+        return nil
     }
 
     /// Sends the run to darkmux when this app is paired, the crew role maps
@@ -568,20 +573,15 @@ final class BotBrain {
         guard !text.isEmpty, let bot = run.bot else { return }
         store.append(.user, text, to: store.conversation(for: .bot(bot.id)))
         tweakRunId = nil
+        if let reason = whyRunCannotStart(run) {
+            store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id)))
+            return
+        }
         guard store.apply(.tweak, to: run) else { return }
-        let followUp = "Follow-up on: \(run.task)\nChange: \(text)"
-        if !startRealRun(run, message: followUp, store: store) { simulateFinish(run, store: store) }
+        _ = startRealRun(run, message: "Follow-up on: \(run.task)\nChange: \(text)", store: store)
     }
 
-    private func simulateFinish(_ run: BotRun, store: BotStore) {
-        run.isSimulated = true
-        let delay = simulatedRunSeconds
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(delay))
-            store.apply(.finish(summary: Self.sampleSummary(for: run)), to: run)
-            store.apply(.closeSimulation, to: run)   // nothing to keep or discard
-        }
-    }
+
 
     /// Drops any sentence that names a tool or tells the user to use one.
     nonisolated static func withoutToolTalk(_ reply: String) -> String {
@@ -593,9 +593,7 @@ final class BotBrain {
         return text.isEmpty ? "Let me check that properly." : text + "."
     }
 
-    static func sampleSummary(for run: BotRun) -> String {
-        "Simulation: nothing ran. Pair with darkmux and \(run.crew.name) will do “\(run.task)” for real, with the changed files and result here."
-    }
+
 
 
     func cancel() {

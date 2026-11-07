@@ -106,18 +106,18 @@ struct RunLoopStoreTests {
         #expect(kinds(store, bot) == [.dispatchCard])
     }
 
-    @Test func tweakFromTheBarRestartsTheRun() {
+    @Test func tweakWhenUnpairedSaysWhyAndLeavesTheResult() {
         let (store, bot) = setUp()
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.simulatedRunSeconds = 3600
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         store.apply(.finish(summary: "s"), to: run)
         brain.tweakRunId = run.id
         brain.tweak("make it bigger", run: run, store: store)
         #expect(brain.tweakRunId == nil)
-        #expect(run.phase == .running)
-        #expect(run.tweaks == 1)
+        #expect(run.phase == .result)
+        #expect(run.tweaks == 0)
     }
+
 }

@@ -11,6 +11,7 @@ struct RunCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(BotBrain.self) private var brain
     @Environment(AppRouter.self) private var router
+    @Environment(FleetConnection.self) private var connection
     @Query private var runs: [BotRun]
 
     init(message: ChatMessage, isLatest: Bool) {
@@ -38,7 +39,19 @@ struct RunCardView: View {
             Label("Dispatch to \(run.crew.name)", systemImage: run.crew.systemImage).font(AppFont.headline())
             Text(run.task).font(AppFont.body())
             if run.phase == .proposed {
-                buttons([("Cancel", .cancel, false), ("Approve", .approve, true)], run: run)
+                if let reason = brain.whyRunCannotStart(run) {
+                    Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+                        Spacer()
+                        if connection.isPaired == false {
+                            Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }
+                                .buttonStyle(.borderedProminent)
+                        }
+                    }
+                } else {
+                    buttons([("Cancel", .cancel, false), ("Approve", .approve, true)], run: run)
+                }
             } else {
                 outcome(run.phase == .canceled ? .failed : .done)
             }

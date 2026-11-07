@@ -22,30 +22,24 @@ struct FleetConnectionTests {
         #expect(CrewRole.evalRunner.darkmuxRole == nil)
     }
 
-    @Test func unpairedApprovalStaysSimulated() {
+    @Test func unpairedApprovalDoesNotStartAnythingAndSaysWhy() {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
-        brain.simulatedRunSeconds = 3600
-        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
+        let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
+        #expect(brain.whyRunCannotStart(run) == "this app isn't paired with darkmux")
         brain.decide(.approve, on: run, store: store)
-        #expect(run.phase == .running)
+        #expect(run.phase == .proposed)
         #expect(run.darkmuxWorkId == nil)
+        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." })
     }
 
-    @Test func aSimulatedRunIsMarkedAndClosesWithoutLeavingTheBotWaiting() async throws {
+    @Test func cancelStillWorksWhenUnpaired() {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
-        let brain = BotBrain()
-        brain.simulatedRunSeconds = 0.05
-        let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
-        brain.decide(.approve, on: run, store: store)
-        #expect(run.isSimulated)
-        try await Task.sleep(for: .milliseconds(400))
-        #expect(run.phase == .done)
-        #expect(run.summary.hasPrefix("Simulation: nothing ran."))
-        #expect(bot.state == .ready)
-        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content.hasPrefix("Simulated run: this app isn't paired") })
+        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
+        BotBrain().decide(.cancel, on: run, store: store)
+        #expect(run.phase == .canceled)
     }
 }
 
