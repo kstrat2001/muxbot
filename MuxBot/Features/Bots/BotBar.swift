@@ -11,6 +11,15 @@ struct BotBar: View {
     @Environment(BotBrain.self) private var brain
     @Query(sort: \Bot.createdAt) private var bots: [Bot]
 
+    @Query private var runs: [BotRun]
+
+    /// The run a Tweak is aimed at, if it belongs to the thread on screen.
+    private var tweakRun: BotRun? {
+        guard let id = brain.tweakRunId, let run = runs.first(where: { $0.id == id }),
+              run.bot?.id == router.context.botId else { return nil }
+        return run
+    }
+
     private var listenerName: String {
         router.context.botId.flatMap { id in bots.first { $0.id == id }?.name } ?? LeadBot.name
     }
@@ -29,8 +38,19 @@ struct BotBar: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let run = tweakRun {
+                HStack {
+                    Label("Tweak: \(run.task)", systemImage: "pencil")
+                        .font(AppFont.caption())
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Stop tweaking", systemImage: "xmark.circle.fill") { brain.tweakRunId = nil }
+                        .labelStyle(.iconOnly)
+                }
+                .foregroundStyle(.secondary)
+            }
             HStack(spacing: Spacing.sm) {
-                TextField("Message \(listenerName)…", text: $router.barDraft, axis: .vertical)
+                TextField(tweakRun == nil ? "Message \(listenerName)…" : "What should change?", text: $router.barDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                     .onSubmit(send)
@@ -55,6 +75,10 @@ struct BotBar: View {
         router.barDraft = ""
         let chat = router.context
         let store = BotStore(context: context)
+        if let run = tweakRun {
+            brain.tweak(text, run: run, store: store)
+            return
+        }
         Task { await brain.send(text, in: chat, store: store) }
     }
 }

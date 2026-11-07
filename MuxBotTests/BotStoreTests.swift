@@ -13,6 +13,7 @@ enum TestStore {
         let context = ModelContext(container)
         try? context.delete(model: BotTask.self)
         try? context.delete(model: BotResource.self)
+        try? context.delete(model: BotRun.self)
         try? context.delete(model: Bot.self)
         try? context.delete(model: ChatMessage.self)
         try? context.delete(model: ChatConversation.self)
@@ -33,16 +34,6 @@ struct BotStoreTests {
         let hcr = bots[0].sortedResources
         #expect(hcr.map(\.kind) == [.repo, .folder])
         #expect(hcr.first?.value == "https://github.com/kstrat2001/hcr")
-    }
-
-    @Test func dispatchRecordsCrewTaskAndSetsWorking() {
-        let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
-        store.dispatch(task: "Fix the footer", crew: .coder, on: bot)
-        let reloaded = try! #require(store.bot(id: bot.id))
-        #expect(reloaded.state == .working)
-        #expect(reloaded.currentTask?.crew == .coder)
-        #expect(reloaded.currentTask?.title == "Fix the footer")
     }
 
     @Test func approvingAddResourceSavesItOnTheThreadsBot() {

@@ -61,6 +61,9 @@ final class Bot {
     @Relationship(deleteRule: .cascade, inverse: \BotResource.bot)
     var resources: [BotResource]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \BotRun.bot)
+    var runs: [BotRun]? = []
+
     init(name: String, instructions: String, modelName: String = "", systemImage: String = "sparkles", state: BotState = BotState.ready) {
         self.name = name
         self.instructions = instructions

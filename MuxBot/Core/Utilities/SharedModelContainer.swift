@@ -13,6 +13,7 @@ enum SharedModelContainer {
         Bot.self,
         BotTask.self,
         BotResource.self,
+        BotRun.self,
     ])
 
     /// The App Group directory if the sandbox lets us write there, else

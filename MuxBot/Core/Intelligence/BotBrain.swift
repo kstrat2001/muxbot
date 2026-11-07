@@ -234,6 +234,8 @@ final class BotBrain {
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
     var fleet = FleetSnapshot.sample
+    /// Off in tests, so turns are deterministic keyword-fallback turns.
+    var useOnDeviceModel = true
 
     var onDeviceAvailable: Bool {
         #if canImport(FoundationModels)
@@ -257,7 +259,7 @@ final class BotBrain {
         fallbackNote = nil
 
         var turn: BotTurn?
-        if onDeviceAvailable {
+        if useOnDeviceModel && onDeviceAvailable {
             turn = await onDeviceTurn(for: text, speaker: speaker, bots: bots)
             if turn == nil { fallbackNote = "The on-device model couldn't answer, so I used simple keyword matching." }
         } else {
@@ -265,7 +267,53 @@ final class BotBrain {
         }
         let result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
         store.append(.assistant, result.reply, to: conversation)
-        if let action = result.action { pending = Pending(context: context, action: action) }
+        switch result.action {
+        case let .dispatch(crew, task)?:
+            // Dispatches become a card in the thread, not a bar card.
+            if let bot = context.botId.flatMap(store.bot(id:)) { store.proposeRun(task: task, crew: crew, on: bot) }
+        case let action?:
+            pending = Pending(context: context, action: action)
+        case nil:
+            break
+        }
+    }
+
+    // MARK: Run loop
+
+    /// The run a Tweak is aimed at; the next message in its bot's thread
+    /// goes to that run instead of starting a new conversation turn.
+    var tweakRunId: UUID?
+    /// How long a simulated run takes until the fleet is connected.
+    var simulatedRunSeconds: Double = 4
+
+    /// A person's decision on a run card: Approve, Cancel, Keep, Discard,
+    /// Open PR, Not now. Approve starts the (simulated) run.
+    func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
+        guard store.apply(event, to: run) else { return }
+        if event == .approve { simulateFinish(run, store: store) }
+    }
+
+    /// Sends a follow-up to the same run (and, once wired, the same worktree).
+    func tweak(_ request: String, run: BotRun, store: BotStore) {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let bot = run.bot else { return }
+        store.append(.user, text, to: store.conversation(for: .bot(bot.id)))
+        tweakRunId = nil
+        guard store.apply(.tweak, to: run) else { return }
+        simulateFinish(run, store: store)
+    }
+
+    private func simulateFinish(_ run: BotRun, store: BotStore) {
+        let delay = simulatedRunSeconds
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            store.apply(.finish(summary: Self.sampleSummary(for: run)), to: run)
+        }
+    }
+
+    static func sampleSummary(for run: BotRun) -> String {
+        let pass = run.tweaks == 0 ? "" : " (after \(run.tweaks) tweak\(run.tweaks == 1 ? "" : "s"))"
+        return "\(run.crew.name) finished “\(run.task)”\(pass). Sample result: the fleet isn't connected yet, so there is no real diff. Changed files, tests and a screenshot will show here."
     }
 
     func cancel() {
@@ -287,8 +335,9 @@ final class BotBrain {
             note = "Added bot \(draft.name)."
         case let .dispatch(crew, task):
             guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
-            store.dispatch(task: task, crew: crew, on: bot)
-            note = "Dispatched to \(crew.name): \(task)"
+            store.proposeRun(task: task, crew: crew, on: bot)
+            self.pending = nil
+            return
         case let .addResource(kind, value):
             guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
             store.addResource(kind, value, to: bot)

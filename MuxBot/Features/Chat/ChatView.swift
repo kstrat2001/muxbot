@@ -10,12 +10,28 @@ struct ChatView: View {
         (conversation.messages ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
+    /// The newest card of each kind for each run; older ones are history.
+    private var latestCardIds: Set<UUID> {
+        var latest: [String: ChatMessage] = [:]
+        for message in messages where message.kind != .text {
+            latest["\(message.runId?.uuidString ?? "")-\(message.kind.rawValue)"] = message
+        }
+        return Set(latest.values.map(\.id))
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: Spacing.sm) {
                     ForEach(messages) { message in
-                        ChatBubbleView(role: message.role, content: message.content).id(message.id)
+                        Group {
+                            if message.kind == .text {
+                                ChatBubbleView(role: message.role, content: message.content)
+                            } else {
+                                RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
+                            }
+                        }
+                        .id(message.id)
                     }
                     if isThinking {
                         ProgressView().frame(maxWidth: .infinity, alignment: .leading)

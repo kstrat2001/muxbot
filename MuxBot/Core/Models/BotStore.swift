@@ -75,16 +75,56 @@ struct BotStore {
         return task
     }
 
-    /// Records work a bot sends to a darkmux crew role and sets the bot
-    /// Working. No fleet call yet: the run starts once the fleet is wired.
+    /// A bot proposes work for its crew: the run starts as a dispatch
+    /// card in the bot's thread, waiting on Approve.
     @discardableResult
-    func dispatch(task title: String, crew: CrewRole, on bot: Bot) -> BotTask {
-        let task = BotTask(title: title, why: "Dispatched to \(crew.name)", crew: crew)
-        context.insert(task)
-        task.bot = bot
-        bot.state = BotState.working
+    func proposeRun(task: String, crew: CrewRole, on bot: Bot) -> BotRun {
+        let run = BotRun(task: task, crew: crew)
+        context.insert(run)
+        run.bot = bot
+        append(.assistant, task, kind: .dispatchCard, runId: run.id, to: conversation(for: .bot(bot.id)))
+        refreshState(of: bot)
+        return run
+    }
+
+    func run(id: UUID) -> BotRun? {
+        let all = (try? context.fetch(FetchDescriptor<BotRun>())) ?? []
+        return all.first { $0.id == id }
+    }
+
+    /// Moves a run through the loop and posts the next card. Returns false,
+    /// changing nothing, when the event isn't allowed in the run's phase.
+    @discardableResult
+    func apply(_ event: RunEvent, to run: BotRun) -> Bool {
+        guard let next = run.phase.next(on: event), let bot = run.bot else { return false }
+        let thread = conversation(for: .bot(bot.id))
+        run.phase = next
+        switch event {
+        case .approve:
+            append(.system, "Dispatched to \(run.crew.name).", kind: .runCard, runId: run.id, to: thread)
+        case let .finish(summary):
+            run.summary = summary
+            append(.assistant, summary, kind: .resultCard, runId: run.id, to: thread)
+        case .tweak:
+            run.tweaks += 1
+            append(.system, "Tweak \(run.tweaks) sent to \(run.crew.name).", kind: .runCard, runId: run.id, to: thread)
+        case .keep:
+            append(.assistant, "Kept. Open a pull request for it?", kind: .prCard, runId: run.id, to: thread)
+        case .cancel, .discard, .openPR, .skipPR:
+            try? context.save()
+        }
+        refreshState(of: bot)
+        return true
+    }
+
+    /// Needs you while a run waits on a decision, Working while one runs,
+    /// otherwise Ready.
+    func refreshState(of bot: Bot) {
+        let phases = (bot.runs ?? []).map(\.phase)
+        bot.state = phases.contains(where: \.awaitsYou) ? .needsYou
+            : phases.contains(where: \.isActive) ? .working
+            : (bot.tasks ?? []).isEmpty ? .ready : bot.state
         try? context.save()
-        return task
     }
 
     @discardableResult
@@ -114,8 +154,8 @@ struct BotStore {
         return created
     }
 
-    func append(_ role: ChatRole, _ text: String, to conversation: ChatConversation) {
-        let message = ChatMessage(role: role, content: text)
+    func append(_ role: ChatRole, _ text: String, kind: MessageKind = .text, runId: UUID? = nil, to conversation: ChatConversation) {
+        let message = ChatMessage(role: role, content: text, kind: kind, runId: runId)
         message.conversation = conversation
         context.insert(message)
         conversation.updatedAt = .now
