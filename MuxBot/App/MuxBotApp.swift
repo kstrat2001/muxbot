@@ -4,7 +4,7 @@ import SwiftData
 @main
 struct MuxBotApp: App {
     @State private var router = AppRouter()
-    @State private var roleStore = RoleStore()
+    @State private var radio = RadioPlanner()
     @State private var llm = OnDeviceLLMService()
     @State private var notifications = NotificationService()
 
@@ -16,6 +16,7 @@ struct MuxBotApp: App {
         } catch {
             fatalError("Could not create the model container: \(error)")
         }
+        RoleStore(context: container.mainContext).seedIfEmpty()
         BackgroundTaskService.register()
     }
 
@@ -23,7 +24,7 @@ struct MuxBotApp: App {
         WindowGroup {
             ContentView()
                 .environment(router)
-                .environment(roleStore)
+                .environment(radio)
                 .environment(llm)
                 .environment(notifications)
                 .task { BackgroundTaskService.scheduleRefresh() }

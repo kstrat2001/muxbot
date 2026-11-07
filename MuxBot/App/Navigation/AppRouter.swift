@@ -4,15 +4,18 @@ import SwiftUI
 final class AppRouter {
     var path = NavigationPath()
     var showNewRole = false
+    /// Set to move focus into the Radio dock on Home.
+    var focusRadio = false
 
     func navigate(to route: Route) {
         path.append(route)
     }
 
-    /// Radio is the only way to start work, so every "start work" path lands here.
+    /// Radio is the only way to start work, so every "start work" path lands
+    /// on Home with the Radio dock focused.
     func openRadio() {
         path = NavigationPath()
-        path.append(Route.radio)
+        focusRadio = true
     }
 
     func popToRoot() {

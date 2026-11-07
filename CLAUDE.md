@@ -19,12 +19,13 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 - **No third-party dependencies.** Apple frameworks only (SwiftUI, SwiftData, FoundationModels, ...).
 - **Swift 6, strict concurrency complete.** UI state types are `@MainActor @Observable`.
 - **Radio is the only way to start work.** Role screens never get a task input; they link back to Radio ("New work? Ask Radio").
-- **The app owns its role store.** Roles live in the app (`RoleStore`), not as a mirror of darkmux config. Today it is sample data.
+- **The app owns its role store.** Roles live in the app's SwiftData store (`MuxRole`, `RoleTask`, mutated through `RoleStore`), not as a mirror of darkmux config. First launch seeds Coder, Reviewer, Eval runner and Researcher.
 - **American English** in all copy, comments and docs.
-- No networking or darkmux calls exist yet; the screens are placeholders.
+- No networking or darkmux calls exist yet. Radio plans on device (`RadioPlanner`: Foundation Models guided generation, keyword fallback labeled in the UI); Approve only records a local task.
 
 ## Layout
 
 - `MuxBot/App`: entry point, `ContentView`, typed navigation (`AppRouter`, `Route`).
 - `MuxBot/Core`: design system, on-device LLM + generic `ChatService`, models, notification/background services, keychain, SwiftData container.
-- `MuxBot/Features`: Home (role tiles + Radio dock), Radio, RoleChat, Roles (new role form), Chat (shared transcript UI).
+- `MuxBot/Features`: Home (role tiles + Radio dock), RoleChat, Roles (new role form), Chat (shared transcript UI).
+- `MuxBotTests`: Swift Testing suites (`xcodebuild ... -destination 'platform=macOS' test`).

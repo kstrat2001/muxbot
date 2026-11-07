@@ -56,11 +56,28 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_EMIT_LOC_STRINGS: YES
 
+  MuxBotTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: MuxBotTests
+    dependencies:
+      - target: MuxBot
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp.tests
+        # The macOS app bundle nests its binary; XcodeGen's default is the iOS path.
+        "TEST_HOST[sdk=macosx*]": $(BUILT_PRODUCTS_DIR)/MuxBot.app/Contents/MacOS/MuxBot
+
 schemes:
   MuxBot:
     build:
       targets:
         MuxBot: all
+    test:
+      targets:
+        - MuxBotTests
     run:
       config: Debug
     archive:

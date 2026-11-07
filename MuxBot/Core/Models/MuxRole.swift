@@ -1,71 +1,62 @@
 import Foundation
+import SwiftData
 
-/// A darkmux role as the app shows it. Named `MuxRole` to avoid clashing
-/// with `ChatRole`. The app owns its role store; for now it is sample data.
-struct MuxRole: Identifiable, Hashable, Sendable {
-    enum Kind: String, CaseIterable, Sendable {
-        case builder, researcher, benchmarker, ideas
+/// Where a role stands. Drives the Home grouping.
+enum RoleState: String, Codable, CaseIterable, Sendable {
+    case needsYou, working, ready
 
-        var systemImage: String {
-            switch self {
-            case .builder: "hammer"
-            case .researcher: "magnifyingglass"
-            case .benchmarker: "gauge"
-            case .ideas: "lightbulb"
-            }
-        }
-
-        var label: String {
-            switch self {
-            case .builder: "Builder"
-            case .researcher: "Researcher"
-            case .benchmarker: "Benchmarker"
-            case .ideas: "Ideas"
-            }
+    var label: String {
+        switch self {
+        case .needsYou: "Needs you"
+        case .working: "Working"
+        case .ready: "Ready"
         }
     }
-
-    enum Status: String, CaseIterable, Sendable {
-        case needsYou, working, ready
-
-        var label: String {
-            switch self {
-            case .needsYou: "Needs you"
-            case .working: "Working"
-            case .ready: "Ready"
-            }
-        }
-    }
-
-    var id = UUID()
-    var name: String
-    var kind: Kind
-    var status: Status
-    var summary: String
 }
 
-/// In-memory role store with sample data. No darkmux calls yet.
-@MainActor @Observable
-final class RoleStore {
-    var roles: [MuxRole] = RoleStore.sample
-    var latestUpdate = "Researcher finished the model sweep. 3 results ready."
+/// A role in the app's own role store. Named `MuxRole` to avoid clashing
+/// with `ChatRole`. Persisted with SwiftData; not a mirror of darkmux config.
+@Model
+final class MuxRole {
+    var id: UUID = UUID()
+    var name: String = ""
+    /// What this role does, in plain words. Radio routes work by it.
+    var instructions: String = ""
+    /// The local model this role should run on. Empty means the default.
+    var modelName: String = ""
+    var systemImage: String = "sparkles"
+    @Attribute(.externalStorage) var avatarImageData: Data?
+    var state: RoleState = RoleState.ready
+    var createdAt: Date = Date()
 
-    func roles(with status: MuxRole.Status) -> [MuxRole] {
-        roles.filter { $0.status == status }
+    @Relationship(deleteRule: .cascade, inverse: \RoleTask.role)
+    var tasks: [RoleTask]? = []
+
+    init(name: String, instructions: String, modelName: String = "", systemImage: String = "sparkles", state: RoleState = RoleState.ready) {
+        self.name = name
+        self.instructions = instructions
+        self.modelName = modelName
+        self.systemImage = systemImage
+        self.state = state
     }
 
-    func role(id: UUID) -> MuxRole? {
-        roles.first { $0.id == id }
+    /// The task this role is on, newest first.
+    var currentTask: RoleTask? {
+        (tasks ?? []).max { $0.createdAt < $1.createdAt }
     }
+}
 
-    func add(name: String, kind: MuxRole.Kind) {
-        roles.append(MuxRole(name: name, kind: kind, status: .ready, summary: "New role. Ask Radio to give it work."))
+/// A piece of work Radio gave a role. Local only until the fleet is wired.
+@Model
+final class RoleTask {
+    var id: UUID = UUID()
+    var title: String = ""
+    var why: String = ""
+    var createdAt: Date = Date()
+    var role: MuxRole?
+
+    init(title: String, why: String) {
+        self.title = title
+        self.why = why
     }
-
-    static let sample: [MuxRole] = [
-        MuxRole(name: "Builder", kind: .builder, status: .needsYou, summary: "Wants a yes on the refactor plan."),
-        MuxRole(name: "Researcher", kind: .researcher, status: .working, summary: "Reading three papers on context length."),
-        MuxRole(name: "Benchmarker", kind: .benchmarker, status: .working, summary: "Running the lab workload, 4 of 10."),
-        MuxRole(name: "Ideas", kind: .ideas, status: .ready, summary: "Idle. Ready for new work."),
-    ]
 }

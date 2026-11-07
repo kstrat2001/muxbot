@@ -8,6 +8,7 @@ struct ChatView<Footer: View>: View {
     let service: ChatService
     var showsInput = true
     var placeholder = "Message"
+    var onSent: (() -> Void)? = nil
     @ViewBuilder var footer: () -> Footer
 
     @Environment(\.modelContext) private var context
@@ -59,7 +60,9 @@ struct ChatView<Footer: View>: View {
 
     private func send() {
         let text = draft
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         draft = ""
+        onSent?()
         Task { await service.send(text, in: conversation, context: context) }
     }
 }

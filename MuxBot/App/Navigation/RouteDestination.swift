@@ -5,8 +5,6 @@ struct RouteDestination: View {
 
     var body: some View {
         switch route {
-        case .radio:
-            RadioView()
         case .roleChat(let id):
             RoleChatView(roleId: id)
         }
