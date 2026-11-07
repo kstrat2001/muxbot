@@ -10,6 +10,7 @@ struct NewBotView: View {
     @State private var resource = ""
     @State private var folder: URL?
     @State private var pickingFolder = false
+    @State private var look = BotLook.suggested(for: "")
 
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -17,6 +18,9 @@ struct NewBotView: View {
         Form {
             Section("Name") {
                 TextField("e.g. Life coach, my website, Daily update", text: $name)
+            }
+            Section("Look") {
+                BotLookPicker(look: $look)
             }
             Section {
                 TextField("What this bot is about", text: $instructions, axis: .vertical)
@@ -52,6 +56,8 @@ struct NewBotView: View {
                 Button("Save") {
                     let store = BotStore(context: context)
                     let bot = store.add(name: name, instructions: instructions, modelName: "")
+                    bot.look = look
+                    try? context.save()
                     let value = resource.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !value.isEmpty {
                         let kind = ResourceKind.guess(for: value)

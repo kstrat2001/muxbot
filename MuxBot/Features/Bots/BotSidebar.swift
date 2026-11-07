@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// The macOS / iPad sidebar: Mux Bot, each bot (symbol, name, unread dot,
+/// The macOS / iPad sidebar: Mux Bot, each bot (character, name, unread dot,
 /// status), "New bot", then Activity.
 struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
@@ -13,10 +13,10 @@ struct BotSidebar: View {
         @Bindable var router = router
         List(selection: $router.sidebar) {
             Section {
-                row(name: LeadBot.name, systemImage: LeadBot.systemImage, unread: unread(nil), state: nil)
+                row(name: LeadBot.name, look: .lead, unread: unread(nil), state: nil)
                     .tag(SidebarItem.lead)
                 ForEach(bots) { bot in
-                    row(name: bot.name, systemImage: bot.systemImage, unread: unread(bot.id), state: bot.state)
+                    row(name: bot.name, look: bot.look, unread: unread(bot.id), state: bot.state)
                         .tag(SidebarItem.bot(bot.id))
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
@@ -51,12 +51,9 @@ struct BotSidebar: View {
         return !selected && (threads.first { $0.roleId == botId }?.hasUnread ?? false)
     }
 
-    private func row(name: String, systemImage: String, unread: Bool, state: BotState?) -> some View {
+    private func row(name: String, look: BotLook, unread: Bool, state: BotState?) -> some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: systemImage)
-                .foregroundStyle(Color.brandGreen)
-                .frame(width: 22)
-                .accessibilityHidden(true)
+            BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: 26)
             Text(name).lineLimit(1)
             Spacer(minLength: 0)
             if unread {

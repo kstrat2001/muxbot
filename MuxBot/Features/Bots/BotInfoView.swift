@@ -20,8 +20,14 @@ struct BotInfoView: View {
     var body: some View {
         Form {
             Section("About") {
-                Label(bot.name, systemImage: bot.systemImage).font(AppFont.headline())
+                HStack(spacing: Spacing.md) {
+                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44)
+                    Text(bot.name).font(AppFont.headline())
+                }
                 Text(bot.instructions).foregroundStyle(.secondary)
+            }
+            Section("Look") {
+                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
             }
             workCopySection
             Section("Resources") {
