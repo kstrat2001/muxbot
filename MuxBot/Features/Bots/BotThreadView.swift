@@ -34,25 +34,41 @@ struct BotThreadView: View {
 
     private var previewURL: URL? { bot?.previewURL }
 
+    /// The viewports the bot's preview recipe lists, if it's loaded.
+    private var recipeViewports: [String]? {
+        for repo in bot?.repoSlugs ?? [] {
+            if case let .ready(manifest, _)? = brain.recipes[repo] { return manifest.viewports }
+        }
+        return nil
+    }
+
     var body: some View {
         Group {
             if let url = previewURL, router.showPreview {
-                let panel = PreviewPanel(url: url) { router.showPreview = false }
-                if isWide {
+                let panel = PreviewPanel(url: url, recipeViewports: recipeViewports) {
+                    router.showPreview = false
+                    router.previewFullScreen = false
+                }
+                if router.previewFullScreen {
+                    panel.safeAreaInset(edge: .bottom) { BotBar() }
+                } else if isWide {
+                    #if os(macOS)
+                    HSplitView {
+                        chat.frame(minWidth: 320, idealWidth: 480)
+                        panel.frame(minWidth: 360, maxWidth: .infinity)
+                    }
+                    #else
                     HStack(spacing: 0) {
                         chat.frame(minWidth: 320)
                         Divider()
                         panel.frame(minWidth: 360, maxWidth: .infinity)
                     }
+                    #endif
                 } else {
-                    if router.previewFullScreen {
-                        panel.safeAreaInset(edge: .bottom) { BotBar() }
-                    } else {
-                        VStack(spacing: 0) {
-                            panel.frame(height: 340)
-                            Divider()
-                            chat
-                        }
+                    VStack(spacing: 0) {
+                        panel.frame(height: 340)
+                        Divider()
+                        chat
                     }
                 }
             } else {

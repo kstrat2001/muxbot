@@ -79,7 +79,10 @@ struct ContentView: View {
 
     private var split: some View {
         @Bindable var router = router
-        return NavigationSplitView {
+        let columns = Binding<NavigationSplitViewVisibility>(
+            get: { router.previewFullScreen && router.showPreview ? .detailOnly : .all },
+            set: { _ in })
+        return NavigationSplitView(columnVisibility: columns) {
             BotSidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {

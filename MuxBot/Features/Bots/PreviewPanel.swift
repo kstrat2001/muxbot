@@ -6,7 +6,10 @@ import WebKit
 /// darkmux will report each run's own.
 struct PreviewPanel: View {
     let url: URL
+    var recipeViewports: [String]? = nil
     let close: () -> Void
+
+    @State private var viewport: PreviewViewport?
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
@@ -42,16 +45,24 @@ struct PreviewPanel: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Point at part of the page; your next message is about it.")
-                #if os(iOS)
-                if sizeClass == .compact {
-                    Button(router.previewFullScreen ? "Show chat" : "Full screen",
-                           systemImage: router.previewFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-                        router.previewFullScreen.toggle()
+                Menu {
+                    ForEach(PreviewViewport.allCases, id: \.self) { option in
+                        Button(option.label, systemImage: option.systemImage) { viewport = option }
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
+                } label: {
+                    Label(currentViewport.label, systemImage: currentViewport.systemImage)
                 }
-                #endif
+                .labelStyle(.iconOnly)
+                .fixedSize()
+                .help("Preview at phone, tablet or desktop width")
+                Button(router.previewFullScreen ? "Show chat" : "Full window",
+                       systemImage: router.previewFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                    router.previewFullScreen.toggle()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .keyboardShortcut(router.previewFullScreen ? .cancelAction : KeyboardShortcut("f", modifiers: [.command, .shift]))
+                .help(router.previewFullScreen ? "Back to chat (Esc)" : "Preview fills the window (⇧⌘F)")
                 Button("Close preview", systemImage: "xmark.circle.fill", action: close)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
@@ -59,7 +70,14 @@ struct PreviewPanel: View {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
             .background(.bar)
-            WebView(preview.page)
+            GeometryReader { geometry in
+                let layout = currentViewport.layout(in: geometry.size)
+                WebView(preview.page)
+                    .frame(width: layout.width, height: layout.height)
+                    .scaleEffect(layout.scale, anchor: .topLeading)
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                    .clipped()
+            }
                 .overlay(alignment: .top) {
                     if let copiedNote {
                         Text(copiedNote)
@@ -73,6 +91,16 @@ struct PreviewPanel: View {
                 }
         }
         .task(id: url) { preview.show(url) }
+    }
+
+    private var currentViewport: PreviewViewport {
+        #if DEBUG
+        // `-previewViewport desktop` for layout checks.
+        if viewport == nil, let forced = UserDefaults.standard.string(forKey: "previewViewport").flatMap(PreviewViewport.init(rawValue:)) {
+            return forced
+        }
+        #endif
+        return viewport ?? PreviewViewport.preferred(from: recipeViewports)
     }
 
     private func copy(visible: Bool) {

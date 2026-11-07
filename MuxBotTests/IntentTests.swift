@@ -212,3 +212,28 @@ struct CorrectionFlowTests {
         #expect(bot.runs?.count == 1)
     }
 }
+
+struct PreviewViewportTests {
+    @Test func fitUsesThePanelAsIs() {
+        let l = PreviewViewport.fit.layout(in: CGSize(width: 683, height: 900))
+        #expect(l.width == 683 && l.height == 900 && l.scale == 1)
+    }
+
+    @Test func desktopRendersAt1440AndScalesDownToFit() {
+        let l = PreviewViewport.desktop.layout(in: CGSize(width: 720, height: 900))
+        #expect(l.width == 1440)
+        #expect(l.scale == 0.5)
+        #expect(l.height == 1800)   // fills the panel's height after scaling
+    }
+
+    @Test func phoneFitsWithoutScalingInAWidePanel() {
+        let l = PreviewViewport.phone.layout(in: CGSize(width: 1200, height: 900))
+        #expect(l.width == 390 && l.scale == 1 && l.height == 900)
+    }
+
+    @Test func recipeViewportsPickTheDefault() {
+        #expect(PreviewViewport.preferred(from: ["desktop", "phone"]) == .desktop)
+        #expect(PreviewViewport.preferred(from: ["tablet"]) == .tablet)
+        #expect(PreviewViewport.preferred(from: nil) == .fit)
+    }
+}

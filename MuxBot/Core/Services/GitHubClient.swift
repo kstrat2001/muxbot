@@ -63,6 +63,7 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
     var command: String
     var port: Int?
     var pages: [String]?
+    var viewports: [String]?
 
     var summary: String {
         var parts = ["\(command)\(port.map { " on port \($0)" } ?? "")"]
