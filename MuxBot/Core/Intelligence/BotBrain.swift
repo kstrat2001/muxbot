@@ -643,7 +643,7 @@ final class BotBrain {
                 continue   // darkmux briefly unreachable: keep checking
             }
             switch status.status {
-            case "running": continue
+            case "running", "cancelling": continue
             case "cancelled": store.apply(.stop, to: run); return
             case "done":
                 let report = status.finalAssistant ?? ""

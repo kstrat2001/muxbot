@@ -27,7 +27,7 @@ enum RunResultText {
 
     static func classify(error raw: String, reason: String?) -> RunEnd {
         let lower = (raw + " " + (reason ?? "")).lowercased()
-        if reason == "cancelled" || ["cancelled", "sigterm", "exit 143", "signal 15", "killed"].contains(where: { lower.contains($0) }) {
+        if reason == "cancelled" || ["cancelled", "sigterm", "sigkill", "exit 143", "signal 15", "signal 9", "killed"].contains(where: { lower.contains($0) }) {
             return .stopped
         }
         let lines = withoutPlumbing(raw).split(separator: "\n").map(String.init)

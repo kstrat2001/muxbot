@@ -27,6 +27,7 @@ struct RunResultTextTests {
     @Test(arguments: [
         ("Error: dispatch killed by signal 15 (SIGTERM); exit 143", RunEnd.stopped),
         ("cancelled", .stopped),
+        ("signal 9/SIGKILL", .stopped),
         ("[darkmux-liveness] ts +8617ms credential-read\nError: model endpoint refused the connection", .failed("model endpoint refused the connection")),
     ])
     func errorsBecomeAPlainOutcome(raw: String, expected: RunEnd) {
