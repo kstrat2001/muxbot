@@ -38,11 +38,13 @@ final class FleetConnection {
     }
     var approveCommand: String { "\(cliCommand) client approve" }
     var serveCommand: String { "\(cliCommand) client serve" }
-    var profile: String? { if case let .paired(_, profiles) = state { profiles.first } else { nil } }
+    /// The profiles the Mac's owner let this app use.
+    var allowedProfiles: [String] { if case let .paired(_, profiles) = state { profiles } else { [] } }
     var isPaired: Bool { if case .paired = state { true } else { false } }
 
-    /// Starts a pairing request and waits for `darkmux client approve`.
-    func pair(profile: String) {
+    /// Starts a pairing request and waits for `darkmux client approve`. The
+    /// owner chooses which profiles to grant there.
+    func pair() {
         pairing?.cancel()
         let code = Self.makeCode()
         let secret = Self.randomHex(32)
@@ -50,7 +52,7 @@ final class FleetConnection {
         state = .waiting(code: code, expires: Date().addingTimeInterval(10 * 60))
         pairing = Task {
             do {
-                let scopes = DarkmuxClient.Scopes(profiles: [profile], workspace: true)
+                let scopes = DarkmuxClient.Scopes(profiles: [], workspace: true)
                 let id = try await client.requestPairing(deviceName: device, code: code, secret: secret, scopes: scopes)
                 while !Task.isCancelled {
                     try await Task.sleep(for: .seconds(2))
@@ -59,7 +61,7 @@ final class FleetConnection {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
                         keychain.save(key: Self.tokenKey, value: token)
-                        let profiles = status.scopes?.profiles ?? [profile]
+                        let profiles = status.scopes?.profiles ?? []
                         UserDefaults.standard.set(name, forKey: Self.nameKey)
                         UserDefaults.standard.set(profiles, forKey: Self.profilesKey)
                         state = .paired(name: name, profiles: profiles)

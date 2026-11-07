@@ -10,7 +10,6 @@ import AppKit
 struct FleetPairingView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("darkmux.pair.profile") private var profile = ""
     @State private var justPaired = false
 
     var body: some View {
@@ -18,23 +17,14 @@ struct FleetPairingView: View {
             switch connection.state {
             case .unpaired, .failed:
                 Section {
-                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time.")
+                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal and choose which profiles it may use; you can revoke it any time.")
                         .foregroundStyle(.secondary)
-                }
-                Section {
-                    TextField("Profile, e.g. flint-rec", text: $profile)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("darkmux profile")
-                } footer: {
-                    Text("Runs from this app use this profile. darkmux shows it when you approve.")
                 }
                 if case let .failed(message) = connection.state {
                     Section { Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
                 }
                 Section {
-                    Button("Pair with darkmux", systemImage: "link") { connection.pair(profile: profile.trimmingCharacters(in: .whitespaces)) }
-                        .disabled(profile.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Pair with darkmux", systemImage: "link") { connection.pair() }
                 } footer: {
                     Text("Needs `darkmux client serve` running on this Mac.")
                 }
@@ -50,7 +40,7 @@ struct FleetPairingView: View {
                     #endif
                     step(2, "Paste this command and press Return.") { EmptyView() }
                     CommandBox(command: connection.approveCommand)
-                    step(3, "Check that darkmux shows this code, then type y and press Return.") { EmptyView() }
+                    step(3, "Check that darkmux shows this code, type y, then choose which profiles this app may use (Return for all).") { EmptyView() }
                     Text(code)
                         .font(.system(.largeTitle, design: .monospaced, weight: .bold))
                         .frame(maxWidth: .infinity)

@@ -527,16 +527,18 @@ final class BotBrain {
     /// to a darkmux role, and the bot has a folder under ~/.darkmux/worktrees.
     /// Returns false (so the run is simulated) otherwise.
     private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
-        guard let connection, let token = connection.token, let profile = connection.profile,
+        guard let connection, let token = connection.token,
               let role = run.crew.darkmuxRole, let bot = run.bot,
               let workdir = FleetConnection.workdir(for: bot) else { return false }
         let thread = store.conversation(for: .bot(bot.id))
         Task { @MainActor in
             do {
-                let workId = try await connection.client.submitWork(token: token, role: role, message: message,
-                                                                    profile: profile, workdir: workdir)
+                // darkmux picks the profile for this role (its role binding, else
+                // the default) and checks it against what the owner granted.
+                let (workId, profile) = try await connection.client.submitWork(token: token, role: role, message: message,
+                                                                               profile: nil, workdir: workdir)
                 run.darkmuxWorkId = workId
-                store.append(.system, "Running on darkmux: \(role) on \(profile).", to: thread)
+                store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 while true {
                     try await Task.sleep(for: .seconds(3))
                     let status = try await connection.client.workStatus(token: token, workId: workId)

@@ -51,12 +51,15 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(PairStatus.self, from: data)
     }
 
-    func submitWork(token: String, role: String, message: String, profile: String, workdir: String?) async throws -> String {
-        struct Body: Encodable { var role: String; var message: String; var profile: String; var workdir: String? }
-        struct Reply: Decodable { var work_id: String }
+    /// Starts a run. `profile` nil lets darkmux pick it the way
+    /// `darkmux dispatch <role>` would; the reply names the profile used.
+    func submitWork(token: String, role: String, message: String, profile: String?, workdir: String?) async throws -> (workId: String, profile: String?) {
+        struct Body: Encodable { var role: String; var message: String; var profile: String?; var workdir: String? }
+        struct Reply: Decodable { var work_id: String; var profile: String? }
         let data = try await send("POST", "/client/work", body: Body(role: role, message: message, profile: profile, workdir: workdir),
                                   headers: ["Authorization": "Bearer \(token)"])
-        return try JSONDecoder().decode(Reply.self, from: data).work_id
+        let reply = try JSONDecoder().decode(Reply.self, from: data)
+        return (reply.work_id, reply.profile)
     }
 
     func workStatus(token: String, workId: String) async throws -> WorkStatus {
