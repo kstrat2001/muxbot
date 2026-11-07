@@ -565,7 +565,7 @@ final class BotBrain {
         case .bug?:
             // Never let a model that can't see the page judge it: measure it
             // and draft an issue.
-            await draftBug(text, element: element, repo: repos.first?.repo, store: store, conversation: conversation)
+            await draftBug(text, element: element, repo: repos.first?.repo, bot: bot, store: store, conversation: conversation)
             return
         case .fix?, .review?:
             let crew: CrewRole = intent == .fix ? .coder : .reviewer
@@ -807,7 +807,7 @@ final class BotBrain {
 
     // MARK: Bug reports
 
-    private func draftBug(_ text: String, element: PickedElement?, repo: String?, store: BotStore, conversation: ChatConversation) async {
+    private func draftBug(_ text: String, element: PickedElement?, repo: String?, bot: Bot?, store: BotStore, conversation: ChatConversation) async {
         let facts: PageFacts?
         if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text)) }
         let measured = facts.map(BugReport.describe) ?? []
@@ -823,7 +823,24 @@ final class BotBrain {
         var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
                                     facts: facts, page: nil, repo: repo)
         draft.selector = element?.selector
-        draft.expected = await expectedLine(for: text)
+        // The layout around the reported width, measured in the preview: the
+        // switch between presets, its rule and file. No model judges it.
+        var layout: LayoutMeasure.Measured?
+        if let probe = layoutProbe, let bot, let root = runs.previewURL(for: bot), let width = facts?.viewport {
+            let page = facts?.url ?? "/"
+            let url = URL(string: String(page.drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
+            let got = await probe.measure(url: url, widths: LayoutMeasure.widths(around: width))
+            if !got.isEmpty { layout = LayoutMeasure.summarize(got, focus: width) }
+        }
+        draft.facts += layout?.lines ?? []
+        draft.likelyPlace = layout?.likelyPlace
+        // Expected is what you should see: from the measurement when it says,
+        // else the model's line only if it names no fix or mechanism.
+        if let done = layout?.doneWhen {
+            draft.expected = done.capitalizedFirst
+        } else if let line = await expectedLine(for: text), BugReport.isOutcomeOnly(line) {
+            draft.expected = line
+        }
         if let json = try? JSONEncoder().encode(draft), let body = String(data: json, encoding: .utf8) {
             store.append(.assistant, body, kind: .bugCard, to: conversation)
         }
@@ -834,7 +851,7 @@ final class BotBrain {
     private func expectedLine(for report: String) async -> String? {
         #if canImport(FoundationModels)
         guard useOnDeviceModel, onDeviceUnavailableReason == nil, !report.isEmpty else { return nil }
-        let session = LanguageModelSession(instructions: "You turn a bug description into one short sentence saying what should happen instead. Reply with only that sentence.")
+        let session = LanguageModelSession(instructions: "You turn a bug description into one short sentence describing what the person should see on the page when it works. Describe only the visible result. Never name a cause, a fix, code, CSS, timing or settings. Reply with only that sentence.")
         let line = try? await session.respond(to: report).content.trimmingCharacters(in: .whitespacesAndNewlines)
         return line.flatMap { $0.isEmpty || $0.count > 200 ? nil : $0 }
         #else

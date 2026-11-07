@@ -93,6 +93,16 @@ enum LayoutMeasure {
         return presets + [desktop]
     }
 
+    /// For a bug draft: the reported width, the presets either side of it,
+    /// and desktop.
+    static func widths(around width: Int) -> [Int] {
+        var out = [width]
+        if let below = presets.filter({ $0 < width }).max() { out.append(below) }
+        if let above = presets.filter({ $0 > width }).min() { out.append(above) }
+        if width != desktop { out.append(desktop) }
+        return out
+    }
+
     struct Measured: Equatable {
         var lines: [String]
         var doneWhen: String?
@@ -108,6 +118,12 @@ enum LayoutMeasure {
         /// One sentence a brief leads with: the rule, what it switches, and
         /// the range to change.
         var switchLead: String? = nil
+        /// "inertia/css/app.css, @media (max-width: 768px)" when a rule is
+        /// behind the switch.
+        var switchPlace: String? = nil
+
+        /// Where to look: the switching rule and its file, else the file.
+        var likelyPlace: String? { switchPlace ?? likelyFile }
     }
 
     static func summarize(_ facts: [LayoutFacts], focus: Int?) -> Measured {
@@ -179,6 +195,7 @@ enum LayoutMeasure {
         var switchRule: String?
         var targetRange: String?
         var switchLead: String?
+        var switchPlace: String?
         if let focus, let at = facts.first(where: { $0.viewport == focus }),
            let below = facts.filter({ $0.viewport < focus }).max(by: { $0.viewport < $1.viewport }) {
             for s in at.sections {
@@ -195,6 +212,7 @@ enum LayoutMeasure {
                 targetRange = "\(low)–\(high)px"
                 let wanted = Self.short(other.arrangementText), now = Self.short(s.arrangementText)
                 switchRule = rule.map { r in "@media \(r.media)\(file(r.source).map { " in \($0)" } ?? "")" }
+                switchPlace = rule.flatMap { r in file(r.source).map { "\($0), @media \(r.media)" } }
                 switchLead = (switchRule.map { "\($0) switches \(s.selector) to \(wanted) at \(below.viewport)px" }
                               ?? "\(s.selector) is \(wanted) at \(below.viewport)px")
                     + ", but it's \(now) at \(focus)px. Make it \(wanted) from \(low)px to \(high)px too."
@@ -209,7 +227,7 @@ enum LayoutMeasure {
         var seen = Set<String>()
         lines = lines.filter { seen.insert($0).inserted }
         return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine,
-                        switchRule: switchRule, targetRange: targetRange, switchLead: switchLead)
+                        switchRule: switchRule, targetRange: targetRange, switchLead: switchLead, switchPlace: switchPlace)
     }
 
     /// The block a brief carries.
