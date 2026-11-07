@@ -33,9 +33,31 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         return (intent, String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces))
     }
 
+    /// "no, it's a question", "not a bug, just asking", "actually, fix it":
+    /// the user correcting how the bot read their last message.
+    static func correction(in text: String) -> Intent? {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard lower.count <= 60, ["no", "not ", "nope", "actually"].contains(where: { lower.hasPrefix($0) }) else { return nil }
+        let cues: [(Intent, [String])] = [
+            (.ask, ["question", "just asking", "only asking", "ask"]),
+            (.bug, ["bug"]),
+            (.review, ["review"]),
+            (.issues, ["issues", "tickets"]),
+            (.fix, ["fix", "change it", "do it"]),
+        ]
+        // The last cue mentioned wins: "not a bug, a question" → question.
+        var best: (Intent, String.Index)?
+        for (intent, words) in cues {
+            for word in words {
+                if let r = lower.range(of: word, options: .backwards), best == nil || r.lowerBound > best!.1 { best = (intent, r.lowerBound) }
+            }
+        }
+        return best?.0
+    }
+
     /// "#8" or ".../issues/8" → 8.
     static func issueNumber(in text: String) -> Int? {
-        let patterns = [#"/issues/(\d+)"#, #"#(\d+)\b"#]
+        let patterns = [#"/issues/(\d+)"#, #"#(\d+)\b"#, #"(?i)\bissue\s+(\d+)\b"#, #"(?i)\bfix\s+(\d+)\b"#]
         for pattern in patterns {
             if let match = text.range(of: pattern, options: .regularExpression) {
                 let digits = text[match].filter(\.isNumber)

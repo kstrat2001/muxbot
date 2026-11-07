@@ -156,7 +156,10 @@ struct OpenIssuesTool: Tool {
             do {
                 let issues = IssueQuery.filter(try await client.openIssues(repo: ref.repo),
                                                label: arguments.label, includePullRequests: arguments.includePullRequests)
-                lines.append(issues.isEmpty ? "\(header): no open issues." : "\(header):\n" + issues.prefix(10).map { "- \($0.line)" }.joined(separator: "\n"))
+                // Tight cap: the on-device model's context is small.
+                let shown = issues.prefix(5).map { "- " + String($0.line.prefix(90)) }
+                let more = issues.count > 5 ? "\n(\(issues.count - 5) more)" : ""
+                lines.append(issues.isEmpty ? "\(header): no open issues." : "\(header):\n" + shown.joined(separator: "\n") + more)
             } catch {
                 lines.append("\(header): couldn't read issues (\(error.localizedDescription))")
             }

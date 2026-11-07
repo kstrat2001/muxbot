@@ -112,6 +112,8 @@ struct IssueReferenceTests {
         ("ok fix https://github.com/kstrat2001/hcr/issues/8", 8),
         ("fix #12 please", 12),
         ("can you fix issue #3?", 3),
+        ("fix 8", 8),
+        ("please fix issue 12", 12),
     ])
     func issueNumbers(text: String, number: Int) {
         #expect(Intent.issueNumber(in: text) == number)
@@ -144,5 +146,69 @@ struct FixIssueFlowTests {
         await brain.send("ok fix https://github.com/kstrat2001/hcr/issues/8", in: .bot(bot.id), store: store)
         #expect(bot.runs?.first?.task == "Fix #8: No padding on left/right of the border (kstrat2001/hcr)")
         #expect(bot.runs?.first?.crew == .coder)
+    }
+}
+
+struct PromptTrimmingTests {
+    let speaker = BotSummary(id: UUID(), name: "humancodereader", instructions: String(repeating: "Website work. ", count: 40), state: .ready)
+    var bots: [BotSummary] {
+        [speaker] + (0..<30).map { BotSummary(id: UUID(), name: "Bot \($0)", instructions: String(repeating: "x", count: 300), state: .ready) }
+    }
+
+    @Test func fullInstructionsStayWellUnderTheOnDeviceBudget() {
+        let text = BotBrain.instructions(for: "where should this run? which machine is free?", speaker: speaker,
+                                         bots: bots, fleet: .sample, compact: false)
+        // ~4K tokens shared with the tool schema, request and answer: keep
+        // instructions under ~2,600 characters (~650 tokens).
+        #expect(text.count < 2600)
+        #expect(text.contains("Machines:"))
+    }
+
+    @Test func fleetBriefingOnlyWhenAsked() {
+        let text = BotBrain.instructions(for: "fix the footer", speaker: speaker, bots: bots, fleet: .sample, compact: false)
+        #expect(!text.contains("Machines:"))
+    }
+
+    @Test func compactRetryDropsRosterAndFleet() {
+        let text = BotBrain.instructions(for: "which machine is free?", speaker: speaker, bots: bots, fleet: .sample, compact: true)
+        #expect(!text.contains("Other bots"))
+        #expect(!text.contains("Machines:"))
+        #expect(text.count < 700)
+    }
+}
+
+struct CorrectionTests {
+    @Test(arguments: [
+        ("no, it's a question", Intent.ask),
+        ("not a bug, just asking", .ask),
+        ("no, it's a bug", .bug),
+        ("actually, fix it", .fix),
+        ("nope, I meant review it", .review),
+    ])
+    func corrections(text: String, intent: Intent) {
+        #expect(Intent.correction(in: text) == intent)
+    }
+
+    @Test func ordinaryMessagesAreNotCorrections() {
+        #expect(Intent.correction(in: "the footer has no padding") == nil)
+        #expect(Intent.correction(in: "now fix the header too, and make the footer match the new spacing everywhere please") == nil)
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct CorrectionFlowTests {
+    @Test func noItsAQuestionCancelsTheProposedRunAndAnswersInstead() async throws {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        await brain.send("fix: why does the pricing box touch the edges", in: .bot(bot.id), store: store)
+        let run = try #require(bot.runs?.first)
+        #expect(run.phase == .proposed)
+        await brain.send("no, it's a question", in: .bot(bot.id), store: store)
+        #expect(run.phase == .canceled)
+        let first = try #require((store.conversation(for: .bot(bot.id)).messages ?? []).filter { $0.role == .user }.min { $0.timestamp < $1.timestamp })
+        #expect(first.intentRaw == "ask")
+        #expect(bot.runs?.count == 1)
     }
 }

@@ -286,6 +286,58 @@ final class BotBrain {
     /// Threads already told that the on-device model isn't working here.
     private var toldFallback: Set<ChatContext> = []
 
+    /// The on-device model has a ~4K-token context, shared by these
+    /// instructions, the tool schema, the request and the answer. Each turn
+    /// is a fresh session (no history), so only this has to stay small:
+    /// short roster lines, the fleet briefing only when asked about, and a
+    /// compact form (identity and rules only) for the retry after an
+    /// overflow.
+    nonisolated static func instructions(for request: String, speaker: BotSummary?, bots: [BotSummary],
+                                         fleet: FleetSnapshot, compact: Bool) -> String {
+        let lower = request.lowercased()
+        let crewList = CrewRole.allCases.map(\.name).joined(separator: ", ")
+        let identity = speaker.map {
+            "You are \($0.name), a bot in Mux Bot. \($0.instructions.prefix(160))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
+        } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
+        let rules = """
+            Answer in plain words; propose an action only when the user wants something done. \
+            You cannot see the website. Never say how something looks. \
+            Never mention tools. Never claim whether issues exist without checking. \
+            \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew.")
+            """
+        guard !compact else { return identity + "\n" + rules }
+        let others = bots.filter { $0.id != speaker?.id }.prefix(12)
+        let roster = others.map { "- \($0.name): \($0.instructions.prefix(70))" }.joined(separator: "\n")
+        let wantsFleet = ["machine", "fleet", "memory", "loaded", "running", "free", "where should"].contains { lower.contains($0) }
+        return [identity, rules,
+                "Hand work to another bot only when the user asks or it clearly belongs to that bot.",
+                "Other bots:\n" + (roster.isEmpty ? "(none yet)" : roster),
+                wantsFleet ? String(fleet.briefing.prefix(900)) : ""].filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+
+    /// Errors about one turn (too long, refused, malformed), not about the
+    /// model being unavailable.
+    nonisolated static func isPerTurnFailure(_ error: any Error) -> Bool {
+        #if canImport(FoundationModels)
+        if let e = error as? LanguageModelSession.GenerationError {
+            switch e {
+            case .exceededContextWindowSize, .guardrailViolation, .decodingFailure, .refusal, .unsupportedLanguageOrLocale: return true
+            default: return false
+            }
+        }
+        #endif
+        return false
+    }
+
+    nonisolated static func describe(_ error: any Error) -> String {
+        #if canImport(FoundationModels)
+        if let e = error as? LanguageModelSession.GenerationError, case .exceededContextWindowSize = e {
+            return "That was too long for the on-device model."
+        }
+        #endif
+        return "The on-device model couldn't answer that."
+    }
+
     /// Why the on-device model can't be used, or nil when it reports ready.
     /// (The simulator can report ready and still fail at inference when the
     /// Mac has Apple Intelligence off; that failure is caught per turn.)
@@ -336,6 +388,20 @@ final class BotBrain {
     /// `forced` is an intent you chose (a prefix like "bug:" does the same).
     func send(_ request: String, in context: ChatContext, store: BotStore,
               element: PickedElement? = nil, forced: Intent? = nil) async {
+        // "no, it's a question": re-read the previous message instead.
+        if let corrected = Intent.correction(in: request),
+           let previous = (store.conversation(for: context).messages ?? [])
+               .filter({ $0.role == .user && $0.kind == .text })
+               .max(by: { $0.timestamp < $1.timestamp }) {
+            let thread = store.conversation(for: context)
+            store.append(.user, request.trimmingCharacters(in: .whitespacesAndNewlines), to: thread)
+            // Drop a card the misread proposed, if it's still waiting.
+            for run in (context.botId.flatMap(store.bot(id:))?.runs ?? []) where run.phase == .proposed && run.createdAt >= previous.timestamp {
+                store.apply(.cancel, to: run)
+            }
+            await reinterpret(previous, as: corrected, store: store)
+            return
+        }
         let (prefix, body) = Intent.parse(request)
         let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || element != nil else { return }
@@ -407,12 +473,22 @@ final class BotBrain {
         // Questions and everything else: the on-device model, then keywords.
         let prompt = element.map { "\(text)\n\nAbout this element on the page: \(BugReport.describe($0.asFacts).joined()) Selector: \($0.selector)." } ?? text
         var turn: BotTurn?
+        var turnNote: String?
         var unavailableReason = onDeviceUnavailableReason
         if useOnDeviceModel && unavailableReason == nil {
             do {
-                turn = try await onDeviceTurn(for: prompt, speaker: speaker, bots: bots, repos: repos)
+                do {
+                    turn = try await onDeviceTurn(for: prompt, speaker: speaker, bots: bots, repos: repos)
+                } catch let error as LanguageModelSession.GenerationError {
+                    // Too long: retry once with a fresh, trimmed session.
+                    guard case .exceededContextWindowSize = error else { throw error }
+                    turn = try await onDeviceTurn(for: String(prompt.prefix(1200)), speaker: speaker, bots: bots,
+                                                  repos: repos, compact: true)
+                }
             } catch {
-                unavailableReason = error.localizedDescription
+                // Only "can't run at all" errors mean the model is unavailable;
+                // a too-long or refused turn just falls back for this message.
+                if Self.isPerTurnFailure(error) { turnNote = Self.describe(error) } else { unavailableReason = error.localizedDescription }
             }
         }
         if turn == nil, let reason = unavailableReason, useOnDeviceModel, !toldFallback.contains(context) {
@@ -421,7 +497,8 @@ final class BotBrain {
         }
         fallbackNote = !useOnDeviceModel || turn != nil ? nil
             : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
-            : "The on-device model's answer wasn't usable, so I used keyword matching."
+            : turnNote.map { "\($0) I used keyword matching for this message." }
+            ?? "The on-device model's answer wasn't usable, so I used keyword matching."
         var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
         if intent == .ask { result.action = nil }   // a question never proposes work
         apply(result, context: context, store: store, conversation: conversation)
@@ -627,33 +704,16 @@ final class BotBrain {
         self.pending = nil
     }
 
-    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo]) async throws -> BotTurn? {
+    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],
+                              compact: Bool = false) async throws -> BotTurn? {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
-        let roster = others.map { "- \($0.name): \($0.instructions)" }.joined(separator: "\n")
-        let crewList = CrewRole.allCases.map(\.name).joined(separator: ", ")
-        let identity = speaker.map {
-            "You are \($0.name), a bot in Mux Bot. \($0.instructions)\nYour resources: \($0.resources.isEmpty ? "none yet" : $0.resources.joined(separator: ", "))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
-        } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
+        let lower = request.lowercased()
+        let wantsIssues = FallbackBrain.isIssueQuestion(lower) || lower.contains("issue")
         let issueTool = OpenIssuesTool(repos: repos, client: github)
-        let tools: [any Tool] = repos.isEmpty ? [] : [issueTool]
-        let rules = """
-            Never mention tools or their names to the user. Never say whether issues, bugs or pull requests \
-            exist without calling listOpenIssues first; if you can't check, say so. \
-            \(speaker == nil ? "When the user wants an issue fixed, hand it off (handOff) to the bot that owns that repo." : "When the user wants an issue fixed, dispatch it to the Coder crew.")
-            """
-        let session = LanguageModelSession(tools: tools, instructions: """
-            \(identity)
-            Answer questions in plain words; propose an action only when the user wants something done. \
-            You cannot see the website or the preview. Never say how something looks. When the user describes a \
-            visual problem, believe them and offer to dispatch a fix to the Coder crew. \
-            \(rules)
-            Hand work to another bot only when the user asks or it clearly belongs to that bot. \
-            When asked where work should run, suggest the online machine with the most free memory.
-            Other bots:
-            \(roster.isEmpty ? "(none yet)" : roster)
-            \(fleet.briefing)
-            """)
+        let tools: [any Tool] = compact || repos.isEmpty || !wantsIssues ? [] : [issueTool]
+        let session = LanguageModelSession(tools: tools, instructions: Self.instructions(
+            for: request, speaker: speaker, bots: bots, fleet: fleet, compact: compact))
         do {
             var g: GeneratedTurn
             do {
