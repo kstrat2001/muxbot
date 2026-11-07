@@ -35,6 +35,7 @@ struct ContentView: View {
         #if os(macOS)
         if UserDefaults.standard.bool(forKey: "snapshot") { Task { await snapshotWindow() } }
         #endif
+        if UserDefaults.standard.bool(forKey: "showPreview") { router.showPreview = true }
         guard let name = UserDefaults.standard.string(forKey: "openBot") else { return }
         if name == LeadBot.name { router.path = [.lead]; return }
         if let bot = BotStore(context: context).allBots().first(where: { $0.name == name }) {

@@ -52,6 +52,23 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
 protocol GitHubClient: Sendable {
     /// Open issues and pull requests for "owner/repo", newest first.
     func openIssues(repo: String) async throws -> [GitHubIssue]
+    /// A file on the default branch, or nil if it doesn't exist.
+    func file(repo: String, path: String) async throws -> Data?
+}
+
+/// A repo's darkmux preview recipe, `.darkmux/preview.json`. Draft format.
+struct PreviewManifest: Sendable, Equatable, Decodable {
+    static let path = ".darkmux/preview.json"
+
+    var command: String
+    var port: Int?
+    var pages: [String]?
+
+    var summary: String {
+        var parts = ["\(command)\(port.map { " on port \($0)" } ?? "")"]
+        if let pages, !pages.isEmpty { parts.append("pages \(pages.joined(separator: ", "))") }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// Unauthenticated GitHub REST API: public repos only, 60 requests an hour
@@ -67,6 +84,19 @@ struct RESTGitHubClient: GitHubClient {
             throw GitHubError(status: http.statusCode)
         }
         return try JSONDecoder().decode([GitHubIssue].self, from: data)
+    }
+}
+
+extension RESTGitHubClient {
+    /// Raw file from the default branch (raw.githubusercontent.com, which
+    /// doesn't count against the API rate limit).
+    func file(repo: String, path: String) async throws -> Data? {
+        guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard status == 200 else { throw GitHubError(status: status) }
+        return data
     }
 }
 

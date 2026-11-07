@@ -5,6 +5,10 @@ import Testing
 struct MockGitHub: GitHubClient {
     var issues: [GitHubIssue] = []
     var error: (any Error)?
+    var files: [String: String] = [:]
+    func file(repo: String, path: String) async throws -> Data? {
+        files["\(repo)/\(path)"].map { Data($0.utf8) }
+    }
     func openIssues(repo: String) async throws -> [GitHubIssue] {
         if let error { throw error }
         return issues
@@ -151,5 +155,45 @@ struct LeadBotIssueTests {
         await brain.send("zzz bug tickets?", in: .lead, store: store)
         let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant }.last?.content ?? ""
         #expect(reply.hasPrefix("Which bot's repo should I check?"))
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct PreviewRecipeTests {
+    let hcrDraft = #"{"schema":"darkmux.preview/draft-1","command":"npm run dev","port":3333,"pages":["/","/pricing"]}"#
+
+    @Test func manifestSummary() throws {
+        let m = try JSONDecoder().decode(PreviewManifest.self, from: Data(hcrDraft.utf8))
+        #expect(m.summary == "npm run dev on port 3333 · pages /, /pricing")
+    }
+
+    @Test func recipeIsReadyWhenTheRepoHasOne() async {
+        let brain = BotBrain()
+        brain.github = MockGitHub(files: ["kstrat2001/hcr/.darkmux/preview.json": hcrDraft])
+        await brain.loadRecipe(for: "kstrat2001/hcr")
+        guard case .ready(let m)? = brain.recipes["kstrat2001/hcr"] else { Issue.record("expected ready"); return }
+        #expect(m.port == 3333)
+    }
+
+    @Test func recipeIsMissingWhenTheFileIsAbsent() async {
+        let brain = BotBrain()
+        brain.github = MockGitHub()
+        await brain.loadRecipe(for: "kstrat2001/hcr")
+        #expect(brain.recipes["kstrat2001/hcr"] == .missing)
+    }
+
+    @Test func previewURLKindIsGuessedForTailnetAndLocalhost() {
+        #expect(ResourceKind.guess(for: "http://mac.tail123.ts.net:8445/") == .previewURL)
+        #expect(ResourceKind.guess(for: "http://localhost:3333") == .previewURL)
+        #expect(ResourceKind.guess(for: "https://example.com") == .link)
+    }
+
+    @Test func runsCarryTheBotsPreviewURL() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        store.addResource(.previewURL, "http://mac.tail123.ts.net:8445/", to: bot)
+        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
+        #expect(run.previewURL == "http://mac.tail123.ts.net:8445/")
+        #expect(bot.previewURL?.port == 8445)
     }
 }

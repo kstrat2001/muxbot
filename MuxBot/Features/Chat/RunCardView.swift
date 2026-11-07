@@ -47,8 +47,8 @@ struct RunCardView: View {
                 StatusBadge(kind: isLatest && run.phase == .running ? .running : .done)
                 Label(run.crew.name, systemImage: run.crew.systemImage).font(AppFont.headline())
                 Spacer()
-                if let url = run.previewURL.flatMap(URL.init(string:)) {
-                    Link(destination: url) { Label("Live", systemImage: "play.rectangle") }
+                if run.previewURL.flatMap(URL.init(string:)) != nil {
+                    Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
                 } else {
                     Button("Live", systemImage: "play.rectangle") {}
                         .disabled(true)

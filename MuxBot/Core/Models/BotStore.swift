@@ -32,8 +32,18 @@ struct BotStore {
         allBots().first { $0.id == id }
     }
 
-    /// Inserts the starter bots on first launch only.
+    /// A temporary live-preview URL for the humancodereader starter bot,
+    /// from `MUXBOT_TEST_PREVIEW_URL` in the gitignored Config/Local.xcconfig
+    /// (a tailnet test server; real runs will get theirs from darkmux).
+    nonisolated static var testPreviewURL: String? {
+        let value = Bundle.main.object(forInfoDictionaryKey: "MuxBotTestPreviewURL") as? String
+        return value?.hasPrefix("http") == true ? value : nil
+    }
+
+    /// Inserts the starter bots on first launch only, then adds a test
+    /// preview URL to humancodereader if one is configured and missing.
     func seedIfEmpty() {
+        defer { addTestPreviewURL() }
         guard allBots().isEmpty else { return }
         let start = Date()
         for (offset, item) in Self.defaults.enumerated() {
@@ -47,6 +57,15 @@ struct BotStore {
                 resource.bot = bot
             }
         }
+        try? context.save()
+    }
+
+    private func addTestPreviewURL() {
+        guard let url = Self.testPreviewURL,
+              let bot = allBots().first(where: { $0.name == "humancodereader" }),
+              !bot.sortedResources.contains(where: { $0.kind == .previewURL }) else { return }
+        let last = bot.sortedResources.last?.createdAt ?? bot.createdAt
+        addResource(.previewURL, url, to: bot).createdAt = last.addingTimeInterval(1)
         try? context.save()
     }
 
@@ -80,6 +99,8 @@ struct BotStore {
     @discardableResult
     func proposeRun(task: String, crew: CrewRole, on bot: Bot) -> BotRun {
         let run = BotRun(task: task, crew: crew)
+        // Until darkmux reports a run's own live URL, runs share the bot's.
+        run.previewURL = bot.sortedResources.last { $0.kind == .previewURL }?.value
         context.insert(run)
         run.bot = bot
         append(.assistant, task, kind: .dispatchCard, runId: run.id, to: conversation(for: .bot(bot.id)))

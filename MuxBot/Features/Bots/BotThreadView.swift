@@ -24,7 +24,68 @@ struct BotThreadView: View {
     private var bot: Bot? { matches.first }
     private var title: String { context.botId == nil ? LeadBot.name : (bot?.name ?? "Bot") }
 
+    @Environment(AppRouter.self) private var router
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isWide: Bool { sizeClass == .regular }
+    #else
+    private let isWide = true
+    #endif
+
+    private var previewURL: URL? { bot?.previewURL }
+
     var body: some View {
+        Group {
+            if let url = previewURL, router.showPreview {
+                let panel = PreviewPanel(url: url) { router.showPreview = false }
+                if isWide {
+                    HStack(spacing: 0) {
+                        chat.frame(minWidth: 320)
+                        Divider()
+                        panel.frame(minWidth: 360, maxWidth: .infinity)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        panel.frame(height: 340)
+                        Divider()
+                        chat
+                    }
+                }
+            } else {
+                chat
+            }
+        }
+        .navigationTitle(title)
+        .toolbar {
+            if let bot {
+                ToolbarItem(placement: .primaryAction) {
+                    StatusBadge(kind: bot.state.kind)
+                }
+                if previewURL != nil {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Preview", systemImage: router.showPreview ? "rectangle.slash" : "safari") {
+                            router.showPreview.toggle()
+                        }
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Bot info", systemImage: "info.circle") { showInfo = true }
+                }
+            }
+        }
+        .task {
+            greetIfNew()
+            for repo in bot?.repoSlugs ?? [] { await brain.loadRecipe(for: repo) }
+        }
+        .sheet(isPresented: $showInfo) {
+            if let bot { NavigationStack { BotInfoView(bot: bot) } }
+        }
+    }
+
+    /// The transcript with the chat bar pinned under it. Each screen pins
+    /// the bar itself: on macOS a bar attached to the navigation stack
+    /// does not carry into pushed views.
+    private var chat: some View {
         Group {
             if context.botId != nil && bot == nil {
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
@@ -34,24 +95,7 @@ struct BotThreadView: View {
                 ProgressView()
             }
         }
-        .navigationTitle(title)
-        // Each screen pins the bar itself: on macOS a bar attached to the
-        // navigation stack does not carry into pushed views.
         .safeAreaInset(edge: .bottom) { BotBar() }
-        .toolbar {
-            if let bot {
-                ToolbarItem(placement: .primaryAction) {
-                    StatusBadge(kind: bot.state.kind)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Bot info", systemImage: "info.circle") { showInfo = true }
-                }
-            }
-        }
-        .task { greetIfNew() }
-        .sheet(isPresented: $showInfo) {
-            if let bot { NavigationStack { BotInfoView(bot: bot) } }
-        }
     }
 
     private func greetIfNew() {

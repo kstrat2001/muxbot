@@ -80,16 +80,29 @@ final class Bot {
     var sortedResources: [BotResource] {
         (resources ?? []).sorted { $0.createdAt < $1.createdAt }
     }
+
+    /// Where to watch this bot's work: the newest run's live URL, else a
+    /// preview URL resource (today a temporary test server).
+    var previewURL: URL? {
+        let fromRun = (runs ?? []).sorted { $0.createdAt < $1.createdAt }.last?.previewURL
+        let fromResource = sortedResources.last { $0.kind == .previewURL }?.value
+        return (fromRun ?? fromResource).flatMap(URL.init(string:))
+    }
+
+    var repoSlugs: [String] {
+        sortedResources.filter { $0.kind == .repo }.compactMap { GitHubIssue.repoSlug(from: $0.value) }
+    }
 }
 
 enum ResourceKind: String, Codable, CaseIterable, Sendable {
-    case repo, folder, preview, link, note
+    case repo, folder, preview, previewURL, link, note
 
     var label: String {
         switch self {
         case .repo: "Repo"
         case .folder: "Local folder"
         case .preview: "Preview recipe"
+        case .previewURL: "Preview URL"
         case .link: "Link"
         case .note: "Note"
         }
@@ -100,6 +113,7 @@ enum ResourceKind: String, Codable, CaseIterable, Sendable {
         case .repo: "arrow.triangle.branch"
         case .folder: "folder"
         case .preview: "play.rectangle"
+        case .previewURL: "safari"
         case .link: "link"
         case .note: "note.text"
         }
@@ -110,6 +124,7 @@ enum ResourceKind: String, Codable, CaseIterable, Sendable {
     static func guess(for value: String) -> ResourceKind {
         let v = value.lowercased()
         if v.contains("github.com/") { return .repo }
+        if v.contains(".ts.net") || v.contains("localhost") || v.contains("127.0.0.1") { return .previewURL }
         if v.hasPrefix("http://") || v.hasPrefix("https://") { return .link }
         if v.hasSuffix("preview.json") { return .preview }
         if v.hasPrefix("/") || v.hasPrefix("~/") { return .folder }

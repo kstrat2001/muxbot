@@ -11,6 +11,8 @@ final class AppRouter {
     var showNewBot = false
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".
     var barDraft = ""
+    /// The live preview panel beside (or above) the thread on screen.
+    var showPreview = false
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.

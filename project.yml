@@ -38,6 +38,16 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
+        # Temporary live-preview server for the humancodereader seed bot;
+        # set MUXBOT_TEST_PREVIEW_URL in the gitignored Config/Local.xcconfig.
+        MuxBotTestPreviewURL: $(MUXBOT_TEST_PREVIEW_URL)
+        # Tailnet previews are plain http until tailnet HTTPS certificates
+        # are enabled; allow it for *.ts.net only.
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
         LSApplicationCategoryType: public.app-category.developer-tools
         UILaunchScreen: {}
         UIApplicationSceneManifest:
