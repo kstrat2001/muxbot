@@ -92,10 +92,12 @@ struct AutoCommitFlowTests {
         let proposed = store.proposeRun(task: "a", crew: .coder, on: bot)
         let question = finished(store, bot, changed: [], task: "b")
         _ = finished(store, bot, changed: ["c.txt +1 −0"], task: "c")
-        #expect(Set(NeedsYouBanner.items(bot.runs ?? [], dismissed: []).map(\.id)) == [proposed.id, question.id])
-        #expect(NeedsYouBanner.items(bot.runs ?? [], dismissed: [proposed.id, question.id]).isEmpty)
+        let local = LocalBotState(fileURL: nil)
+        #expect(Set(NeedsYou.banner(bot.runs ?? [], in: local).map(\.id)) == [proposed.id, question.id])
+        NeedsYou.dismiss([proposed, question], in: local)
+        #expect(NeedsYou.banner(bot.runs ?? [], in: local).isEmpty)
         let fresh = store.proposeRun(task: "d", crew: .coder, on: bot)
-        #expect(NeedsYouBanner.items(bot.runs ?? [], dismissed: [proposed.id, question.id]).map(\.id) == [fresh.id], "a new item brings it back")
+        #expect(NeedsYou.banner(bot.runs ?? [], in: local).map(\.id) == [fresh.id], "a new item brings it back")
     }
 
     @Test func aSmallTabletPresetChecks768Breakpoints() {

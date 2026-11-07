@@ -84,7 +84,7 @@ struct RoleTile: View {
                     RoleAvatar(role: role, tint: tint)
                     Spacer()
                     // A badge only when there's something to say: no dot for idle.
-                    if role.state != .ready { StatusBadge(kind: role.state.kind) }
+                    if NeedsYou.shownState(role) != .ready { StatusBadge(kind: NeedsYou.shownState(role).kind) }
                 }
                 Text(role.name).font(AppFont.headline())
                 Text(detail)
@@ -95,7 +95,7 @@ struct RoleTile: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .overlay {
-            if role.state == .working {
+            if NeedsYou.shownState(role) == .working {
                 RoundedRectangle(cornerRadius: CornerRadius.lg)
                     .strokeBorder(Color.brandBlue, lineWidth: 2)
                     .phaseAnimator([0.25, 1.0]) { content, phase in
@@ -108,7 +108,7 @@ struct RoleTile: View {
     }
 
     private var detail: String {
-        switch role.state {
+        switch NeedsYou.shownState(role) {
         case .working: role.currentTask?.title ?? "Working."
         case .needsYou: "Waiting on your answer."
         case .ready: role.instructions.isEmpty ? "Ready for work." : role.instructions
@@ -116,7 +116,7 @@ struct RoleTile: View {
     }
 
     private var tint: Color {
-        switch role.state {
+        switch NeedsYou.shownState(role) {
         case .needsYou: .brandOrange
         case .working: .brandBlue
         case .ready: .brandGreen
@@ -136,7 +136,7 @@ struct RoleAvatar: View {
                     .frame(width: 32, height: 32)
                     .clipShape(Circle())
             } else {
-                BotAvatarView(look: role.look, mood: AvatarMood(role.state), size: 36, blinkId: role.id)
+                BotAvatarView(look: role.look, mood: AvatarMood(NeedsYou.shownState(role)), size: 36, blinkId: role.id)
             }
         }
         .accessibilityHidden(true)

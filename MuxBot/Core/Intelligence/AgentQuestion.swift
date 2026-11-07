@@ -36,14 +36,3 @@ enum RunCardState {
     }
 }
 
-/// The pinned "needs you" banner at the top of a bot's thread: only runs
-/// waiting for Approve and runs that stopped with a question. Dismissing it
-/// only hides it (they stay in Activity > Needs you); a new item brings it back.
-enum NeedsYouBanner {
-    @MainActor
-    static func items(_ runs: [BotRun], dismissed: Set<UUID>) -> [BotRun] {
-        let waiting = runs.filter(\.needsYou).sorted { $0.createdAt < $1.createdAt }
-        let fresh = waiting.filter { !dismissed.contains($0.id) }
-        return fresh.isEmpty ? [] : fresh
-    }
-}

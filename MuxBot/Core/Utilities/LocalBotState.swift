@@ -16,9 +16,12 @@ final class LocalBotState: @unchecked Sendable {
         /// The preview's device size (`PreviewViewport` raw value) you last
         /// picked for this bot.
         var previewViewport: String?
+        /// Runs whose "needs you" you hid here (the banner's ×), by id.
+        var dismissedRuns: [String]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
+                && (dismissedRuns ?? []).isEmpty
         }
     }
 

@@ -22,6 +22,6 @@ struct RunNotice: Equatable, Sendable {
     /// Runs waiting on a decision of yours.
     @MainActor
     static func badgeCount(_ runs: [BotRun]) -> Int {
-        runs.filter(\.needsYou).count
+        NeedsYou.waiting(runs).count
     }
 }

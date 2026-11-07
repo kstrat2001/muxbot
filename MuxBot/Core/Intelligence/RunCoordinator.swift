@@ -63,9 +63,6 @@ final class RunCoordinator {
     var deciding: Set<UUID> = []
     /// Why the last Undo didn't happen, shown on the card.
     var decisionErrors: [UUID: String] = [:]
-    /// Runs whose "needs you" banner you dismissed (this session only; they
-    /// stay listed in Activity).
-    var dismissedBanner: Set<UUID> = []
 
     /// Undo (the card's one button): darkmux reverts the run's commit.
     /// Keep is never needed (darkmux committed the run when it finished).

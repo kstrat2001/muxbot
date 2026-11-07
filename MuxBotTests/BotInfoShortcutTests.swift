@@ -29,34 +29,38 @@ struct BotInfoShortcutTests {
 import SwiftUI
 import UIKit
 
-/// The (i) sits in the row's layout after the status badge, never on top of
-/// it (Kain, 2026-11-07: it covered the needs-you badge). Set MUXBOT_SHOTS
-/// to a folder for a look.
+/// The (i) sits in the row's layout before the status badge, never on top
+/// of it (Kain, 2026-11-07: it covered the needs-you badge). Renders the
+/// real sidebar row, selected and hovered, with a short and a long name;
+/// set MUXBOT_SHOTS to a folder for a look.
 @Suite(.serialized) @MainActor
 struct SidebarInfoButtonRenderTests {
-    @Test func theInfoButtonLeavesTheBadgeVisible() throws {
-        let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Site")
-        let router = AppRouter()
-        router.sidebar = .bot(bot.id)   // selected: the (i) shows
-        let rowWithBadge = HStack {
-            Text(bot.name)
-            Spacer(minLength: 0)
-            StatusBadge(kind: .needsYou)
+    @Test func theInfoButtonSitsBeforeTheBadge() throws {
+        let id = UUID()
+        let cases: [(String, String, Bool)] = [
+            ("selected", "humancodereader", true),
+            ("hovered-long", "A very long bot name that has to truncate", false),
+        ]
+        var images: [UIImage] = []
+        for (_, name, selected) in cases {
+            let router = AppRouter()
+            router.sidebar = selected ? .bot(id) : .lead
+            let view = BotSidebar.row(name: name, look: .lead, id: id, unread: true, state: .needsYou)
+                .environment(\.sidebarInfo, SidebarInfoContext(enabled: true, hovering: !selected))
+                .environment(router)
+                .frame(width: 260)
+                .padding(8)
+                .background(selected ? Color.green.opacity(0.5) : Color.white)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            images.append(try #require(renderer.uiImage))
         }
-        let view = rowWithBadge
-            .modifier(SidebarInfoButton(bot: bot))
-            .frame(width: 220)
-            .padding(8)
-            .background(Color.green.opacity(0.5))
-            .environment(router)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        let image = try #require(renderer.uiImage)
-        if let dir = ProcessInfo.processInfo.environment["MUXBOT_SHOTS"], let png = image.pngData() {
-            try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("sidebar-info-row.png"))
+        if let dir = ProcessInfo.processInfo.environment["MUXBOT_SHOTS"] {
+            for (image, c) in zip(images, cases) {
+                try image.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("sidebar-row-\(c.0).png"))
+            }
         }
-        #expect(image.size.width > 0, "a render for a look, not a layout assertion")
+        #expect(images.allSatisfy { $0.size.width == 276 }, "a render for a look")
     }
 }
 #endif

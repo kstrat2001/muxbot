@@ -22,11 +22,11 @@ struct BotSidebar: View {
         @Bindable var router = router
         return List(selection: $router.sidebar) {
             Section {
-                row(name: LeadBot.name, look: .lead, id: nil, unread: unread(nil), state: nil)
+                Self.row(name: LeadBot.name, look: .lead, id: nil, unread: unread(nil), state: nil)
                     .tag(SidebarItem.lead)
                     .botContextMenu(nil)
                 ForEach(bots) { bot in
-                    row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: bot.state)
+                    Self.row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: NeedsYou.shownState(bot))
                         #if os(macOS)
                         .modifier(SidebarInfoButton(bot: bot))   // inside the row, so the tag stays outermost
                         #endif
@@ -82,11 +82,13 @@ struct BotSidebar: View {
     static let rowPadding: CGFloat = 0
     #endif
 
-    private func row(name: String, look: BotLook, id: UUID?, unread: Bool, state: BotState?) -> some View {
+    static func row(name: String, look: BotLook, id: UUID?, unread: Bool, state: BotState?) -> some View {
         HStack(spacing: Spacing.sm) {
             BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: Self.avatarSize, blinkId: id)
             Text(name).lineLimit(1)
             Spacer(minLength: 0)
+            // macOS: the (i) sits before the badges, side by side, never on top.
+            if let id { SidebarInfoGlyph(botId: id, name: name) }
             if unread {
                 Circle().fill(Color.brandBlue).frame(width: 8, height: 8).accessibilityLabel("Unread")
             }
@@ -145,7 +147,7 @@ struct BotSidebar: View {
     /// "1 result waiting for you", "2 things waiting for you", "Running".
     static func waitingText(_ bot: Bot) -> String? {
         let runs = bot.runs ?? []
-        let waiting = runs.filter(\.needsYou)
+        let waiting = NeedsYou.waiting(runs)
         if waiting.count == 1 {
             switch waiting[0].phase {
             case .result: return "1 result waiting for you"
@@ -159,29 +161,17 @@ struct BotSidebar: View {
     }
 }
 
-/// The (i) on a bot's sidebar row, shown while the row is hovered or
-/// selected: Bot info in a popover anchored to the row (also ⌘I and the
-/// row's context menu).
+/// The (i) on a bot's sidebar row (macOS): the row reports hover here and
+/// anchors Bot info's popover; `SidebarInfoGlyph` draws the button inside
+/// the row, before its badges.
 struct SidebarInfoButton: ViewModifier {
     let bot: Bot
     @Environment(AppRouter.self) private var router
     @State private var hovering = false
 
     func body(content: Content) -> some View {
-        let open = router.infoBotId == bot.id
-        // In the row's own layout, after its unread dot and status badge:
-        // never drawn on top of them.
-        HStack(spacing: Spacing.xs) {
-            content
-            if hovering || open || router.sidebar == .bot(bot.id) {
-                Button { router.infoBotId = bot.id } label: {
-                    Image(systemName: open ? "info.circle.fill" : "info.circle")
-                }
-                .buttonStyle(.borderless)
-                .help("Bot info (⌘I)")
-                .accessibilityLabel("\(bot.name) info")
-            }
-        }
+        content
+            .environment(\.sidebarInfo, SidebarInfoContext(enabled: true, hovering: hovering))
             .onHover { hovering = $0 }
             .popover(isPresented: Binding(get: { router.infoBotId == bot.id },
                                           set: { if !$0, router.infoBotId == bot.id { router.infoBotId = nil } }),
@@ -189,5 +179,35 @@ struct SidebarInfoButton: ViewModifier {
                 NavigationStack { BotInfoView(bot: bot) }
                     .frame(width: 440, height: 580)
             }
+    }
+}
+
+struct SidebarInfoContext: Equatable {
+    var enabled = false
+    var hovering = false
+}
+
+extension EnvironmentValues {
+    /// Whether this row shows an (i), and whether it's hovered.
+    @Entry var sidebarInfo = SidebarInfoContext()
+}
+
+/// The (i) itself, shown while its row is hovered, selected or open.
+struct SidebarInfoGlyph: View {
+    let botId: UUID
+    let name: String
+    @Environment(\.sidebarInfo) private var info
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        let open = router.infoBotId == botId
+        if info.enabled, info.hovering || open || router.sidebar == .bot(botId) {
+            Button { router.infoBotId = botId } label: {
+                Image(systemName: open ? "info.circle.fill" : "info.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Bot info (⌘I)")
+            .accessibilityLabel("\(name) info")
+        }
     }
 }

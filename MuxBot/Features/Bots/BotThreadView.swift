@@ -166,7 +166,7 @@ struct BotThreadView: View {
         .task {
             // Opening a bot that needs you goes to the card that's waiting.
             if router.focusRunId == nil,
-               let waiting = (bot?.runs ?? []).filter(\.needsYou).max(by: { $0.createdAt < $1.createdAt }) {
+               let waiting = NeedsYou.waiting(bot?.runs ?? []).max(by: { $0.createdAt < $1.createdAt }) {
                 router.focusRunId = waiting.id
             }
             greetIfNew()
@@ -205,7 +205,7 @@ struct BotThreadView: View {
     /// Pinned at the top: runs waiting for Approve or with a question. A tap
     /// goes to the card; × hides it until something new needs you.
     @ViewBuilder private var needsYouBanner: some View {
-        let items = NeedsYouBanner.items(bot?.runs ?? [], dismissed: brain.runs.dismissedBanner)
+        let items = NeedsYou.banner(bot?.runs ?? [])
         if let first = items.last {
             HStack(spacing: Spacing.sm) {
                 StatusBadge(kind: .needsYou)
@@ -220,10 +220,10 @@ struct BotThreadView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                Button("Hide", systemImage: "xmark") { brain.runs.dismissedBanner.formUnion(items.map(\.id)) }
+                Button("Hide", systemImage: "xmark") { NeedsYou.dismiss(items) }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
-                    .help("Hide this; it stays in Activity")
+                    .help("Hide this here (and its badge) until something new needs you; it stays in Activity")
             }
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
