@@ -61,19 +61,19 @@ struct BotThreadView: View {
         }
         .navigationTitle(title)
         .toolbar {
-            if let bot {
-                ToolbarItem(placement: .primaryAction) {
-                    StatusBadge(kind: bot.state.kind)
-                }
-                if previewURL != nil {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("Preview", systemImage: router.showPreview ? "rectangle.slash" : "safari") {
-                            router.showPreview.toggle()
+            if bot != nil {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if previewURL != nil {
+                        // A panel symbol; the toggle's highlight shows it's open.
+                        @Bindable var router = router
+                        Toggle(isOn: $router.showPreview) {
+                            Label("Preview", systemImage: isWide ? "sidebar.right" : "rectangle.tophalf.inset.filled")
                         }
+                        .toggleStyle(.button)
+                        .help(router.showPreview ? "Hide preview" : "Show preview")
                     }
-                }
-                ToolbarItem(placement: .primaryAction) {
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
+                        .help("Bot info and resources")
                 }
             }
         }
