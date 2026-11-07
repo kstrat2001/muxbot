@@ -22,11 +22,11 @@ struct BotSidebar: View {
         @Bindable var router = router
         return List(selection: $router.sidebar) {
             Section {
-                row(name: LeadBot.name, look: .lead, unread: unread(nil), state: nil)
+                row(name: LeadBot.name, look: .lead, id: nil, unread: unread(nil), state: nil)
                     .tag(SidebarItem.lead)
                     .botContextMenu(nil)
                 ForEach(bots) { bot in
-                    row(name: bot.name, look: bot.look, unread: unread(bot.id), state: bot.state)
+                    row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: bot.state)
                         .tag(SidebarItem.bot(bot.id))
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
@@ -79,9 +79,9 @@ struct BotSidebar: View {
     static let rowPadding: CGFloat = 0
     #endif
 
-    private func row(name: String, look: BotLook, unread: Bool, state: BotState?) -> some View {
+    private func row(name: String, look: BotLook, id: UUID?, unread: Bool, state: BotState?) -> some View {
         HStack(spacing: Spacing.sm) {
-            BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: Self.avatarSize)
+            BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: Self.avatarSize, blinkId: id)
             Text(name).lineLimit(1)
             Spacer(minLength: 0)
             if unread {

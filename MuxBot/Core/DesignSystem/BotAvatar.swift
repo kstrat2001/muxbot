@@ -88,14 +88,21 @@ struct BotAvatarView: View {
     let look: BotLook
     var mood: AvatarMood = .idle
     var size: CGFloat = 32
+    /// The bot's id, so its idle blink has its own timing (bots never blink
+    /// in unison). Without one, the look picks the timing.
+    var blinkId: UUID? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var schedule: BlinkSchedule {
+        blinkId.map(BlinkSchedule.init(id:)) ?? BlinkSchedule(seed: BlinkSchedule.stableHash("\(look.animal)\(look.bodyHex)\(look.eyeHex)"))
+    }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
             let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, canvas in
+            Canvas { [schedule] ctx, canvas in
                 ctx.scaleBy(x: canvas.width / 100, y: canvas.height / 100)
-                AvatarPainter(look: look, mood: mood, t: t, still: reduceMotion).paint(&ctx)
+                AvatarPainter(look: look, mood: mood, t: t, still: reduceMotion, blink: schedule).paint(&ctx)
             }
         }
         .frame(width: size, height: size)
@@ -111,6 +118,7 @@ struct AvatarPainter {
     let mood: AvatarMood
     let t: Double
     var still = false
+    var blink = BlinkSchedule(seed: 1)
 
     private static let muzzle = Color(hex: "fff4e8")
     private static let ink = Color(hex: "1d1f27")
@@ -403,9 +411,9 @@ struct AvatarPainter {
         let k = Self.ink
         switch mood {
         case .idle:
-            let phase = still ? 0 : (t.truncatingRemainder(dividingBy: 4)) / 4
-            let blink: CGFloat = (0.92...0.98).contains(phase) ? 0.1 : 1
-            var eyes = scaled(ctx, x: 50, y: eyeY, sx: 1, sy: blink)
+            // Reduce Motion: no blinking at all.
+            let open: CGFloat = still ? 1 : blink.openness(at: t)
+            var eyes = scaled(ctx, x: 50, y: eyeY, sx: 1, sy: open)
             eye(&eyes, 38)
             eye(&eyes, 62)
             smile(&ctx)
@@ -540,4 +548,63 @@ struct BotLookPicker: View {
         }
     }
     .padding()
+}
+
+// MARK: - Blink timing
+
+/// When one bot blinks while idle: its own phase and a jittered interval of
+/// 4 to 9 seconds, with an occasional double blink, all derived from the
+/// bot's id with a stable hash (`hashValue` changes every launch), so each
+/// bot keeps its rhythm and bots never blink in unison.
+struct BlinkSchedule: Equatable, Sendable {
+    struct Blink: Equatable { var time: Double; var isSecond: Bool }
+
+    let seed: UInt64
+    /// Average gap; each blink is jittered ±2.5 s, so gaps run 4 to 9 s.
+    private static let slot = 6.5, jitter = 1.25, closed = 0.15, doubleGap = 0.35, doubleChance = 0.15
+
+    init(seed: UInt64) { self.seed = seed }
+    init(id: UUID) {
+        self.seed = withUnsafeBytes(of: id.uuid) { Self.fnv1a(Array($0)) }
+    }
+
+    static func stableHash(_ text: String) -> UInt64 { fnv1a(Array(text.utf8)) }
+
+    private static func fnv1a(_ bytes: [UInt8]) -> UInt64 {
+        bytes.reduce(0xcbf2_9ce4_8422_2325) { ($0 ^ UInt64($1)) &* 0x0000_0100_0000_01b3 }
+    }
+
+    /// A stable pseudo-random number in 0..<1 for slot `n` and stream `k`.
+    private func random(_ n: Int64, _ k: UInt64) -> Double {
+        var z = seed &+ UInt64(bitPattern: n) &* 0x9e37_79b9_7f4a_7c15 &+ k &* 0xd1b5_4a32_d192_ed03
+        z = (z ^ (z >> 30)) &* 0xbf58_476d_1ce4_e5b9
+        z = (z ^ (z >> 27)) &* 0x94d0_49bb_1331_11eb
+        z ^= z >> 31
+        return Double(z >> 11) / Double(1 << 53)
+    }
+
+    private var phase: Double { random(0, 7) * Self.slot }
+
+    private func blinks(inSlot n: Int64) -> [Blink] {
+        let first = Double(n) * Self.slot + phase + (random(n, 1) * 2 - 1) * Self.jitter
+        var out = [Blink(time: first, isSecond: false)]
+        if random(n, 2) < Self.doubleChance { out.append(Blink(time: first + Self.doubleGap, isSecond: true)) }
+        return out
+    }
+
+    /// Every blink starting in `from..<to`, in order.
+    func blinks(from: Double, to: Double) -> [Blink] {
+        let lo = Int64(((from - phase) / Self.slot).rounded(.down)) - 1
+        let hi = Int64(((to - phase) / Self.slot).rounded(.up)) + 1
+        return (lo...hi).flatMap(blinks(inSlot:)).filter { $0.time >= from && $0.time < to }
+    }
+
+    /// 1 when the eyes are open, 0.1 while they blink.
+    func openness(at t: Double) -> CGFloat {
+        let n = Int64(((t - phase) / Self.slot).rounded(.down))
+        for slot in (n - 1)...(n + 1) {
+            for b in blinks(inSlot: slot) where t >= b.time && t < b.time + Self.closed { return 0.1 }
+        }
+        return 1
+    }
 }

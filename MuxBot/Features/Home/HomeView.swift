@@ -136,7 +136,7 @@ struct RoleAvatar: View {
                     .frame(width: 32, height: 32)
                     .clipShape(Circle())
             } else {
-                BotAvatarView(look: role.look, mood: AvatarMood(role.state), size: 36)
+                BotAvatarView(look: role.look, mood: AvatarMood(role.state), size: 36, blinkId: role.id)
             }
         }
         .accessibilityHidden(true)

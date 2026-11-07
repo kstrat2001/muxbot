@@ -36,7 +36,7 @@ struct BotInfoView: View {
         Form {
             Section("About") {
                 HStack(spacing: Spacing.md) {
-                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44)
+                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44, blinkId: bot.id)
                     TextField("Name", text: nameBinding).font(AppFont.headline())
                 }
                 TextField("What this bot is about", text: aboutBinding, axis: .vertical)
