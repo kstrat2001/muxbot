@@ -17,15 +17,40 @@ import FoundationModels
 /// An open issue or pull request on GitHub.
 struct GitHubIssue: Sendable, Equatable, Decodable {
     struct Label: Sendable, Equatable, Decodable { var name: String }
-    struct PullRequestMarker: Sendable, Equatable, Decodable {}
+    struct PullRequestMarker: Sendable, Equatable, Decodable {
+        var mergedAt: String? = nil
+        enum CodingKeys: String, CodingKey { case mergedAt = "merged_at" }
+    }
 
     var number: Int
     var title: String
     var labels: [Label] = []
     var pullRequest: PullRequestMarker?
     var body: String?
+    /// "open" or "closed"; set when the issue was looked up by number.
+    var state: String? = nil
 
     var isPullRequest: Bool { pullRequest != nil }
+
+    /// Issues a pull request closes: "Fixes #8", "closes owner/repo#4".
+    var fixes: [Int] {
+        guard isPullRequest, let body else { return [] }
+        let re = try? NSRegularExpression(pattern: #"(?i)\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)[:\s]+(?:[\w.-]+/[\w.-]+)?#(\d+)"#)
+        let ns = body as NSString
+        return (re?.matches(in: body, range: NSRange(location: 0, length: ns.length)) ?? [])
+            .compactMap { Int(ns.substring(with: $0.range(at: 1))) }
+    }
+
+    /// The line for an issue that open pull requests fix.
+    func line(fixedBy prs: [Int]) -> String {
+        prs.isEmpty ? line : "\(line) (open PR \(prs.map { "#\($0)" }.joined(separator: ", ")) fixes it)"
+    }
+
+    /// "#9 PR: Restore side padding — merged", for a lookup by number.
+    var statusLine: String {
+        let status = pullRequest?.mergedAt != nil ? "merged" : (state ?? "open")
+        return "#\(number) \(isPullRequest ? "PR: " : "")\(title) — \(status)"
+    }
     var labelNames: [String] { labels.map(\.name) }
 
     /// "#12 Fix the footer [bug]" or "#13 PR: Bump deps".
@@ -35,7 +60,7 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case number, title, labels, body
+        case number, title, labels, body, state
         case pullRequest = "pull_request"
     }
 
@@ -53,6 +78,8 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
 protocol GitHubClient: Sendable {
     /// Open issues and pull requests for "owner/repo", newest first.
     func openIssues(repo: String) async throws -> [GitHubIssue]
+    /// One issue or pull request by number, open or not; nil if missing.
+    func issue(repo: String, number: Int) async throws -> GitHubIssue?
     /// A file on the default branch, or nil if it doesn't exist.
     func file(repo: String, path: String) async throws -> Data?
 }
@@ -86,6 +113,29 @@ struct RESTGitHubClient: GitHubClient {
             throw GitHubError(status: http.statusCode)
         }
         return try JSONDecoder().decode([GitHubIssue].self, from: data)
+    }
+
+    func issue(repo: String, number: Int) async throws -> GitHubIssue? {
+        guard let url = URL(string: "https://api.github.com/repos/\(repo)/issues/\(number)") else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard status == 200 else { throw GitHubError(status: status) }
+        var found = try JSONDecoder().decode(GitHubIssue.self, from: data)
+        // The issues endpoint doesn't say whether a PR merged; the pulls one does.
+        if found.isPullRequest, found.state == "closed",
+           let prURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)") {
+            var pr = URLRequest(url: prURL)
+            pr.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+            if let (prData, _) = try? await URLSession.shared.data(for: pr),
+               let marker = try? JSONDecoder().decode(GitHubIssue.PullRequestMarker.self, from: prData) {
+                found.pullRequest = marker
+            }
+        }
+        return found
     }
 }
 
@@ -122,6 +172,26 @@ enum IssueQuery {
         let labeled = pool.filter { $0.labelNames.contains { $0.caseInsensitiveCompare(label) == .orderedSame } }
         return labeled.isEmpty ? pool : labeled
     }
+
+    /// Issue number → the open pull requests that fix it.
+    static func fixedBy(_ issues: [GitHubIssue]) -> [Int: [Int]] {
+        var map: [Int: [Int]] = [:]
+        for pr in issues where pr.isPullRequest {
+            for n in pr.fixes where !(map[n] ?? []).contains(pr.number) { map[n, default: []].append(pr.number) }
+        }
+        return map
+    }
+
+    /// Tool and fallback lines: issues name their open fix PR, PRs name
+    /// what they fix.
+    static func lines(_ shown: [GitHubIssue], all: [GitHubIssue]) -> [String] {
+        let fixed = fixedBy(all)
+        return shown.map { i in
+            i.isPullRequest && !i.fixes.isEmpty
+                ? "\(i.line) (fixes \(i.fixes.map { "#\($0)" }.joined(separator: ", ")))"
+                : i.line(fixedBy: fixed[i.number] ?? [])
+        }
+    }
 }
 
 #if canImport(FoundationModels)
@@ -138,7 +208,7 @@ struct OpenIssuesTool: Tool {
     var counter = ToolCallCounter()
 
     let name = "listOpenIssues"
-    let description = "Lists open GitHub issues (and optionally pull requests) in the bots' repos. Always call it before saying anything about issues, bugs, tickets or pull requests."
+    let description = "Lists open GitHub issues (and optionally pull requests) in the bots' repos, with the open PR that fixes each issue, or looks up one issue or PR by number (open, closed or merged). Always call it before saying anything about issues, bugs, tickets or pull requests."
 
     @Generable
     struct Arguments {
@@ -146,6 +216,8 @@ struct OpenIssuesTool: Tool {
         var label: String
         @Guide(description: "true to include open pull requests")
         var includePullRequests: Bool
+        @Guide(description: "An issue or pull request number to look up, such as 9. 0 to list open issues.")
+        var number: Int
     }
 
     func call(arguments: Arguments) async throws -> String {
@@ -156,10 +228,15 @@ struct OpenIssuesTool: Tool {
         for ref in repos {
             let header = "\(ref.bot) (\(ref.repo))"
             do {
-                let issues = IssueQuery.filter(try await client.openIssues(repo: ref.repo),
-                                               label: arguments.label, includePullRequests: arguments.includePullRequests)
+                if arguments.number > 0 {
+                    let found = try await client.issue(repo: ref.repo, number: arguments.number)
+                    lines.append("\(header): " + (found?.statusLine ?? "no #\(arguments.number)."))
+                    continue
+                }
+                let all = try await client.openIssues(repo: ref.repo)
+                let issues = IssueQuery.filter(all, label: arguments.label, includePullRequests: arguments.includePullRequests)
                 // Tight cap: the on-device model's context is small.
-                let shown = issues.prefix(5).map { "- " + String($0.line.prefix(90)) }
+                let shown = IssueQuery.lines(Array(issues.prefix(5)), all: all).map { "- " + String($0.prefix(110)) }
                 let more = issues.count > 5 ? "\n(\(issues.count - 5) more)" : ""
                 lines.append(issues.isEmpty ? "\(header): no open issues." : "\(header):\n" + shown.joined(separator: "\n") + more)
             } catch {

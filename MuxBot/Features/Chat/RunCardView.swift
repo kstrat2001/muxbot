@@ -38,7 +38,8 @@ struct RunCardView: View {
         switch message.kind {
         case .dispatchCard:
             Label("Dispatch to \(run.crew.name)", systemImage: run.crew.systemImage).font(AppFont.headline())
-            Text(run.task).font(AppFont.body())
+            Text(Linkify.attributed(run.task, repo: repo(run))).font(AppFont.body())
+            RefChips(refs: refs(run))
             DisclosureGroup("What \(run.crew.name) gets") {
                 Text(BotBrain.workBrief(run.brief ?? run.task))
                     .font(.system(.caption, design: .monospaced))
@@ -87,8 +88,9 @@ struct RunCardView: View {
                         .accessibilityHint("The live preview appears once the fleet is connected.")
                 }
             }
-            Text(message.content).font(AppFont.footnote()).foregroundStyle(.secondary)
+            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
+            RefChips(refs: refs(run))
             if run.isSimulated {
                 SimulationBadge()
                 Text(message.content).font(AppFont.body()).foregroundStyle(.secondary)
@@ -106,7 +108,7 @@ struct RunCardView: View {
                     .font(AppFont.footnote())
                 }
             } else {
-                Text(message.content).font(AppFont.body())
+                Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
                 if !run.changedFiles.isEmpty {
                     DisclosureGroup {
                         Text(run.diff ?? "No diff available.")
@@ -120,7 +122,8 @@ struct RunCardView: View {
                 }
                 if let notes = run.notes {
                     DisclosureGroup("\(run.crew.name)'s notes") {
-                        Text((try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes))
+                        Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
+                                           repo: repo(run), linkPaths: true))
                             .font(AppFont.footnote())
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,6 +149,7 @@ struct RunCardView: View {
             }
         case .prCard:
             Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
+            RefChips(refs: refs(run))
             switch run.phase {
             case .kept:
                 Text(RunResultText.prUnavailable).font(AppFont.footnote()).foregroundStyle(.secondary)
@@ -167,6 +171,13 @@ struct RunCardView: View {
     }
 
     private var store: BotStore { BotStore(context: context) }
+
+    private func repo(_ run: BotRun) -> String? { run.bot?.repoSlugs.first }
+
+    /// The issues and PRs the run's task and brief mention.
+    private func refs(_ run: BotRun) -> [GitHubRef] {
+        Linkify.references(in: [run.task, run.brief ?? ""].joined(separator: "\n"), repo: repo(run))
+    }
 
     private func buttons(_ items: [(String, RunEvent, Bool)], run: BotRun) -> some View {
         HStack {
@@ -195,5 +206,30 @@ struct SimulationBadge: View {
             .padding(.vertical, 2)
             .background(Capsule().fill(Color.secondary.opacity(0.2)))
             .foregroundStyle(.secondary)
+    }
+}
+
+/// Small tappable chips for the issues and PRs a card mentions ("hcr#8").
+/// They open GitHub in the default browser.
+struct RefChips: View {
+    let refs: [GitHubRef]
+
+    var body: some View {
+        if !refs.isEmpty {
+            HStack(spacing: Spacing.xs) {
+                ForEach(refs, id: \.self) { ref in
+                    Link(destination: ref.url) {
+                        Text(ref.label)
+                            .font(AppFont.footnote(.semibold))
+                            .padding(.horizontal, Spacing.sm)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
+                    .help(ref.url.absoluteString)
+                    .accessibilityLabel("Open \(ref.label) on GitHub")
+                }
+            }
+        }
     }
 }

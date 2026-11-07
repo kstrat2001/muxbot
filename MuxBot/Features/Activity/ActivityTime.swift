@@ -1,8 +1,8 @@
 import Foundation
 
-/// Time text for the Work tab. Takes the clock as a parameter so tests can
+/// Time text for the Activity tab. Takes the clock as a parameter so tests can
 /// fix it.
-enum WorkTime {
+enum ActivityTime {
     /// "just now", "5 min ago", "3 h ago" today; otherwise the date and time
     /// in the user's locale.
     static func started(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {

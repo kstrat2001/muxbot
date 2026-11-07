@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// A thread's transcript, Messages-style: newest at the bottom, bot on the
 /// left, you on the right, run cards inline. The thread view pins `BotBar`
@@ -8,6 +9,12 @@ struct ChatView: View {
     var isThinking = false
 
     @Environment(AppRouter.self) private var router
+    @Query private var bots: [Bot]
+
+    /// The thread's bot's first GitHub repo, for linking "#8".
+    private var repo: String? {
+        bots.first { $0.id == conversation.roleId }?.repoSlugs.first
+    }
     @State private var flashRunId: UUID?
 
     private var messages: [ChatMessage] {
@@ -30,7 +37,7 @@ struct ChatView: View {
                     ForEach(messages) { message in
                         Group {
                             if message.kind == .text {
-                                ChatBubbleView(role: message.role, content: message.content)
+                                ChatBubbleView(role: message.role, content: message.content, repo: repo)
                             } else if message.kind == .bugCard {
                                 BugCardView(message: message)
                             } else {

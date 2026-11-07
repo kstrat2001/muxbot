@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// The macOS / iPad sidebar: Mux Bot, each bot (symbol, name, unread dot,
-/// status), "New bot", then Work.
+/// status), "New bot", then Activity.
 struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
@@ -30,7 +30,7 @@ struct BotSidebar: View {
                 Text("Bots")
             }
             Section {
-                Label("Work", systemImage: "checklist").tag(SidebarItem.work)
+                Label("Activity", systemImage: "waveform.path.ecg").tag(SidebarItem.activity)
             }
         }
         .toolbar {

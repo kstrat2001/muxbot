@@ -3,7 +3,7 @@ import Testing
 @testable import MuxBot
 
 @Suite(.serialized) @MainActor
-struct WorkSectionsTests {
+struct ActivitySectionsTests {
     private func run(_ store: BotStore, _ bot: Bot, _ task: String, to phase: RunPhase, minutesAgo: Double) -> BotRun {
         let r = store.proposeRun(task: task, crew: .coder, on: bot)
         r.createdAt = Date().addingTimeInterval(-minutesAgo * 60)
@@ -20,7 +20,7 @@ struct WorkSectionsTests {
         let result = run(store, bot, "waiting for keep", to: .result, minutesAgo: 5)
         let proposed = run(store, bot, "waiting for approve", to: .proposed, minutesAgo: 1)
 
-        let s = WorkSections(runs: [done, stopped, running, result, proposed])
+        let s = ActivitySections(runs: [done, stopped, running, result, proposed])
         #expect(s.needsYou.map(\.task) == ["waiting for approve", "waiting for keep"])
         #expect(s.running.map(\.task) == ["fixing now"])
         #expect(s.finished.map(\.task) == ["stopped one", "old fix"])
@@ -31,32 +31,32 @@ struct WorkSectionsTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "b", instructions: "", modelName: "")
         let runs = (0..<30).map { run(store, bot, "t\($0)", to: .done, minutesAgo: Double($0)) }
-        #expect(WorkSections(runs: runs).finished.count == 20)
+        #expect(ActivitySections(runs: runs).finished.count == 20)
     }
 
     @Test func noRunsIsEmpty() {
-        #expect(WorkSections(runs: []).isEmpty)
+        #expect(ActivitySections(runs: []).isEmpty)
     }
 }
 
-struct WorkTimeTextTests {
+struct ActivityTimeTextTests {
     let now = Date(timeIntervalSince1970: 1_794_000_000)   // fixed clock
 
     @Test func startedIsRelativeToday() {
-        #expect(WorkTime.started(now.addingTimeInterval(-5 * 60), now: now, calendar: .init(identifier: .gregorian)) == "5 min ago")
-        #expect(WorkTime.started(now.addingTimeInterval(-20), now: now, calendar: .init(identifier: .gregorian)) == "just now")
+        #expect(ActivityTime.started(now.addingTimeInterval(-5 * 60), now: now, calendar: .init(identifier: .gregorian)) == "5 min ago")
+        #expect(ActivityTime.started(now.addingTimeInterval(-20), now: now, calendar: .init(identifier: .gregorian)) == "just now")
     }
 
     @Test func startedOnEarlierDaysShowsTheDate() {
-        let text = WorkTime.started(now.addingTimeInterval(-3 * 86_400), now: now, calendar: .init(identifier: .gregorian))
+        let text = ActivityTime.started(now.addingTimeInterval(-3 * 86_400), now: now, calendar: .init(identifier: .gregorian))
         #expect(!text.contains("ago"))
         #expect(text.count > 5)
     }
 
     @Test func durations() {
-        #expect(WorkTime.duration(seconds: 42) == "0:42")
-        #expect(WorkTime.duration(seconds: 3 * 60 + 5) == "3:05")
-        #expect(WorkTime.duration(seconds: 2 * 3600 + 7 * 60) == "2h 7m")
+        #expect(ActivityTime.duration(seconds: 42) == "0:42")
+        #expect(ActivityTime.duration(seconds: 3 * 60 + 5) == "3:05")
+        #expect(ActivityTime.duration(seconds: 2 * 3600 + 7 * 60) == "2h 7m")
     }
 }
 

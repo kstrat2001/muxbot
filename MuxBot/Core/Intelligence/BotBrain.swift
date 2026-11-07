@@ -138,11 +138,18 @@ enum FallbackBrain {
         let label = lower.contains("bug") ? "bug" : nil
         let includePRs = lower.contains("pull request") || lower.contains("prs")
         let matches = IssueQuery.filter(issues, label: label, includePullRequests: includePRs)
-        guard let first = matches.first(where: { !$0.isPullRequest }) ?? matches.first else {
+        guard !matches.isEmpty else {
             return BotTurn(reply: "No open \(label.map { "\($0) " } ?? "")issues on \(repo).", action: nil)
         }
-        let list = matches.prefix(5).map { "• \($0.line)" }.joined(separator: "\n")
+        let fixed = IssueQuery.fixedBy(issues)
+        let list = IssueQuery.lines(Array(matches.prefix(5)), all: issues).map { "• \($0)" }.joined(separator: "\n")
         let more = matches.count > 5 ? "\n…and \(matches.count - 5) more." : ""
+        // Offer the first issue nobody has a PR for yet.
+        guard let first = matches.first(where: { !$0.isPullRequest && fixed[$0.number] == nil }) else {
+            let covered = matches.compactMap { i in fixed[i.number].map { "PR #\($0[0]) is open for #\(i.number)" } }
+            let tail = covered.isEmpty ? "" : "\n\(covered.joined(separator: "; ")): review it on GitHub."
+            return BotTurn(reply: "Open on \(repo):\n\(list)\(more)\(tail)", action: nil)
+        }
         return BotTurn(reply: "Open on \(repo):\n\(list)\(more)\nFix #\(first.number) with Coder?",
                        action: .dispatch(crew: .coder, task: "Fix #\(first.number): \(first.title) (\(repo))"))
     }
@@ -304,6 +311,7 @@ final class BotBrain {
             Answer in plain words; propose an action only when the user wants something done. \
             You cannot see the website. Never say how something looks. \
             Never mention tools. Never claim whether issues exist without checking. \
+            If an issue already has an open PR, say so with its number (PR #9) instead of offering to fix it. Write issue and PR numbers as #N. \
             \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew.")
             """
         guard !compact else { return identity + "\n" + rules }

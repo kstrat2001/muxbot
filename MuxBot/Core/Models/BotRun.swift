@@ -71,7 +71,7 @@ final class BotRun {
     var createdAt: Date = Date()
     var bot: Bot?
 
-    /// Needs you (0), running (1), finished (2): the Work table's default order.
+    /// Needs you (0), running (1), finished (2): the Activity table's default order.
     var statusRank: Int { phase.awaitsYou ? 0 : phase.isActive ? 1 : 2 }
 
     var durationSeconds: Double? {
@@ -79,7 +79,7 @@ final class BotRun {
         return (finishedAt ?? Date()).timeIntervalSince(startedAt)
     }
 
-    /// Sort keys for the Work table (Optional isn't Comparable).
+    /// Sort keys for the Activity table (Optional isn't Comparable).
     var botName: String { bot?.name ?? "" }
     var crewName: String { crew.name }
     var durationSort: Double { durationSeconds ?? -1 }

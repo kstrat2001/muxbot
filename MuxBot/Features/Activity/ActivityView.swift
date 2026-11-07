@@ -4,21 +4,21 @@ import SwiftData
 /// The work your bots started: what needs you, what's running, what
 /// recently finished. Read-only apart from Stop; tapping a run opens its
 /// bot's conversation at the run's card, where Keep / Tweak / Discard live.
-struct WorkView: View {
+struct ActivityView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(BotBrain.self) private var brain
     @Query private var runs: [BotRun]
 
     var body: some View {
-        let sections = WorkSections(runs: runs)
+        let sections = ActivitySections(runs: runs)
         Group {
             if sections.isEmpty {
-                EmptyStateView(systemImage: "checklist", title: "Nothing running",
+                EmptyStateView(systemImage: "waveform.path.ecg", title: "Nothing running",
                                message: "Ask a bot to start something.")
             } else {
                 #if os(macOS)
-                WorkTable(sections: sections)
+                ActivityTable(sections: sections)
                 #else
                 List {
                     section(sections.needsYou, kind: .needsYou)
@@ -28,14 +28,14 @@ struct WorkView: View {
                 #endif
             }
         }
-        .navigationTitle("Work")
+        .navigationTitle("Activity")
     }
 
     @ViewBuilder private func section(_ items: [BotRun], kind: StatusKind) -> some View {
         if !items.isEmpty {
             Section {
                 ForEach(items) { run in
-                    Button { router.open(run) } label: { WorkRow(run: run) }
+                    Button { router.open(run) } label: { ActivityRow(run: run) }
                         .buttonStyle(.plain)
                 }
             } header: {
@@ -48,8 +48,8 @@ struct WorkView: View {
 #if os(macOS)
 /// Mac: a sortable table. Default order: needs you, running, finished,
 /// newest first in each.
-private struct WorkTable: View {
-    let sections: WorkSections
+private struct ActivityTable: View {
+    let sections: ActivitySections
 
     @Environment(AppRouter.self) private var router
     @State private var selection: BotRun.ID?
@@ -63,7 +63,7 @@ private struct WorkTable: View {
 
     var body: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("", value: \.statusRank) { run in StatusBadge(kind: WorkRow.kind(of: run)) }
+            TableColumn("", value: \.statusRank) { run in StatusBadge(kind: ActivityRow.kind(of: run)) }
                 .width(28)
             TableColumn("Task", value: \.task) { run in Text(run.task).lineLimit(1) }
             TableColumn("Bot", value: \.botName) { run in Text(run.botName) }
@@ -72,11 +72,11 @@ private struct WorkTable: View {
                 Label(run.crew.name, systemImage: run.crew.systemImage)
             }
             .width(min: 90, ideal: 110)
-            TableColumn("Machine") { _ in Text(WorkRow.machine).foregroundStyle(.secondary) }
+            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(.secondary) }
                 .width(min: 80, ideal: 110)
             TableColumn("Started", value: \.createdAt) { run in
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text(WorkTime.started(run.startedAt ?? run.createdAt, now: context.date))
+                    Text(ActivityTime.started(run.startedAt ?? run.createdAt, now: context.date))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -86,10 +86,10 @@ private struct WorkTable: View {
             TableColumn("Duration", value: \.durationSort) { run in
                 if run.phase == .running {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text(run.durationSeconds.map(WorkTime.duration) ?? "").monospacedDigit()
+                        Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit()
                     }
                 } else {
-                    Text(run.durationSeconds.map(WorkTime.duration) ?? "").monospacedDigit().foregroundStyle(.secondary)
+                    Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit().foregroundStyle(.secondary)
                 }
             }
             .width(min: 60, ideal: 70)
@@ -124,7 +124,7 @@ private struct StopButton: View {
 }
 #endif
 
-private struct WorkRow: View {
+private struct ActivityRow: View {
     let run: BotRun
 
     @Environment(\.modelContext) private var context
@@ -142,7 +142,7 @@ private struct WorkRow: View {
                 HStack(spacing: Spacing.xs) {
                     Text(run.bot?.name ?? "")
                     Text("·")
-                    Text(WorkTime.started(run.startedAt ?? run.createdAt))
+                    Text(ActivityTime.started(run.startedAt ?? run.createdAt))
                     if run.phase == .running {
                         Text("·")
                         TimelineView(.periodic(from: .now, by: 1)) { context in

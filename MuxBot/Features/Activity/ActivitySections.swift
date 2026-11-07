@@ -1,8 +1,8 @@
 import Foundation
 
-/// The Work tab's three groups: what needs you, what's running, and what
+/// The Activity tab's three groups: what needs you, what's running, and what
 /// recently finished or stopped. Newest first in each.
-struct WorkSections {
+struct ActivitySections {
     var needsYou: [BotRun]
     var running: [BotRun]
     var finished: [BotRun]

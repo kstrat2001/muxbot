@@ -53,7 +53,7 @@ struct SidebarRoutingTests {
         #expect(router.sidebar == .bot(id))
         #expect(router.path.isEmpty)
         #expect(router.context == .bot(id))
-        router.sidebar = .work
+        router.sidebar = .activity
         #expect(router.context == .lead)
     }
 

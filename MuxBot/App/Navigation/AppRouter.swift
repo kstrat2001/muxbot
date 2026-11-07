@@ -1,12 +1,12 @@
 import SwiftUI
 
 enum AppTab: Hashable {
-    case bots, work
+    case bots, activity
 }
 
-/// The macOS / iPad sidebar: Mux Bot, each bot, and Work.
+/// The macOS / iPad sidebar: Mux Bot, each bot, and Activity.
 enum SidebarItem: Hashable {
-    case lead, bot(UUID), work
+    case lead, bot(UUID), activity
 }
 
 @MainActor @Observable

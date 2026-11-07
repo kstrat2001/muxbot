@@ -15,12 +15,14 @@ extension View {
 struct ChatBubbleView: View {
     let role: ChatRole
     let content: String
+    /// The bot's GitHub repo ("owner/name"), so "#8" can link to it.
+    var repo: String? = nil
 
     private var isUser: Bool { role == .user }
 
     var body: some View {
         if role == .system {
-            Text(content)
+            Text(Linkify.attributed(content, repo: repo))
                 .font(AppFont.footnote())
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -31,8 +33,17 @@ struct ChatBubbleView: View {
         }
     }
 
+    /// Links read as links on the green bubble too: white and underlined.
+    private var linked: AttributedString {
+        var text = Linkify.attributed(content, repo: repo)
+        guard isUser else { return text }
+        for run in text.runs where run.link != nil { text[run.range].underlineStyle = .single }
+        return text
+    }
+
     private var bubble: some View {
-        Text(content)
+        Text(linked)
+                .tint(isUser ? Color.white : Color.accentColor)
                 .font(AppFont.body())
                 .foregroundStyle(isUser ? Color.white : Color.primary)
                 .padding(.horizontal, Spacing.md)

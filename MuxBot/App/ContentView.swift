@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// macOS and iPad: a sidebar of Mux Bot, each bot and Work, with the
+/// macOS and iPad: a sidebar of Mux Bot, each bot and Activity, with the
 /// selected thread beside it. iPhone: two tabs, Bots (Home grid, then
-/// threads) and Work.
+/// threads) and Activity.
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
@@ -43,7 +43,7 @@ struct ContentView: View {
         guard let name = UserDefaults.standard.string(forKey: "openBot") else { return }
         router.usesSidebar = wantsSidebar
         if name == LeadBot.name { router.navigate(to: .lead); return }
-        if name == "Work" { router.tab = .work; router.sidebar = .work; return }
+        if name == "Activity" { router.tab = .activity; router.sidebar = .activity; return }
         if let bot = BotStore(context: context).allBots().first(where: { $0.name == name }) {
             router.navigate(to: .bot(bot.id))
         }
@@ -72,8 +72,8 @@ struct ContentView: View {
                         .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
                 }
             }
-            Tab("Work", systemImage: "checklist", value: AppTab.work) {
-                NavigationStack { WorkView() }
+            Tab("Activity", systemImage: "waveform.path.ecg", value: AppTab.activity) {
+                NavigationStack { ActivityView() }
             }
         }
     }
@@ -90,7 +90,7 @@ struct ContentView: View {
             NavigationStack(path: $router.path) {
                 Group {
                     switch router.sidebar {
-                    case .work?: WorkView()
+                    case .activity?: ActivityView()
                     case let .bot(id)?: BotThreadView(context: .bot(id)).id(id)
                     case .lead?, nil: BotThreadView(context: .lead)
                     }

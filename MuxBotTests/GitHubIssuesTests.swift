@@ -13,6 +13,10 @@ struct MockGitHub: GitHubClient {
         if let error { throw error }
         return issues
     }
+    func issue(repo: String, number: Int) async throws -> GitHubIssue? {
+        if let error { throw error }
+        return issues.first { $0.number == number }
+    }
 }
 
 func issue(_ n: Int, _ title: String, labels: [String] = [], pr: Bool = false) -> GitHubIssue {
@@ -213,5 +217,42 @@ struct VisualReportTests {
 
     @Test func questionsAboutLooksAreNotReports() {
         #expect(!FallbackBrain.isVisualReport("does the border look ok?"))
+    }
+}
+
+struct FixedByTests {
+    private func issue(_ n: Int, _ title: String, pr: Bool = false, body: String? = nil) -> GitHubIssue {
+        GitHubIssue(number: n, title: title, pullRequest: pr ? .init() : nil, body: body)
+    }
+
+    @Test func closingKeywordsInPRBodies() {
+        #expect(issue(9, "Pad", pr: true, body: "Fixes #8.\nAlso closes #3, resolves kstrat2001/hcr#4").fixes == [8, 3, 4])
+        #expect(issue(9, "Pad", pr: true, body: "Mentions #8 only").fixes.isEmpty)
+        #expect(issue(7, "Not a PR", body: "Fixes #8").fixes.isEmpty)
+    }
+
+    @Test func issueLinesNameTheirOpenPR() {
+        let all = [issue(9, "Restore side padding", pr: true, body: "Fixes #8."), issue(8, "Start a project box has no gutter")]
+        let fixed = IssueQuery.fixedBy(all)
+        #expect(fixed[8] == [9])
+        #expect(all[1].line(fixedBy: fixed[8] ?? []) == "#8 Start a project box has no gutter (open PR #9 fixes it)")
+    }
+
+    @Test func fallbackSkipsIssuesThatAlreadyHaveAPR() {
+        let all = [issue(9, "Restore side padding", pr: true, body: "Fixes #8."), issue(8, "No gutter"), issue(5, "Footer")]
+        let turn = FallbackBrain.issuesTurn(all, repo: "kstrat2001/hcr", asked: "any open issues?")
+        #expect(turn.reply.contains("#8 No gutter (open PR #9 fixes it)"))
+        #expect(turn.reply.contains("Fix #5"))
+        let onlyFixed = FallbackBrain.issuesTurn(Array(all.prefix(2)), repo: "kstrat2001/hcr", asked: "any open issues?")
+        #expect(onlyFixed.action == nil)
+        #expect(onlyFixed.reply.contains("PR #9 is open for #8"))
+    }
+
+    @Test func lookupLineSaysState() {
+        var pr = issue(9, "Restore side padding", pr: true)
+        pr.state = "open"
+        #expect(pr.statusLine == "#9 PR: Restore side padding — open")
+        pr.state = "closed"; pr.pullRequest = .init(mergedAt: "2026-11-07T00:00:00Z")
+        #expect(pr.statusLine == "#9 PR: Restore side padding — merged")
     }
 }
