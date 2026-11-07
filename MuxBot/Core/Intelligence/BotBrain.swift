@@ -610,8 +610,44 @@ final class BotBrain {
             if let bot = run.bot { store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id))) }
             return
         }
+        // Keep and Discard act on the files first; the card moves only when
+        // darkmux has done it, and says what it did.
+        if event == .keep || event == .discard, run.darkmuxWorkId != nil {
+            Task { await applyOnDisk(event, to: run, store: store) }
+            return
+        }
         guard store.apply(event, to: run) else { return }
         if event == .approve { _ = startRealRun(run, message: run.brief ?? run.task, store: store) }
+    }
+
+    /// Runs with Keep or Discard in flight (their buttons wait).
+    var deciding: Set<UUID> = []
+
+    private func applyOnDisk(_ event: RunEvent, to run: BotRun, store: BotStore) async {
+        guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
+              let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
+            if let bot = run.bot, connection?.token == nil {
+                store.append(.system, "Can't do that yet: \(RunBlocker.unpaired.message).", to: store.conversation(for: .bot(bot.id)))
+            }
+            return
+        }
+        let thread = store.conversation(for: .bot(bot.id))
+        deciding.insert(run.id)
+        defer { deciding.remove(run.id) }
+        do {
+            if event == .keep {
+                let kept = try await connection.client.keepWork(token: token, workId: workId, message: run.task)
+                run.keptBranch = kept.branch
+                run.keptCommit = kept.commit
+                store.append(.system, RunResultText.kept(files: kept.files, branch: kept.branch, commit: kept.commit), to: thread)
+            } else {
+                let put = try await connection.client.discardWork(token: token, workId: workId)
+                store.append(.system, RunResultText.discarded(restored: put.restored, removed: put.removed), to: thread)
+            }
+            store.apply(event, to: run)
+        } catch {
+            store.append(.system, "Couldn't \(event == .keep ? "keep" : "discard") it: \(error.localizedDescription)", to: thread)
+        }
     }
 
     /// Every darkmux run gets the same working rules after its task, plus

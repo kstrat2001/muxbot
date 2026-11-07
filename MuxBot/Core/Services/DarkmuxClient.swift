@@ -122,6 +122,32 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(Reply.self, from: data).recipe
     }
 
+    struct KeepResult: Decodable, Sendable, Equatable {
+        var commit: String
+        var branch: String
+        var files: [String]
+    }
+
+    struct DiscardResult: Decodable, Sendable, Equatable {
+        var restored: [String]
+        var removed: [String]
+    }
+
+    /// Commits exactly the files the run changed to its work copy's branch.
+    func keepWork(token: String, workId: String, message: String) async throws -> KeepResult {
+        struct Body: Encodable { var message: String }
+        let data = try await send("POST", "/client/work/\(workId)/keep", body: Body(message: message),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(KeepResult.self, from: data)
+    }
+
+    /// Puts back every file the run changed and removes files it added.
+    func discardWork(token: String, workId: String) async throws -> DiscardResult {
+        let data = try await send("POST", "/client/work/\(workId)/discard", body: [String: String](),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(DiscardResult.self, from: data)
+    }
+
     func cancelWork(token: String, workId: String) async throws {
         _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
     }

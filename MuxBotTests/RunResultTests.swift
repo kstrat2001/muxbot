@@ -60,7 +60,7 @@ struct RunEndingTests {
     }
 
     @Test func prCardNeverClaimsAPullRequestWasOpened() {
-        #expect(!RunResultText.prUnavailable.localizedCaseInsensitiveContains("opened"))
-        #expect(RunResultText.prUnavailable.contains("GitHub"))
+        #expect(!RunResultText.prUnavailable(branch: nil).localizedCaseInsensitiveContains("opened"))
+        #expect(RunResultText.prUnavailable(branch: nil).contains("GitHub"))
     }
 }

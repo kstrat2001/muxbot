@@ -9,7 +9,30 @@ enum RunEnd: Equatable, Sendable {
 /// Turns darkmux's raw run output into what the chat shows: a short,
 /// friendly line; never plumbing (runtime images, liveness, out-dirs).
 enum RunResultText {
-    static let prUnavailable = "I can't open pull requests from the app yet: that needs GitHub sign-in, which isn't here. I can pass it to Mux Bot, or you can open one from the work copy."
+    /// No GitHub sign-in yet, so the app can't push or open a PR itself.
+    static func prUnavailable(branch: String?) -> String {
+        guard let branch else {
+            return "I can't open pull requests from the app yet: that needs GitHub sign-in, which isn't here. I can pass it to Mux Bot."
+        }
+        return "I can't open pull requests from the app yet (no GitHub sign-in). The change is committed on \(branch) on this Mac: push that branch and open a PR on GitHub, or pass it to Mux Bot."
+    }
+
+    /// What Keep did: "Committed pricing.tsx to mux/x (abc1234)."
+    static func kept(files: [String], branch: String, commit: String) -> String {
+        let what = files.count == 1 ? ((files[0] as NSString).lastPathComponent) : "\(files.count) files"
+        return "Committed \(what) to \(branch) (\(commit))."
+    }
+
+    /// What Discard did: "Put back README.md. Removed new.txt."
+    static func discarded(restored: [String], removed: [String]) -> String {
+        func list(_ files: [String]) -> String {
+            files.count == 1 ? (files[0] as NSString).lastPathComponent : "\(files.count) files"
+        }
+        var parts: [String] = []
+        if !restored.isEmpty { parts.append("Put back \(list(restored)).") }
+        if !removed.isEmpty { parts.append("Removed \(list(removed)).") }
+        return parts.isEmpty ? "Nothing had changed." : parts.joined(separator: " ")
+    }
 
     /// Markdown to plain text: no **, `, _ or links syntax.
     static func plain(_ markdown: String) -> String {

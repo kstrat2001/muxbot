@@ -31,6 +31,11 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: MuxBot
+    entitlements:
+      path: MuxBot/MuxBot.entitlements
+      properties:
+        # Keep access to a folder you picked (Add folder) across launches.
+        com.apple.security.files.bookmarks.app-scope: true
     info:
       path: MuxBot/Info.plist
       properties:

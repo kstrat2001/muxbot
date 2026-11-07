@@ -64,6 +64,9 @@ final class BotRun {
     var diff: String?
     /// For a run that didn't finish: the log, without darkmux plumbing.
     var details: String?
+    /// After Keep: the branch and commit darkmux committed the changes to.
+    var keptBranch: String?
+    var keptCommit: String?
     /// Nothing really ran: the app isn't paired with darkmux (or can't
     /// send this run). Shown as a simulation, closed without a decision.
     /// Unused since runs are always real; dropped with the versioned schema.

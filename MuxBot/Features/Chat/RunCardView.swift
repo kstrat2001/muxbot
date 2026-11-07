@@ -130,15 +130,19 @@ struct RunCardView: View {
                     HStack {
                         Button("Discard", systemImage: "trash", role: .destructive) { brain.decide(.discard, on: run, store: store) }
                             .buttonStyle(.bordered)
+                            .help("Put the changed files back as they were")
                         Button("Tweak", systemImage: "pencil") {
                             brain.tweakRunId = run.id
                             router.barDraft = ""
                         }
                         .buttonStyle(.bordered)
                         Spacer()
+                        if brain.deciding.contains(run.id) { ProgressView().controlSize(.small) }
                         Button("Keep", systemImage: "checkmark") { brain.decide(.keep, on: run, store: store) }
                             .buttonStyle(.borderedProminent)
+                            .help("Commit these changes to the work copy's branch")
                     }
+                    .disabled(brain.deciding.contains(run.id))
                 } else {
                     outcome(isLatest && run.phase == .discarded ? .failed : .done)
                 }
@@ -148,7 +152,7 @@ struct RunCardView: View {
             RefChips(refs: refs(run))
             switch run.phase {
             case .kept:
-                Text(RunResultText.prUnavailable).font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(.secondary)
                 HStack {
                     Button("Not now") { brain.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
                     Spacer()
