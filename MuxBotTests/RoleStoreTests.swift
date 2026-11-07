@@ -43,34 +43,52 @@ struct RoleStoreTests {
         #expect(role.avatarImageData == nil)
     }
 
-    @Test func assignRecordsTaskAndSetsWorking() {
+    @Test func handOffRecordsTaskSetsWorkingAndPostsInTargetThread() {
         let store = TestStore.fresh()
         let role = store.add(name: "Coder", instructions: "Writes code", modelName: "")
-        store.assign(task: "Fix the login bug", why: "It writes code", to: role)
+        store.handOff(task: "Fix the login bug", from: LeadBot.name, to: role)
 
         let reloaded = try! #require(store.role(id: role.id))
         #expect(reloaded.state == .working)
         #expect(reloaded.currentTask?.title == "Fix the login bug")
-        let convo = ChatService.conversation(for: role.id, title: role.name, context: store.context)
-        #expect((convo.messages ?? []).contains { $0.content.contains("Fix the login bug") })
+        let thread = store.conversation(for: .bot(role.id))
+        #expect((thread.messages ?? []).contains { $0.content == "From \(LeadBot.name): Fix the login bug" })
     }
 
-    @Test func approvingANewRolePlanSavesIt() {
+    @Test func leadAndBotThreadsAreSeparate() {
         let store = TestStore.fresh()
-        let planner = RadioPlanner()
-        planner.plan = .newRole(RoleDraft(name: "Writer", instructions: "Drafts posts"), why: "Asked for it")
-        planner.approve(in: store)
+        let role = store.add(name: "Coder", instructions: "Writes code", modelName: "")
+        let lead = store.conversation(for: .lead)
+        #expect(lead.id == store.conversation(for: .lead).id)
+        #expect(lead.id != store.conversation(for: .bot(role.id)).id)
+    }
+
+    @Test func approvingAHandOffNotesItInTheSourceThread() {
+        let store = TestStore.fresh()
+        let role = store.add(name: "Reviewer", instructions: "Reviews", modelName: "")
+        let brain = BotBrain()
+        brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "Reviewer", task: "Check PR 12"))
+        brain.approve(in: store)
+        #expect(brain.pending == nil)
+        #expect(store.role(id: role.id)?.state == .working)
+        #expect((store.conversation(for: .lead).messages ?? []).contains { $0.content == "Handed to Reviewer: Check PR 12" })
+    }
+
+    @Test func approvingANewBotSavesIt() {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        brain.pending = .init(context: .lead, action: .createBot(BotDraft(name: "Writer", instructions: "Drafts posts")))
+        brain.approve(in: store)
         #expect(store.allRoles().map(\.name) == ["Writer"])
-        #expect(planner.plan == nil)
     }
 
     @Test func cancelLeavesTheStoreAlone() {
         let store = TestStore.fresh()
         let role = store.add(name: "Coder", instructions: "Writes code", modelName: "")
-        let planner = RadioPlanner()
-        planner.plan = .assign(roleId: role.id, roleName: "Coder", task: "x", why: "y")
-        planner.cancel()
-        #expect(planner.plan == nil)
+        let brain = BotBrain()
+        brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "Coder", task: "x"))
+        brain.cancel()
+        #expect(brain.pending == nil)
         #expect(store.role(id: role.id)?.state == .ready)
         #expect(role.tasks?.isEmpty ?? true)
     }

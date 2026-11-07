@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Reads and writes roles in the app's SwiftData store. Views read live
+/// Reads and writes bots (roles in code) and their threads in the app's SwiftData store. Views read live
 /// with `@Query`; every mutation goes through here.
 @MainActor
 struct RoleStore {
@@ -48,20 +48,37 @@ struct RoleStore {
         return role
     }
 
-    /// Records a task on the role and sets it Working. No fleet call yet.
+    /// Records work handed to a bot, sets it Working, and posts the
+    /// handoff in the bot's thread. No fleet call yet.
     @discardableResult
-    func assign(task title: String, why: String, to role: MuxRole) -> RoleTask {
-        let task = RoleTask(title: title, why: why)
+    func handOff(task title: String, from sender: String, to role: MuxRole) -> RoleTask {
+        let task = RoleTask(title: title, why: "From \(sender)")
         context.insert(task)
         task.role = role
         role.state = RoleState.working
-
-        let convo = ChatService.conversation(for: role.id, title: role.name, context: context)
-        let note = ChatMessage(role: .system, content: "New task from Radio: \(title)\nWhy: \(why)")
-        note.conversation = convo
-        context.insert(note)
-        try? context.save()
+        append(.system, "From \(sender): \(title)", to: conversation(for: .bot(role.id)))
         return task
+    }
+
+    /// The thread for a context, created on first use. The lead bot's
+    /// thread has no role id.
+    func conversation(for chat: ChatContext) -> ChatConversation {
+        let roleId = chat.botId
+        let all = (try? context.fetch(FetchDescriptor<ChatConversation>())) ?? []
+        if let existing = all.first(where: { $0.roleId == roleId }) { return existing }
+        let title = roleId.flatMap { role(id: $0)?.name } ?? LeadBot.name
+        let created = ChatConversation(title: title, roleId: roleId)
+        context.insert(created)
+        try? context.save()
+        return created
+    }
+
+    func append(_ role: ChatRole, _ text: String, to conversation: ChatConversation) {
+        let message = ChatMessage(role: role, content: text)
+        message.conversation = conversation
+        context.insert(message)
+        conversation.updatedAt = .now
+        try? context.save()
     }
 
     func setState(_ state: RoleState, for role: MuxRole) {

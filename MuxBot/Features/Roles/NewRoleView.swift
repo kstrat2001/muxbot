@@ -20,7 +20,7 @@ struct NewRoleView: View {
             } header: {
                 Text("Role")
             } footer: {
-                Text("Radio reads this to decide which bot gets new work.")
+                Text("Bots read this to decide who gets new work.")
             }
             Section("Model") {
                 TextField("Default model", text: $modelName)

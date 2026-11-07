@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// "Your bots": tiles grouped Needs you / Working / Ready from stored state,
-/// with the Radio dock pinned to the bottom.
+/// "Your bots": the lead bot on top, then bot tiles grouped Needs you /
+/// Working / Ready from stored state. The bar at the bottom talks to the lead bot.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Query(sort: \MuxRole.createdAt) private var roles: [MuxRole]
@@ -12,6 +12,8 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
+                Button { router.navigate(to: .lead) } label: { LeadBotCard() }
+                    .buttonStyle(.plain)
                 ForEach(RoleState.allCases, id: \.self) { state in
                     let group = roles.filter { $0.state == state }
                     if !group.isEmpty {
@@ -19,7 +21,7 @@ struct HomeView: View {
                             SectionHeader(title: state.label, count: group.count)
                             LazyVGrid(columns: columns, spacing: Spacing.md) {
                                 ForEach(group) { role in
-                                    Button { router.navigate(to: .roleChat(role.id)) } label: {
+                                    Button { router.navigate(to: .bot(role.id)) } label: {
                                         RoleTile(role: role)
                                     }
                                     .buttonStyle(.plain)
@@ -30,7 +32,7 @@ struct HomeView: View {
                 }
                 if roles.isEmpty {
                     EmptyStateView(systemImage: "person.3", title: "No bots yet",
-                                   message: "Tap + to add one, or ask Radio to draft one.")
+                                   message: "Tap + to add one, or ask \(LeadBot.name) to set one up.")
                 }
             }
             .padding(Spacing.lg)
@@ -119,5 +121,37 @@ struct RoleAvatar: View {
         #else
         NSImage(data: data).map(Image.init(nsImage:))
         #endif
+    }
+}
+
+/// The lead bot's card: its latest line, tap to open the full thread.
+struct LeadBotCard: View {
+    @Query(filter: #Predicate<ChatConversation> { $0.roleId == nil }) private var threads: [ChatConversation]
+
+    private var latest: String {
+        let messages = (threads.first?.messages ?? []).filter { $0.role == .assistant }
+        return messages.max { $0.timestamp < $1.timestamp }?.content
+            ?? "Tell me what needs doing and I'll get the right bot on it."
+    }
+
+    var body: some View {
+        CardView {
+            HStack(alignment: .top, spacing: Spacing.md) {
+                Image(systemName: LeadBot.systemImage)
+                    .font(.title2)
+                    .foregroundStyle(Color.brandGreen)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(LeadBot.name).font(AppFont.headline())
+                    Text(latest)
+                        .font(AppFont.subheadline())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens your conversation with \(LeadBot.name)")
     }
 }

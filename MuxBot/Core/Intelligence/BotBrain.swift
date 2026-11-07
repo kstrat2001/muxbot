@@ -1,0 +1,283 @@
+import Foundation
+
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// The lead bot on Home that orchestrates the others. Placeholder name:
+/// rename it here and only here.
+enum LeadBot {
+    static let name = "Mux"
+    static let systemImage = "crown"
+    static let persona = "You orchestrate the other bots: hand work to the right bot, set up new bots, and answer questions about the darkmux fleet. Short, confident, friendly."
+}
+
+/// Which conversation the user is in. Follows navigation.
+enum ChatContext: Hashable, Sendable {
+    case lead
+    case bot(UUID)
+
+    var botId: UUID? {
+        if case let .bot(id) = self { id } else { nil }
+    }
+}
+
+/// A bot as the brain sees it: a plain value, safe to hand to the model.
+struct BotSummary: Sendable, Equatable {
+    var id: UUID
+    var name: String
+    var instructions: String
+    var state: RoleState
+}
+
+/// A new bot proposed in conversation. Saved only when the user approves.
+struct BotDraft: Sendable, Equatable {
+    var name: String
+    var instructions: String
+    var modelName: String = ""
+    var systemImage: String = "sparkles"
+}
+
+/// Something a bot wants to do. Every action waits for Approve.
+enum BotAction: Sendable, Equatable {
+    case handOff(toId: UUID, toName: String, task: String)
+    case createBot(BotDraft)
+}
+
+/// One bot turn: what it says, and what it proposes to do.
+struct BotTurn: Sendable, Equatable {
+    var reply: String
+    var action: BotAction?
+}
+
+// MARK: - Keyword fallback
+
+/// Answers without the on-device model: hands off by bot name or keyword,
+/// drafts new bots, and reads the fleet briefing. Used when Foundation
+/// Models is unavailable or gives an unusable answer.
+enum FallbackBrain {
+    private static let newBotPhrases = ["new bot", "create a bot", "add a bot", "make a bot",
+                                        "new role", "create a role", "add a role", "make a role"]
+    private static let fleetWords = ["machine", "fleet", "running", "free", "memory", "loaded", "runs", "mission", "busy"]
+    private static let stopwords: Set<String> = [
+        "the", "and", "for", "with", "this", "that", "from", "into", "about", "please",
+        "can", "you", "our", "your", "some", "out", "all", "are", "was", "will", "what",
+    ]
+
+    /// `speaker` is the bot whose thread this is; `nil` means the lead bot.
+    static func turn(for request: String, speaker: BotSummary?, bots: [BotSummary], fleet: FleetSnapshot) -> BotTurn {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = text.lowercased()
+        let others = bots.filter { $0.id != speaker?.id }
+
+        if newBotPhrases.contains(where: lower.contains) {
+            let draft = draft(from: text)
+            return BotTurn(reply: "I can set up \(draft.name). Approve to add it.", action: .createBot(draft))
+        }
+        if let named = others.first(where: { lower.contains($0.name.lowercased()) }) {
+            return handOff(text, to: named)
+        }
+        if tokens(lower).contains(where: { word in fleetWords.contains { word.hasPrefix($0) } }) {
+            return BotTurn(reply: fleetAnswer(fleet), action: nil)
+        }
+        if speaker == nil {
+            if let best = bestMatch(for: lower, in: others) { return handOff(text, to: best) }
+            return BotTurn(reply: "Which bot should take this? Name one, or ask me for a new bot.", action: nil)
+        }
+        return BotTurn(reply: "Noted. Once the fleet is connected I'll send work like this to darkmux after you approve.", action: nil)
+    }
+
+    static func fleetAnswer(_ fleet: FleetSnapshot) -> String {
+        let active = fleet.runs.filter { $0.status == .running || $0.status == .queued }.count
+        var answer = "\(active) run\(active == 1 ? "" : "s") active."
+        if let roomy = fleet.roomiestMachine {
+            answer += " \(roomy.name) has the most room: \(roomy.freeMemoryGB) GB free"
+            answer += roomy.loadedModels.isEmpty ? "." : ", with \(roomy.loadedModels.joined(separator: ", ")) loaded."
+        }
+        if !fleet.isConnected { answer += " (Sample data: the fleet isn't connected yet.)" }
+        return answer
+    }
+
+    private static func handOff(_ text: String, to bot: BotSummary) -> BotTurn {
+        BotTurn(reply: "That's a job for \(bot.name). Approve to hand it over.",
+                action: .handOff(toId: bot.id, toName: bot.name, task: text))
+    }
+
+    /// The bot whose name and instructions share the most words with the request.
+    static func bestMatch(for lower: String, in bots: [BotSummary]) -> BotSummary? {
+        let words = tokens(lower)
+        var best: (bot: BotSummary, hits: Int)?
+        for bot in bots {
+            let vocabulary = tokens("\(bot.name) \(bot.instructions)".lowercased())
+            let hits = words.filter { word in vocabulary.contains { $0.hasPrefix(word) || word.hasPrefix($0) } }.count
+            if hits > (best?.hits ?? 0) { best = (bot, hits) }
+        }
+        return best?.bot
+    }
+
+    /// Words of four letters or more, minus filler, so short words cannot
+    /// prefix-match everything.
+    static func tokens(_ text: String) -> [String] {
+        text.split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .filter { $0.count >= 4 && !stopwords.contains($0) }
+    }
+
+    /// "New bot called Release helper that tags releases" → name + instructions.
+    static func draft(from text: String) -> BotDraft {
+        var name = "New bot"
+        var instructions = text
+        for marker in [" called ", " named "] {
+            guard let range = text.range(of: marker, options: .caseInsensitive) else { continue }
+            let rest = text[range.upperBound...]
+            let cut = rest.range(of: " that ", options: .caseInsensitive)
+                ?? rest.range(of: " to ", options: .caseInsensitive)
+                ?? rest.range(of: " who ", options: .caseInsensitive)
+            name = String(rest[..<(cut?.lowerBound ?? rest.endIndex)])
+                .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            if let cut { instructions = String(rest[cut.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines) }
+            break
+        }
+        return BotDraft(name: name.isEmpty ? "New bot" : name, instructions: instructions)
+    }
+}
+
+// MARK: - On-device model
+
+#if canImport(FoundationModels)
+@Generable(description: "One reply from a bot in Mux Bot")
+struct GeneratedTurn {
+    @Guide(description: "Your reply to the user, one to three short sentences")
+    var reply: String
+    @Guide(description: "none unless the user wants work handed to another bot (handOff) or a new bot set up (createBot)")
+    var action: GeneratedAction
+    @Guide(description: "For handOff: the exact name of the bot to send the work to")
+    var targetBot: String
+    @Guide(description: "For handOff: the task for that bot. For createBot: one sentence on what the new bot does")
+    var detail: String
+    @Guide(description: "For createBot: a short name for the new bot")
+    var newBotName: String
+}
+
+@Generable
+enum GeneratedAction {
+    case none
+    case handOff
+    case createBot
+}
+#endif
+
+/// Runs a bot's side of a conversation, on device. Replies are saved to
+/// the thread; any proposed action waits on an Approve / Cancel card.
+@MainActor @Observable
+final class BotBrain {
+    struct Pending: Equatable {
+        var context: ChatContext
+        var action: BotAction
+    }
+
+    var isThinking = false
+    var pending: Pending?
+    /// Shown in the bar when the keyword fallback answered.
+    var fallbackNote: String?
+    var fleet = FleetSnapshot.sample
+
+    var onDeviceAvailable: Bool {
+        #if canImport(FoundationModels)
+        SystemLanguageModel.default.isAvailable
+        #else
+        false
+        #endif
+    }
+
+    func send(_ request: String, in context: ChatContext, store: RoleStore) async {
+        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let bots = store.allRoles().map(\.summary)
+        let speaker = context.botId.flatMap { id in bots.first { $0.id == id } }
+        let conversation = store.conversation(for: context)
+        store.append(.user, text, to: conversation)
+
+        isThinking = true
+        defer { isThinking = false }
+        pending = nil
+        fallbackNote = nil
+
+        var turn: BotTurn?
+        if onDeviceAvailable {
+            turn = await onDeviceTurn(for: text, speaker: speaker, bots: bots)
+            if turn == nil { fallbackNote = "The on-device model couldn't answer, so I used simple keyword matching." }
+        } else {
+            fallbackNote = "Apple Intelligence isn't available here, so bots use simple keyword matching."
+        }
+        let result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
+        store.append(.assistant, result.reply, to: conversation)
+        if let action = result.action { pending = Pending(context: context, action: action) }
+    }
+
+    func cancel() {
+        pending = nil
+    }
+
+    /// Carries out the pending action and notes it in the thread it came from.
+    func approve(in store: RoleStore) {
+        guard let pending else { return }
+        let from = pending.context.botId.flatMap { store.role(id: $0)?.name } ?? LeadBot.name
+        let note: String
+        switch pending.action {
+        case let .handOff(toId, toName, task):
+            guard let target = store.role(id: toId) else { self.pending = nil; return }
+            store.handOff(task: task, from: from, to: target)
+            note = "Handed to \(toName): \(task)"
+        case let .createBot(draft):
+            store.add(name: draft.name, instructions: draft.instructions, modelName: draft.modelName, systemImage: draft.systemImage)
+            note = "Added bot \(draft.name)."
+        }
+        store.append(.system, note, to: store.conversation(for: pending.context))
+        self.pending = nil
+    }
+
+    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary]) async -> BotTurn? {
+        #if canImport(FoundationModels)
+        let others = bots.filter { $0.id != speaker?.id }
+        let roster = others.map { "- \($0.name) (\($0.state.label)): \($0.instructions)" }.joined(separator: "\n")
+        let identity = speaker.map { "You are \($0.name), a bot in Mux Bot. \($0.instructions)" }
+            ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona)"
+        let session = LanguageModelSession(instructions: """
+            \(identity)
+            Hand work to another bot only when the user asks or it clearly belongs to that bot. \
+            When asked where work should run, suggest the online machine with the most free memory.
+            Other bots:
+            \(roster.isEmpty ? "(none yet)" : roster)
+            \(fleet.briefing)
+            """)
+        do {
+            let g = try await session.respond(to: request, generating: GeneratedTurn.self).content
+            switch g.action {
+            case .none:
+                return BotTurn(reply: g.reply, action: nil)
+            case .handOff:
+                let wanted = g.targetBot.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard let target = others.first(where: { $0.name.lowercased() == wanted }) else {
+                    return BotTurn(reply: g.reply, action: nil)
+                }
+                return BotTurn(reply: g.reply, action: .handOff(toId: target.id, toName: target.name,
+                                                                task: g.detail.isEmpty ? request : g.detail))
+            case .createBot:
+                guard !g.newBotName.isEmpty else { return BotTurn(reply: g.reply, action: nil) }
+                return BotTurn(reply: g.reply, action: .createBot(BotDraft(name: g.newBotName, instructions: g.detail)))
+            }
+        } catch {
+            return nil
+        }
+        #else
+        return nil
+        #endif
+    }
+}
+
+extension MuxRole {
+    var summary: BotSummary {
+        BotSummary(id: id, name: name, instructions: instructions, state: state)
+    }
+}

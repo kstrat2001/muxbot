@@ -21,7 +21,7 @@ enum RoleState: String, Codable, CaseIterable, Sendable {
 final class MuxRole {
     var id: UUID = UUID()
     var name: String = ""
-    /// What this role does, in plain words. Radio routes work by it.
+    /// What this role does, in plain words. Bots route work by it.
     var instructions: String = ""
     /// The local model this role should run on. Empty means the default.
     var modelName: String = ""
@@ -47,7 +47,7 @@ final class MuxRole {
     }
 }
 
-/// A piece of work Radio gave a role. Local only until the fleet is wired.
+/// A piece of work handed to a bot. Local only until the fleet is wired.
 @Model
 final class RoleTask {
     var id: UUID = UUID()

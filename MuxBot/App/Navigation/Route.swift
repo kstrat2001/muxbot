@@ -1,5 +1,6 @@
 import Foundation
 
 enum Route: Hashable {
-    case roleChat(UUID)
+    case lead
+    case bot(UUID)
 }

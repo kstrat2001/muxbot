@@ -7,6 +7,19 @@ struct ChatBubbleView: View {
     private var isUser: Bool { role == .user }
 
     var body: some View {
+        if role == .system {
+            Text(content)
+                .font(AppFont.footnote())
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.xs)
+        } else {
+            bubble
+        }
+    }
+
+    private var bubble: some View {
         HStack {
             if isUser { Spacer(minLength: Spacing.xxl) }
             Text(content)

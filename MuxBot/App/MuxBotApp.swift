@@ -4,8 +4,7 @@ import SwiftData
 @main
 struct MuxBotApp: App {
     @State private var router = AppRouter()
-    @State private var radio = RadioPlanner()
-    @State private var llm = OnDeviceLLMService()
+    @State private var brain = BotBrain()
     @State private var notifications = NotificationService()
 
     private let container: ModelContainer
@@ -24,8 +23,7 @@ struct MuxBotApp: App {
         WindowGroup {
             ContentView()
                 .environment(router)
-                .environment(radio)
-                .environment(llm)
+                .environment(brain)
                 .environment(notifications)
                 .task { BackgroundTaskService.scheduleRefresh() }
         }

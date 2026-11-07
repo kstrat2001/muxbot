@@ -1,15 +1,25 @@
 import SwiftUI
 
+/// Two tabs: Bots, where all work starts in conversation, and Fleet, a
+/// read-only view of what the fleet is doing. Sidebar on macOS and iPad.
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
 
     var body: some View {
         @Bindable var router = router
-        NavigationStack(path: $router.path) {
-            HomeView()
-                .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+        TabView(selection: $router.tab) {
+            Tab("Bots", systemImage: "bubble.left.and.bubble.right", value: AppTab.bots) {
+                NavigationStack(path: $router.path) {
+                    HomeView()
+                        .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+                }
+                .safeAreaInset(edge: .bottom) { BotBar() }
+            }
+            Tab("Fleet", systemImage: "server.rack", value: AppTab.fleet) {
+                NavigationStack { FleetView() }
+            }
         }
-        .safeAreaInset(edge: .bottom) { RadioDock() }
+        .tabViewStyle(.sidebarAdaptable)
         .sheet(isPresented: $router.showNewRole) {
             NavigationStack { NewRoleView() }
         }

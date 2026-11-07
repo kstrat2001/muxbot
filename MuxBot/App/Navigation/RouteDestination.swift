@@ -5,8 +5,8 @@ struct RouteDestination: View {
 
     var body: some View {
         switch route {
-        case .roleChat(let id):
-            RoleChatView(roleId: id)
+        case .lead: BotThreadView(context: .lead)
+        case .bot(let id): BotThreadView(context: .bot(id))
         }
     }
 }

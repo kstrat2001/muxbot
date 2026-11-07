@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// A chat thread. `roleId == nil` is the Radio conversation; otherwise the
+/// A chat thread. `roleId == nil` is the lead bot's conversation; otherwise the
 /// thread belongs to one role in the app's role store.
 @Model
 final class ChatConversation {
