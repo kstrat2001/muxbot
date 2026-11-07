@@ -60,7 +60,7 @@ struct BotThreadView: View {
                 let full = router.previewFullScreen
                 let panel = Group {
                     if let url = previewURL {
-                        PreviewPanel(url: url, recipeViewports: recipeViewports) {
+                        PreviewPanel(url: url, recipeViewports: recipeViewports, botId: bot?.id) {
                             router.showPreview = false
                             router.previewFullScreen = false
                         }

@@ -7,8 +7,12 @@ import WebKit
 struct PreviewPanel: View {
     let url: URL
     var recipeViewports: [String]? = nil
+    /// The bot whose preview this is: its device size is remembered on this
+    /// Mac (`LocalBotState`), across page changes, threads and relaunches.
+    var botId: UUID? = nil
     let close: () -> Void
 
+    /// Only without a bot; a bot's choice lives in `LocalBotState`.
     @State private var viewport: PreviewViewport?
     @State private var settled: PreviewViewport.Layout?
     @State private var settleTask: Task<Void, Never>?
@@ -49,7 +53,7 @@ struct PreviewPanel: View {
                 .help("Point at part of the page; your next message is about it.")
                 Menu {
                     ForEach(PreviewViewport.allCases, id: \.self) { option in
-                        Button(option.label, systemImage: option.systemImage) { viewport = option }
+                        Button(option.label, systemImage: option.systemImage) { choose(option) }
                     }
                 } label: {
                     Label(currentViewport.label, systemImage: currentViewport.systemImage)
@@ -78,10 +82,7 @@ struct PreviewPanel: View {
                 // isn't re-laid out on every frame (that flickered).
                 let layout = settled ?? currentViewport.layout(in: geometry.size)
                 WebView(preview.page)
-                    .frame(width: layout.width, height: layout.height)
-                    .scaleEffect(layout.scale, anchor: .topLeading)
-                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
-                    .clipped()
+                    .modifier(DeviceFrame(layout: layout, panel: geometry.size))
                     .onChange(of: geometry.size) { settle(for: geometry.size) }
                     .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }
                     .onAppear { settled = currentViewport.layout(in: geometry.size) }
@@ -121,7 +122,16 @@ struct PreviewPanel: View {
             return forced
         }
         #endif
-        return viewport ?? PreviewViewport.preferred(from: recipeViewports)
+        return viewport ?? PreviewViewport.resolve(stored: botId.flatMap { LocalBotState.shared[$0]?.previewViewport },
+                                                   recipe: recipeViewports)
+    }
+
+    private func choose(_ option: PreviewViewport) {
+        if let botId {
+            LocalBotState.shared.update(botId) { $0.previewViewport = option.rawValue }
+        } else {
+            viewport = option
+        }
     }
 
     private func copy(visible: Bool) {
@@ -132,5 +142,33 @@ struct PreviewPanel: View {
             try? await Task.sleep(for: .seconds(1.5))
             withAnimation { copiedNote = nil }
         }
+    }
+}
+
+/// Lays a page out at `layout`'s size and scale inside a panel: a device is
+/// centered in a rounded frame with a hairline edge; Desktop and Fit fill
+/// the panel from its corner.
+struct DeviceFrame: ViewModifier {
+    let layout: PreviewViewport.Layout
+    let panel: CGSize
+
+    func body(content: Content) -> some View {
+        let origin = layout.origin(in: panel)
+        let corner: CGFloat = layout.framed ? 18 : 0
+        content
+            .frame(width: layout.width, height: layout.height)
+            .scaleEffect(layout.scale, anchor: .topLeading)
+            .frame(width: layout.width * layout.scale, height: layout.height * layout.scale, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .overlay {
+                if layout.framed {
+                    RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(.quaternary, lineWidth: 1)
+                }
+            }
+            .shadow(color: .black.opacity(layout.framed ? 0.12 : 0), radius: 10, y: 3)
+            .offset(x: origin.x, y: origin.y)
+            .frame(width: panel.width, height: panel.height, alignment: .topLeading)
+            .background(layout.framed ? Color.secondary.opacity(0.06) : Color.clear)
+            .clipped()
     }
 }

@@ -13,8 +13,13 @@ final class LocalBotState: @unchecked Sendable {
         var workspaceMachine: String?
         var folderBookmark: Data?
         var folderName: String?
+        /// The preview's device size (`PreviewViewport` raw value) you last
+        /// picked for this bot.
+        var previewViewport: String?
 
-        var isEmpty: Bool { workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil }
+        var isEmpty: Bool {
+            workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
+        }
     }
 
     @ObservationIgnored private let fileURL: URL?
