@@ -9,6 +9,7 @@ struct BotBar: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(BotBrain.self) private var brain
+    @Environment(PreviewController.self) private var preview
     @Query(sort: \Bot.createdAt) private var bots: [Bot]
 
     @Query private var runs: [BotRun]
@@ -49,15 +50,30 @@ struct BotBar: View {
                 }
                 .foregroundStyle(.secondary)
             }
+            if let element = preview.picked, router.context.botId != nil {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: element.intent == "bug" ? "ladybug" : "scope").accessibilityHidden(true)
+                    Text(element.chip).lineLimit(1)
+                    Button("Remove", systemImage: "xmark.circle.fill") { preview.clearPick() }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                }
+                .font(AppFont.caption(.semibold))
+                .padding(.horizontal, Spacing.sm)
+                .padding(.vertical, Spacing.xs)
+                .background(Capsule().fill(Color.brandGreen.opacity(0.18)))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("About \(element.chip)")
+            }
             HStack(spacing: Spacing.sm) {
-                TextField(tweakRun == nil ? "Message \(listenerName)…" : "What should change?", text: $router.barDraft, axis: .vertical)
+                TextField(tweakRun != nil ? "What should change?" : preview.picked != nil ? "What about it?" : "Message \(listenerName)…", text: $router.barDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                     .onSubmit(send)
                 Button("Send", systemImage: "arrow.up.circle.fill", action: send)
                     .labelStyle(.iconOnly)
                     .font(.title2)
-                    .disabled(router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || brain.isThinking)
+                    .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking)
                 Button("Talk (coming soon)", systemImage: "mic.fill") {}
                     .labelStyle(.iconOnly)
                     .font(.title3)
@@ -67,19 +83,25 @@ struct BotBar: View {
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
         .background(.bar)
+        .onChange(of: preview.picked) {
+            // "Report a bug here" from the preview starts a bug report.
+            if preview.picked?.intent == "bug", router.barDraft.isEmpty { router.barDraft = "bug: " }
+        }
     }
 
     private func send() {
         let text = router.barDraft
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !brain.isThinking else { return }
+        let element = router.context.botId == nil ? nil : preview.picked
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking else { return }
         router.barDraft = ""
+        preview.clearPick()   // a pick is about one message
         let chat = router.context
         let store = BotStore(context: context)
         if let run = tweakRun {
             brain.tweak(text, run: run, store: store)
             return
         }
-        Task { await brain.send(text, in: chat, store: store) }
+        Task { await brain.send(text, in: chat, store: store, element: element) }
     }
 }
 

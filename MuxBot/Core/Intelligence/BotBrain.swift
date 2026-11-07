@@ -329,13 +329,37 @@ final class BotBrain {
         }
     }
 
-    func send(_ request: String, in context: ChatContext, store: BotStore) async {
-        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    /// Sends a message. `element` is what you picked in the preview;
+    /// `forced` is an intent you chose (a prefix like "bug:" does the same).
+    func send(_ request: String, in context: ChatContext, store: BotStore,
+              element: PickedElement? = nil, forced: Intent? = nil) async {
+        let (prefix, body) = Intent.parse(request)
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty || element != nil else { return }
+        let conversation = store.conversation(for: context)
+        let shown = [text, element.map { "📍 \($0.chip)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
+        let message = store.append(.user, shown, to: conversation)
+        message.elementJSON = element.flatMap { try? String(data: JSONEncoder().encode($0), encoding: .utf8) }
+        await respond(to: message, text: text, context: context, store: store, element: element, explicit: forced ?? prefix)
+    }
+
+    /// Answers the same message again under the intent you picked from its chip.
+    func reinterpret(_ message: ChatMessage, as intent: Intent, store: BotStore) async {
+        guard let conversation = message.conversation else { return }
+        let context: ChatContext = conversation.roleId.map { .bot($0) } ?? .lead
+        let element = message.elementJSON.flatMap { try? JSONDecoder().decode(PickedElement.self, from: Data($0.utf8)) }
+        let text = message.content.split(separator: "\n").filter { !$0.hasPrefix("📍") }.joined(separator: "\n")
+        await respond(to: message, text: text, context: context, store: store, element: element, explicit: intent)
+    }
+
+    private func respond(to message: ChatMessage, text: String, context: ChatContext, store: BotStore,
+                         element: PickedElement?, explicit: Intent?) async {
         let bots = store.allBots().map(\.summary)
         let speaker = context.botId.flatMap { id in bots.first { $0.id == id } }
         let conversation = store.conversation(for: context)
-        store.append(.user, text, to: conversation)
+        let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        message.intentRaw = intent?.rawValue
+        try? store.context.save()
 
         isThinking = true
         defer { isThinking = false }
@@ -346,17 +370,38 @@ final class BotBrain {
         let repos = (speaker.map { [$0] } ?? bots).flatMap { bot in
             bot.resources.compactMap(GitHubIssue.repoSlug(from:)).map { BotRepo(bot: bot.name, repo: $0) }
         }
-        // A described problem is a bug report: measure the preview and draft
-        // an issue. Never let a model that can't see the page judge it.
-        if let speaker, FallbackBrain.isVisualReport(text.lowercased()) {
-            await draftBug(text, bot: speaker, repo: repos.first?.repo, store: store, conversation: conversation)
+        let bot = context.botId.flatMap(store.bot(id:))
+        let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
+        if speaker == nil, let intent, [.bug, .fix, .review].contains(intent) {
+            store.append(.assistant, "Open the bot for that project to report bugs or send work to its crew.", to: conversation)
             return
         }
+        switch intent {
+        case .bug?:
+            // Never let a model that can't see the page judge it: measure it
+            // and draft an issue.
+            await draftBug(text, element: element, repo: repos.first?.repo, store: store, conversation: conversation)
+            return
+        case .fix?, .review?:
+            let crew: CrewRole = intent == .fix ? .coder : .reviewer
+            store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
+            if let bot { store.proposeRun(task: text + target, crew: crew, on: bot) }
+            return
+        case .issues?:
+            let turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
+            apply(turn, context: context, store: store, conversation: conversation)
+            return
+        case .ask?, nil:
+            break
+        }
+
+        // Questions and everything else: the on-device model, then keywords.
+        let prompt = element.map { "\(text)\n\nAbout this element on the page: \(BugReport.describe($0.asFacts).joined()) Selector: \($0.selector)." } ?? text
         var turn: BotTurn?
         var unavailableReason = onDeviceUnavailableReason
         if useOnDeviceModel && unavailableReason == nil {
             do {
-                turn = try await onDeviceTurn(for: text, speaker: speaker, bots: bots, repos: repos)
+                turn = try await onDeviceTurn(for: prompt, speaker: speaker, bots: bots, repos: repos)
             } catch {
                 unavailableReason = error.localizedDescription
             }
@@ -368,12 +413,12 @@ final class BotBrain {
         fallbackNote = !useOnDeviceModel || turn != nil ? nil
             : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
             : "The on-device model's answer wasn't usable, so I used keyword matching."
-        if turn == nil, FallbackBrain.isIssueQuestion(text.lowercased()) {
-            // Answered from GitHub itself, so no keyword-matching caveat.
-            turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
-            if unavailableReason == nil { fallbackNote = nil }
-        }
-        let result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
+        var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
+        if intent == .ask { result.action = nil }   // a question never proposes work
+        apply(result, context: context, store: store, conversation: conversation)
+    }
+
+    private func apply(_ result: BotTurn, context: ChatContext, store: BotStore, conversation: ChatConversation) {
         store.append(.assistant, result.reply, to: conversation)
         switch result.action {
         case let .dispatch(crew, task)?:
@@ -388,8 +433,9 @@ final class BotBrain {
 
     // MARK: Bug reports
 
-    private func draftBug(_ text: String, bot: BotSummary, repo: String?, store: BotStore, conversation: ChatConversation) async {
-        let facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text))
+    private func draftBug(_ text: String, element: PickedElement?, repo: String?, store: BotStore, conversation: ChatConversation) async {
+        let facts: PageFacts?
+        if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text)) }
         let measured = facts.map(BugReport.describe) ?? []
         let reply: String
         if facts == nil {
@@ -400,7 +446,9 @@ final class BotBrain {
             reply = measured.joined(separator: " ") + " I drafted a bug."
         }
         store.append(.assistant, reply, to: conversation)
-        let draft = BugReport.draft(from: text, facts: facts, page: nil, repo: repo)
+        var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
+                                    facts: facts, page: nil, repo: repo)
+        draft.selector = element?.selector
         if let json = try? JSONEncoder().encode(draft), let body = String(data: json, encoding: .utf8) {
             store.append(.assistant, body, kind: .bugCard, to: conversation)
         }

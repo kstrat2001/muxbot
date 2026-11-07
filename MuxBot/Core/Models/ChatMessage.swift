@@ -23,6 +23,10 @@ final class ChatMessage {
     var timestamp: Date = Date()
     var kind: MessageKind = MessageKind.text
     var runId: UUID?
+    /// For your messages: how the bot read it (an `Intent` raw value).
+    var intentRaw: String?
+    /// For your messages: the preview element it was about, as JSON.
+    var elementJSON: String?
     var conversation: ChatConversation?
 
     init(role: ChatRole, content: String, kind: MessageKind = MessageKind.text, runId: UUID? = nil) {

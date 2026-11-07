@@ -45,10 +45,14 @@ struct BotThreadView: View {
                         panel.frame(minWidth: 360, maxWidth: .infinity)
                     }
                 } else {
-                    VStack(spacing: 0) {
-                        panel.frame(height: 340)
-                        Divider()
-                        chat
+                    if router.previewFullScreen {
+                        panel.safeAreaInset(edge: .bottom) { BotBar() }
+                    } else {
+                        VStack(spacing: 0) {
+                            panel.frame(height: 340)
+                            Divider()
+                            chat
+                        }
                     }
                 }
             } else {

@@ -1,0 +1,108 @@
+import Foundation
+import Testing
+@testable import MuxBot
+
+struct IntentParsingTests {
+    @Test(arguments: [
+        ("bug: the box has no margin", Intent.bug, "the box has no margin"),
+        ("Fix: tighten the footer", .fix, "tighten the footer"),
+        ("review:the pricing diff", .review, "the pricing diff"),
+        ("ask: why is this green?", .ask, "why is this green?"),
+        ("issues: anything open?", .issues, "anything open?"),
+    ])
+    func prefixes(text: String, intent: Intent, body: String) {
+        let (parsed, rest) = Intent.parse(text)
+        #expect(parsed == intent)
+        #expect(rest == body)
+    }
+
+    @Test func unknownPrefixIsJustText() {
+        let (parsed, rest) = Intent.parse("note: remember the margins")
+        #expect(parsed == nil)
+        #expect(rest == "note: remember the margins")
+    }
+
+    @Test(arguments: [
+        ("any open bug tickets?", false, Intent.issues),
+        ("the border has no padding", false, .bug),
+        ("make it bigger", true, .bug),
+        ("what is this font?", true, .ask),
+    ])
+    func inference(text: String, hasElement: Bool, intent: Intent) {
+        #expect(Intent.infer(text, hasElement: hasElement) == intent)
+    }
+
+    @Test func plainChatInfersNothing() {
+        #expect(Intent.infer("hello there", hasElement: false) == nil)
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct PickedElementFlowTests {
+    let element = PickedElement(label: "Start_a_Project", selector: "main > div.cta", tag: "div", url: "/pricing",
+                                viewport: 683, left: 0, right: 0, width: 683, height: 220,
+                                paddingLeft: "32px", paddingRight: "32px", marginLeft: "0px", marginRight: "0px", x: 0, y: 900)
+
+    private func setUp() -> (BotStore, Bot, BotBrain, MockInspector) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        let inspector = MockInspector(nil)
+        brain.pageInspector = inspector
+        return (store, bot, brain, inspector)
+    }
+
+    private func messages(_ store: BotStore, _ bot: Bot) -> [ChatMessage] {
+        (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }
+    }
+
+    @Test func pickedElementPlusDescriptionDraftsABugWithTheSelector() async throws {
+        let (store, bot, brain, inspector) = setUp()
+        await brain.send("no gutter on the sides", in: .bot(bot.id), store: store, element: element)
+        #expect(inspector.askedTerms.isEmpty)   // pointed at, so no searching
+        let all = messages(store, bot)
+        let user = try #require(all.first { $0.role == .user })
+        #expect(user.content == "no gutter on the sides\n📍 Start_a_Project · /pricing · 683px")
+        #expect(user.intentRaw == "bug")
+        let card = try #require(all.last { $0.kind == .bugCard })
+        let draft = try JSONDecoder().decode(BugDraft.self, from: Data(card.content.utf8))
+        #expect(draft.selector == "main > div.cta")
+        #expect(draft.body.contains("2. Look at `main > div.cta`"))
+        #expect(draft.facts.first?.hasPrefix("The Start_a_Project box (div) is 0px from the left edge") == true)
+    }
+
+    @Test func fixPrefixDispatchesToCoderWithTheSelector() async {
+        let (store, bot, brain, _) = setUp()
+        await brain.send("fix: add a side gutter", in: .bot(bot.id), store: store, element: element)
+        #expect(bot.runs?.first?.crew == .coder)
+        #expect(bot.runs?.first?.task == "add a side gutter (`main > div.cta` on /pricing)")
+    }
+
+    @Test func askNeverProposesWork() async {
+        let (store, bot, brain, _) = setUp()
+        await brain.send("ask: fix the crash bugs in the footer", in: .bot(bot.id), store: store)
+        #expect(bot.runs?.isEmpty ?? true)
+        #expect(brain.pending == nil)
+    }
+
+    @Test func reinterpretingAMessageAnswersAgainUnderTheNewIntent() async throws {
+        let (store, bot, brain, _) = setUp()
+        await brain.send("ask: the border has no padding", in: .bot(bot.id), store: store)
+        let user = try #require(messages(store, bot).first { $0.role == .user })
+        #expect(user.intentRaw == "ask")
+        await brain.reinterpret(user, as: .bug, store: store)
+        #expect(user.intentRaw == "bug")
+        #expect(messages(store, bot).contains { $0.kind == .bugCard })
+    }
+
+    @Test func bugPrefixInTheLeadThreadPointsToTheBot() async {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        await brain.send("bug: the footer overlaps", in: .lead, store: store)
+        let reply = (store.conversation(for: .lead).messages ?? []).last { $0.role == .assistant }?.content
+        #expect(reply == "Open the bot for that project to report bugs or send work to its crew.")
+    }
+}

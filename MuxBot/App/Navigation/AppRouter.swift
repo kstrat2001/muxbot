@@ -13,6 +13,8 @@ final class AppRouter {
     var barDraft = ""
     /// The live preview panel beside (or above) the thread on screen.
     var showPreview = false
+    /// iPhone: the preview fills the thread (handy for picking).
+    var previewFullScreen = false
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.

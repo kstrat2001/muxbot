@@ -175,12 +175,14 @@ struct BotStore {
         return created
     }
 
-    func append(_ role: ChatRole, _ text: String, kind: MessageKind = .text, runId: UUID? = nil, to conversation: ChatConversation) {
+    @discardableResult
+    func append(_ role: ChatRole, _ text: String, kind: MessageKind = .text, runId: UUID? = nil, to conversation: ChatConversation) -> ChatMessage {
         let message = ChatMessage(role: role, content: text, kind: kind, runId: runId)
         message.conversation = conversation
         context.insert(message)
         conversation.updatedAt = .now
         try? context.save()
+        return message
     }
 
     func setState(_ state: BotState, for role: Bot) {

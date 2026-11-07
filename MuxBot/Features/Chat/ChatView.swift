@@ -27,7 +27,12 @@ struct ChatView: View {
                     ForEach(messages) { message in
                         Group {
                             if message.kind == .text {
-                                ChatBubbleView(role: message.role, content: message.content)
+                                VStack(alignment: .trailing, spacing: Spacing.xs) {
+                                    ChatBubbleView(role: message.role, content: message.content)
+                                    if message.role == .user, message.conversation?.roleId != nil {
+                                        IntentChip(message: message)
+                                    }
+                                }
                             } else if message.kind == .bugCard {
                                 BugCardView(message: message)
                             } else {

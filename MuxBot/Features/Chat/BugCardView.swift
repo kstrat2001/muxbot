@@ -66,7 +66,15 @@ struct BugCardView: View {
     }
 
     private func copySnapshot() async -> Bool {
-        guard let png = await preview.snapshotPNG() else { return false }
+        // The picked element's crop if this bug came from a pick, else the page.
+        let crop = draft?.selector != nil ? preview.lastSentCrop : nil
+        var png = crop
+        if png == nil { png = await preview.snapshotPNG() }
+        guard let png else { return false }
+        return copy(png)
+    }
+
+    private func copy(_ png: Data) -> Bool {
         #if os(iOS)
         guard let image = UIImage(data: png) else { return false }
         UIPasteboard.general.image = image
