@@ -35,8 +35,7 @@ targets:
       path: MuxBot/Info.plist
       properties:
         CFBundleDisplayName: Mux Bot
-        # The menu bar, About panel and Dock read CFBundleName on macOS;
-        # PRODUCT_NAME (and the module) stay MuxBot.
+        # The menu bar and About panel read CFBundleName on macOS.
         CFBundleName: Mux Bot
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -66,7 +65,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp
-        PRODUCT_NAME: MuxBot
+        # "Mux Bot.app": the Finder and the Dock show the bundle's file name.
+        # The Swift module stays MuxBot (tests import it).
+        PRODUCT_NAME: Mux Bot
+        PRODUCT_MODULE_NAME: MuxBot
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_APP_SANDBOX: YES
@@ -86,8 +88,9 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp.tests
-        # The macOS app bundle nests its binary; XcodeGen's default is the iOS path.
-        "TEST_HOST[sdk=macosx*]": $(BUILT_PRODUCTS_DIR)/MuxBot.app/Contents/MacOS/MuxBot
+        # The app is "Mux Bot.app"; the macOS bundle nests its binary.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mux Bot.app/Mux Bot"
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Mux Bot.app/Contents/MacOS/Mux Bot"
 
 schemes:
   MuxBot:
