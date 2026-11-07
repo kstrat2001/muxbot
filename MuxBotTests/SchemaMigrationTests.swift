@@ -3,13 +3,65 @@ import SwiftData
 import Testing
 @testable import MuxBot
 
-@Suite(.serialized) @MainActor
-struct SchemaMigrationTests {
-    private func tempDir() -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("muxbot-mig-\(UUID().uuidString)")
+/// Temp folders for on-disk stores, removed when the test ends (and
+/// leftovers from crashed runs swept), so the app's tmp doesn't fill up.
+final class MigrationTempDirs: Sendable {
+    static let prefix = "muxbot-mig-"
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("\(MigrationTempDirs.prefix)\(UUID().uuidString)")
+
+    init() {
+        Self.sweep(olderThan: 3600)
+    }
+
+    deinit { try? FileManager.default.removeItem(at: root) }
+
+    func make() -> URL {
+        let dir = root.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
+
+    /// Removes `muxbot-mig-*` folders not touched for `age` seconds.
+    static func sweep(olderThan age: TimeInterval, in tmp: URL = FileManager.default.temporaryDirectory) {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: tmp.path)) ?? []
+        for name in names where name.hasPrefix(prefix) {
+            let url = tmp.appendingPathComponent(name)
+            let modified = (try? fm.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .distantFuture
+            if Date().timeIntervalSince(modified) > age { try? fm.removeItem(at: url) }
+        }
+    }
+}
+
+struct MigrationTempDirTests {
+    @Test func aTestsFoldersGoWhenItEnds() {
+        var dirs: MigrationTempDirs? = MigrationTempDirs()
+        let made = dirs!.make()
+        #expect(FileManager.default.fileExists(atPath: made.path))
+        let root = dirs!.root
+        dirs = nil
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+    }
+
+    @Test func staleLeftoversAreSweptFreshOnesKept() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let old = tmp.appendingPathComponent("\(MigrationTempDirs.prefix)old"), fresh = tmp.appendingPathComponent("\(MigrationTempDirs.prefix)fresh")
+        let other = tmp.appendingPathComponent("not-ours")
+        for d in [old, fresh, other] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: old.path)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: other.path)
+        MigrationTempDirs.sweep(olderThan: 3600, in: tmp)
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(FileManager.default.fileExists(atPath: fresh.path))
+        #expect(FileManager.default.fileExists(atPath: other.path), "only ours")
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct SchemaMigrationTests {
+    private let dirs = MigrationTempDirs()
+    private func tempDir() -> URL { dirs.make() }
 
     /// Writes a store as the app wrote it before versioning (SchemaV1).
     private func writeV1Store(at url: URL) throws -> (botId: UUID, otherId: UUID) {
