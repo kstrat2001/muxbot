@@ -63,13 +63,15 @@ struct DarkmuxClient: Sendable {
         var profile: String?
         /// A darkmux workspace name; darkmux resolves the folder.
         var workspace: String
+        /// A Tweak: the run it continues.
+        var continues: String? = nil
     }
 
     /// Starts a run in a workspace. `profile` nil lets darkmux pick it the
     /// way `darkmux dispatch <role>` would; the reply names the profile used.
-    func submitWork(token: String, role: String, message: String, profile: String?, workspace: String) async throws -> (workId: String, profile: String?) {
+    func submitWork(token: String, role: String, message: String, profile: String?, workspace: String, continues: String? = nil) async throws -> (workId: String, profile: String?) {
         struct Reply: Decodable { var work_id: String; var profile: String? }
-        let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace),
+        let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace, continues: continues),
                                   headers: ["Authorization": "Bearer \(token)"])
         let reply = try JSONDecoder().decode(Reply.self, from: data)
         return (reply.work_id, reply.profile)

@@ -84,11 +84,11 @@ struct WorkCopyTests {
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: repo)
         let ready = store.add(name: "ready", instructions: "Site")
         ready.workspaceName = "hcr-preview"
-        #expect(RunBlocker.check(paired: false, crew: .coder, bot: repo) == .unpaired)
-        #expect(RunBlocker.check(paired: true, crew: .evalRunner, bot: repo) == .noRole("Eval runner"))
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bare) == .noCode)
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: repo) == .needsWorkCopy("kstrat2001/hcr"))
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: ready) == nil)
+        #expect(RunBlocker.check(paired: false, crew: .coder, bot: repo, deviceRuns: true) == .unpaired)
+        #expect(RunBlocker.check(paired: true, crew: .evalRunner, bot: repo, deviceRuns: true) == .noRole("Eval runner"))
+        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bare, deviceRuns: true) == .noCode)
+        #expect(RunBlocker.check(paired: true, crew: .coder, bot: repo, deviceRuns: true) == .needsWorkCopy("kstrat2001/hcr"))
+        #expect(RunBlocker.check(paired: true, crew: .coder, bot: ready, deviceRuns: true) == nil)
     }
 
     @Test func aPickedFolderIsAWorkCopySourceToo() {
@@ -96,7 +96,7 @@ struct WorkCopyTests {
         let bot = store.add(name: "site", instructions: "Site")
         bot.folderBookmark = Data([1, 2, 3])
         bot.folderName = "site"
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot) == .needsWorkCopy("site"))
+        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot, deviceRuns: true) == .needsWorkCopy("site"))
     }
 
     @Test func foldersAreAddedWithTheOpenPanelNotTyped() {

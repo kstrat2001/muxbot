@@ -37,6 +37,12 @@ struct ContentView: View {
             NavigationStack { FleetPairingView() }
         }
         .sheet(isPresented: $router.showSearch) { SearchView() }
+        // "open card" links in chat (muxbot://run/<id>) jump to that run's card.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let id = RunLink.runId(from: url) else { return .systemAction }
+            if let run = BotStore(context: context).run(id: id) { router.open(run) }
+            return .handled
+        })
         .onChange(of: waitingCount, initial: true) { notifications.setBadge(waitingCount) }
     }
 

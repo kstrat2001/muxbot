@@ -15,6 +15,7 @@ struct FleetConnectionTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
+        brain.runs.deviceRuns = true
         let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
         #expect(brain.runs.whyRunCannotStart(run) == "this app isn't paired with darkmux")
         brain.runs.decide(.approve, on: run, store: store)

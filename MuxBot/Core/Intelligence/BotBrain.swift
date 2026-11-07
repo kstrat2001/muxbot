@@ -49,6 +49,8 @@ enum BotAction: Sendable, Equatable, Codable {
     case dispatch(crew: CrewRole, task: String)
     /// Give the bot whose thread this is a new resource.
     case addResource(kind: ResourceKind, value: String)
+    /// Continue a run that just finished with a follow-up (a Tweak).
+    case tweak(runId: UUID, change: String)
 }
 
 /// One bot turn: what it says, and what it proposes to do.
@@ -128,9 +130,15 @@ enum FallbackBrain {
 
     /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
     static func isIssueQuestion(_ lower: String) -> Bool {
-        ["issue", "ticket", "bug", "pull request", "prs"].contains { lower.contains($0) }
+        let padded = " \(lower.replacingOccurrences(of: "?", with: " ")) "
+        let asks = ["issue", "ticket", "bug", "pull request", "prs", " pr ", "to fix", "needs fixing", "need fixing", "broken"]
+        return asks.contains { padded.contains($0) }
             && !["fix the", "fix this", "build", "implement"].contains { lower.contains($0) }
     }
+
+    /// Words that say "issues" rather than naming a bot (ignored when
+    /// matching a bot by its persona).
+    static let issueWords: Set<String> = ["bugs", "issue", "issues", "fixes", "fixing", "open", "tickets", "ticket", "broken", "anything", "there"]
 
     /// Lists matching issues and offers the first as a Coder dispatch.
     static func issuesTurn(_ issues: [GitHubIssue], repo: String, asked lower: String) -> BotTurn {
@@ -367,12 +375,13 @@ final class BotBrain {
         var target = repos.first
         if lead {
             let withRepo = bots.filter { b in repos.contains { $0.bot == b.name } }
-            let pick = withRepo.first { lower.contains($0.name.lowercased()) } ?? FallbackBrain.bestMatch(for: lower, in: withRepo)
+            guard !withRepo.isEmpty else { return BotTurn(reply: "None of your bots has a GitHub repo yet.", action: nil) }
+            // A bot named (or clearly meant): its repo. Otherwise every bot's.
+            let meaningful = FallbackBrain.tokens(lower).filter { !FallbackBrain.issueWords.contains($0) }.joined(separator: " ")
+            let pick = withRepo.first { lower.contains($0.name.lowercased()) }
+                ?? (meaningful.isEmpty ? nil : FallbackBrain.bestMatch(for: meaningful, in: withRepo))
             target = pick.flatMap { b in repos.first { $0.bot == b.name } }
-            guard target != nil else {
-                let names = withRepo.map(\.name).joined(separator: ", ")
-                return BotTurn(reply: names.isEmpty ? "None of your bots has a GitHub repo yet." : "Which bot's repo should I check? \(names).", action: nil)
-            }
+            if target == nil { return await allReposIssuesTurn(repos: repos, asked: lower) }
         }
         guard let ref = target else {
             return BotTurn(reply: "I don't have a GitHub repo yet. Paste its URL and I'll keep it.", action: nil)
@@ -387,6 +396,22 @@ final class BotBrain {
         } catch {
             return BotTurn(reply: "I couldn't read issues on \(ref.repo): \(error.localizedDescription)", action: nil)
         }
+    }
+
+    /// Every bot's repo: open issues (with the open PR that fixes each) per
+    /// bot, checked on GitHub first. Nothing proposed: name a bot to act.
+    private func allReposIssuesTurn(repos: [BotRepo], asked lower: String) async -> BotTurn {
+        var parts: [String] = []
+        for ref in repos {
+            do {
+                let turn = FallbackBrain.issuesTurn(try await github.openIssues(repo: ref.repo), repo: ref.repo, asked: lower)
+                let body = turn.reply.components(separatedBy: "\n").filter { !$0.hasPrefix("Fix #") && !$0.hasPrefix("Open on") }
+                parts.append("\(ref.bot) (\(ref.repo)):\n" + body.joined(separator: "\n"))
+            } catch {
+                parts.append("\(ref.bot) (\(ref.repo)): couldn't read issues (\(error.localizedDescription)).")
+            }
+        }
+        return BotTurn(reply: parts.joined(separator: "\n\n") + "\n\nName a bot to fix one, like “fix #8 on \(repos[0].bot)”.", action: nil)
     }
 
     /// Sends a message. `element` is what you picked in the preview;
@@ -454,6 +479,27 @@ final class BotBrain {
         let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
         if speaker == nil, let intent, [.bug, .fix, .review].contains(intent) {
             store.append(.assistant, "Open the bot for that project to report bugs or send work to its crew.", to: conversation)
+            return
+        }
+        // Right after a run finishes, a remark about it continues that run (a
+        // Tweak), never a new dispatch picked from older history.
+        if let bot, intent != .issues, intent != .review, Intent.issueNumber(in: text) == nil,
+           !WorkStatus.isWorkQuestion(text.lowercased()),
+           let last = (bot.runs ?? []).max(by: { $0.createdAt < $1.createdAt }),
+           [.result, .failed, .canceled].contains(last.phase),
+           Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
+            store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Send it to \(last.crew.name) as a Tweak?", to: conversation)
+            store.proposeAction(.tweak(runId: last.id, change: text), in: context)
+            return
+        }
+        // "What's running?", "what needs me?": answered from the runs, never guessed.
+        if intent == nil || intent == .ask, WorkStatus.isWorkQuestion(text.lowercased()) {
+            let runs = speaker == nil ? store.allBots().flatMap { $0.runs ?? [] } : (bot?.runs ?? [])
+            var reply = WorkStatus.summary(runs: runs)
+            let nudges = WorkStatus.nudges(runs: runs)
+            if !nudges.isEmpty { reply += "\n\n" + nudges.joined(separator: "\n") }
+            message.intentRaw = Intent.ask.rawValue
+            store.append(.assistant, reply, to: conversation)
             return
         }
         switch intent {
@@ -528,6 +574,11 @@ final class BotBrain {
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
         var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
         if intent == .ask { result.action = nil }   // a question never proposes work
+        // Never a dispatch built from a bare "Fix PR #9": issues are read first.
+        if case let .dispatch(_, task)? = result.action, Self.isBareReference(task) {
+            result.action = nil
+            result.reply = "Which one? Say “fix #N” and I'll read the issue on GitHub first."
+        }
         apply(result, context: context, store: store, conversation: conversation)
     }
 
@@ -581,9 +632,14 @@ final class BotBrain {
         #endif
     }
 
+    /// "Fix PR #9", "fix #8", "Review #12": a number with nothing to act on.
+    nonisolated static func isBareReference(_ task: String) -> Bool {
+        task.range(of: #"^\s*(fix|review)\s+(pr\s+|issue\s+)?#?\d+\s*[.!]?\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// Drops any sentence that names a tool or tells the user to use one.
     nonisolated static func withoutToolTalk(_ reply: String) -> String {
-        let banned = ["listopenissues", " tool", "tool "]
+        let banned = ["listopenissues", " tool", "tool ", "call a function", "function call", " api", "api "]
         let sentences = reply.split(omittingEmptySubsequences: true) { ".!?\n".contains($0) }
         let kept = sentences.filter { s in !banned.contains { s.lowercased().contains($0) } }
         guard kept.count < sentences.count else { return reply }
@@ -619,6 +675,18 @@ final class BotBrain {
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             store.addResource(kind, value, to: bot)
             note = "Added \(kind.label.lowercased()): \(value)"
+        case let .tweak(runId, change):
+            guard let run = store.run(id: runId) else { return }
+            // A finished run continues as a Tweak; one that was stopped or
+            // failed is sent again with the change.
+            if run.phase == .result {
+                runs.tweak(change, run: run, store: store, echo: false)
+            } else if let bot = run.bot {
+                let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
+                                             brief: RunCoordinator.tweakMessage(for: run, change: change))
+                runs.decide(.approve, on: again, store: store)
+            }
+            return
         }
         store.append(.system, note, to: store.conversation(for: chat))
     }

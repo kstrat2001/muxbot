@@ -24,6 +24,9 @@ struct ActionCardView: View {
                 case let .addResource(kind, value)?:
                     Label("Add \(kind.label.lowercased())", systemImage: kind.systemImage).font(AppFont.headline())
                     Text(value).font(AppFont.body()).textSelection(.enabled)
+                case let .tweak(_, change)?:
+                    Label("Tweak the last run", systemImage: "pencil").font(AppFont.headline())
+                    Text(change).font(AppFont.body())
                 case nil:
                     Text(message.content).font(AppFont.body())
                 }
