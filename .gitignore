@@ -1,0 +1,16 @@
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local signing (see Config/Local.xcconfig.example)
+Config/Local.xcconfig
+
+# macOS
+.DS_Store

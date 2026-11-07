@@ -1,0 +1,127 @@
+name: MuxBot
+options:
+  bundleIdPrefix: com.darklyenergized
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+  developmentLanguage: en
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # DEVELOPMENT_TEAM is deliberately not set here: see Config/Base.xcconfig.
+    ENABLE_PREVIEWS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_WARN_UNGUARDED_AVAILABILITY: YES_AGGRESSIVE
+
+targets:
+  MuxBot:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: MuxBot
+    info:
+      path: MuxBot/Info.plist
+      properties:
+        CFBundleDisplayName: Mux Bot
+        # The menu bar and About panel read CFBundleName on macOS.
+        CFBundleName: Mux Bot
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        MuxBotDarkmuxCLI: $(MUXBOT_DARKMUX_CLI)
+        # iCloud sync of bots, runs and threads: on only in builds that set
+        # MUXBOT_CLOUD_SYNC = YES and the iCloud entitlements (Config/*.xcconfig).
+        MuxBotCloudSync: $(MUXBOT_CLOUD_SYNC)
+        # Tailnet previews are plain http until tailnet HTTPS certificates
+        # are enabled; allow it for *.ts.net only.
+        NSAppTransportSecurity:
+          # darkmux's local client endpoint on this Mac (127.0.0.1).
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
+        LSApplicationCategoryType: public.app-category.developer-tools
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        # CloudKit sync pushes (iOS); harmless while sync is off.
+        UIBackgroundModes:
+          - remote-notification
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp
+        # "Mux Bot.app": the Finder and the Dock show the bundle's file name.
+        # The Swift module stays MuxBot (tests import it).
+        PRODUCT_NAME: Mux Bot
+        PRODUCT_MODULE_NAME: MuxBot
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_APP_SANDBOX: YES
+        # Read-only GitHub API calls (bots' issue lookups).
+        ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        # Add folder: read a project folder you pick (its git remote), and
+        # keep access to it with a security-scoped bookmark.
+        ENABLE_USER_SELECTED_FILES: readonly
+        # Entitlements per platform; the iCloud variants are chosen in
+        # Config/Local.xcconfig once the iCloud container exists.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": MuxBot/$(MUXBOT_ENTITLEMENTS_MAC)
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphone*]": MuxBot/$(MUXBOT_ENTITLEMENTS_IOS)
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        # User-facing strings are extracted into MuxBot/Resources/Localizable.xcstrings.
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+
+  MuxBotTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: MuxBotTests
+    dependencies:
+      - target: MuxBot
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp.tests
+        # The app is "Mux Bot.app"; the macOS bundle nests its binary.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mux Bot.app/Mux Bot"
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Mux Bot.app/Contents/MacOS/Mux Bot"
+
+  MuxBotUITests:
+    type: bundle.ui-testing
+    supportedDestinations: [iOS]
+    sources:
+      - path: MuxBotUITests
+    dependencies:
+      - target: MuxBot
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp.uitests
+        TEST_TARGET_NAME: MuxBot
+
+schemes:
+  MuxBot:
+    build:
+      targets:
+        MuxBot: all
+    test:
+      targets:
+        - MuxBotTests
+        - MuxBotUITests
+    run:
+      config: Debug
+    archive:
+      config: Release

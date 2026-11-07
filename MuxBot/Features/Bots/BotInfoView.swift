@@ -1,0 +1,216 @@
+import SwiftUI
+import SwiftData
+import UniformTypeIdentifiers
+
+/// A bot's details and the resources it works with: repos, folders,
+/// preview recipes, links and notes. Bots can also propose resources in
+/// conversation, behind an Approve card.
+struct BotInfoView: View {
+    let bot: Bot
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Environment(BotBrain.self) private var brain
+    @State private var newValue = ""
+    @State private var newKind = ResourceKind.repo
+    @State private var pickingFolder = false
+    @State private var folderProblem: String?
+    @State private var branch: String?
+
+    /// Renaming keeps the bot's look: a look still suggested from the old
+    /// name is saved first, so the animal doesn't change with the name.
+    private var nameBinding: Binding<String> {
+        Binding(get: { bot.name }, set: { newName in
+            let look = bot.look
+            bot.name = newName
+            bot.look = look
+            try? context.save()
+        })
+    }
+
+    private var aboutBinding: Binding<String> {
+        Binding(get: { bot.instructions }, set: { bot.instructions = $0; try? context.save() })
+    }
+
+    var body: some View {
+        Form {
+            Section("About") {
+                HStack(spacing: Spacing.md) {
+                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44, blinkId: bot.id)
+                    TextField("Name", text: nameBinding).font(AppFont.headline())
+                }
+                TextField("What this bot is about", text: aboutBinding, axis: .vertical)
+                    .lineLimit(2...6)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Look") {
+                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
+            }
+            workCopySection
+            Section("Resources") {
+                ForEach(bot.sortedResources) { resource in
+                    Label {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text(resource.value).textSelection(.enabled)
+                            if resource.kind == .previewURL {
+                                Text("Your preview link, until darkmux runs previews itself.")
+                                    .font(AppFont.caption())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: resource.kind.systemImage)
+                    }
+                    .accessibilityLabel("\(resource.kind.label): \(resource.value)")
+                }
+                .onDelete { offsets in
+                    let store = BotStore(context: context)
+                    offsets.map { bot.sortedResources[$0] }.forEach(store.remove)
+                }
+                if bot.sortedResources.isEmpty {
+                    Text("None yet.").foregroundStyle(.secondary)
+                }
+            }
+            Section("Preview") {
+                if bot.workspaceName != nil, let live = brain.runs.livePreviews[bot.id] {
+                    HStack {
+                        Label(live.status.text, systemImage: live.status == .ready ? "play.circle.fill" : live.status.isFailed ? "exclamationmark.triangle" : "circle.dotted")
+                        Spacer()
+                        if live.status == .ready || live.status == .starting || live.status == .installing {
+                            Button("Stop", systemImage: "stop.circle") { Task { await brain.runs.stopPreview(for: bot) } }
+                        } else {
+                            Button("Start", systemImage: "play") { Task { await brain.runs.ensurePreview(for: bot) } }
+                        }
+                    }
+                }
+                ForEach(bot.repoSlugs, id: \.self) { repo in
+                    recipeRow(repo)
+                }
+                if bot.repoSlugs.isEmpty {
+                    Text("Add a repo and I'll look for its preview recipe.").foregroundStyle(.secondary)
+                }
+            }
+            Section("Add a resource") {
+                Picker("Kind", selection: $newKind) {
+                    ForEach(ResourceKind.addable, id: \.self) { kind in
+                        Label(kind.label, systemImage: kind.systemImage).tag(kind)
+                    }
+                }
+                TextField("URL or note", text: $newValue)
+                    .autocorrectionDisabled()
+                    .onChange(of: newValue) {
+                        let guess = ResourceKind.guess(for: newValue)
+                        newKind = ResourceKind.addable.contains(guess) ? guess : .note
+                    }
+                Button("Add", systemImage: "plus") {
+                    BotStore(context: context).addResource(newKind, newValue, to: bot)
+                    newValue = ""
+                }
+                .disabled(newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .formStyle(.grouped)
+        .task {
+            for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
+            await refreshBranch()
+        }
+        .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
+            guard case let .success(url) = result else { return }
+            Task {
+                folderProblem = await brain.runs.addFolder(url, to: bot, store: BotStore(context: context))
+                await refreshBranch()
+            }
+        }
+        .navigationTitle(bot.name)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+        }
+    }
+
+    /// Where darkmux works on this bot's code, on this Mac. Status only:
+    /// darkmux owns the copy; the app knows its name, never a path.
+    private var workCopySection: some View {
+        Section {
+            HStack(spacing: Spacing.sm) {
+                switch (brain.runs.workCopySetup[bot.id], bot.workspaceName) {
+                case (.settingUp?, _):
+                    ProgressView().controlSize(.small)
+                    Text("Setting up on \(FleetConnection.machineName)…")
+                case let (.failed(why)?, _):
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.brandOrange)
+                    Text(why).font(AppFont.footnote())
+                case (nil, _?):
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.brandGreen)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ready on \(bot.workspaceMachine ?? FleetConnection.machineName)")
+                        if let branch, !branch.isEmpty {
+                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(.secondary)
+                        }
+                    }
+                case (nil, nil):
+                    Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                    Text(bot.folderBookmark == nil && bot.repoSlugs.isEmpty ? "No code yet" : "Not set up on this Mac yet")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .accessibilityElement(children: .combine)
+            if let folder = bot.folderName {
+                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(.secondary)
+            }
+            if let folderProblem {
+                Label(folderProblem, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            }
+            #if os(macOS)
+            HStack {
+                Button(bot.folderBookmark == nil ? "Add folder…" : "Change folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
+                if bot.workspaceName == nil, brain.runs.workCopySetup[bot.id] != .settingUp,
+                   bot.folderBookmark != nil || !bot.repoSlugs.isEmpty {
+                    Button("Set up now") { Task { await brain.runs.setUpWorkCopy(for: bot, store: BotStore(context: context)); await refreshBranch() } }
+                }
+            }
+            #endif
+        } header: {
+            Text("Work copy")
+        } footer: {
+            #if os(macOS)
+            Text("Pick the project folder you already have. darkmux works on its own copy on a new branch, so your files and changes are never touched.")
+            #else
+            Text("Work copies are set up from the Mac app for now.")
+            #endif
+        }
+    }
+
+    private func refreshBranch() async {
+        guard let name = bot.workspaceName, let connection = brain.connection, let token = connection.token else { return }
+        branch = try? await connection.client.workspace(token: token, name: name).branch
+    }
+
+    @ViewBuilder private func recipeRow(_ repo: String) -> some View {
+        switch brain.runs.recipes.recipes[repo] {
+        case let .ready(manifest, fromLocalCopy)?:
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Color.brandGreen)
+                Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text(repo).font(AppFont.caption()).foregroundStyle(.secondary)
+            }
+        case .missing?:
+            HStack {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("No preview recipe yet")
+                    Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Draft one") {}
+                    .disabled(true)
+                    .help("Coming soon: a bot drafts the recipe for you to approve.")
+            }
+        case .failed(let message)?:
+            Label("Couldn't check \(repo): \(message)", systemImage: "exclamationmark.triangle")
+                .font(AppFont.footnote())
+        case .loading?, nil:
+            ProgressView().frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}

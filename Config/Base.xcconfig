@@ -1,0 +1,9 @@
+// Shared build settings. Signing team is NOT committed: forks are encouraged.
+// Copy Config/Local.xcconfig.example to Config/Local.xcconfig (gitignored)
+// and set your own DEVELOPMENT_TEAM, or set it in Xcode.
+// Defaults; Local.xcconfig may override them.
+MUXBOT_CLOUD_SYNC = NO
+MUXBOT_ENTITLEMENTS_MAC = MuxBot.entitlements
+MUXBOT_ENTITLEMENTS_IOS = MuxBot.entitlements
+
+#include? "Local.xcconfig"
