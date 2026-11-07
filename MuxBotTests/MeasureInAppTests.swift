@@ -235,7 +235,9 @@ struct LayoutSwitchTests {
     @Test func theHeroSwitchingBetween820And768IsReportedWithItsRule() {
         let m = LayoutMeasure.summarize([heroAt(820), heroAt(768), heroAt(1440)], focus: 820)
         #expect(m.lines.contains("At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."), "\(m.lines)")
-        #expect(m.doneWhen == "at 820px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now.")
+        #expect(m.doneWhen == "from 769px to 1024px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now.")
+        #expect(m.targetRange == "769–1024px")
+        #expect(m.switchRule == "@media (max-width: 768px) in inertia/css/app.css")
         #expect(m.likelyFile == "inertia/css/app.css")
         #expect(m.layoutSwitch != nil)
     }
@@ -276,7 +278,7 @@ struct IssueRerunTests {
         #expect(brief.contains("Element: div#app > div.layout > main > section.hero.container:nth-of-type(1)"))
         #expect(brief.contains("- At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."))
         #expect(brief.contains("Likely file: inertia/css/app.css"))
-        #expect(brief.contains("Done when: at 820px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now."))
+        #expect(brief.contains("Done when: from 769px to 1024px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now."))
         #expect(brief.hasSuffix("What should change: \(kains)"))
         #expect(!brief.contains("Earlier task:"))
     }
@@ -304,5 +306,53 @@ struct IssueRerunTests {
         let (store, bot, brain, _) = setUp()
         let plain = store.proposeRun(task: "Tighten the footer", crew: .coder, on: bot)
         #expect(await brain.rerunBrief(for: plain, change: "less") == nil)
+    }
+}
+
+
+/// When measuring finds the rule that switches the layout, the brief leads
+/// with it: the file, the rule, the range to change. The issue's own
+/// "Expected" stays, labeled as secondary (Fix #10, 2026-11-07: both models
+/// followed "adjust the animation timing" into the animation code first).
+@Suite(.serialized) @MainActor
+struct MeasuredBriefLeadTests {
+    private func brief() async throws -> String {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        return try #require(bot.runs?.first?.brief)
+    }
+
+    @Test func theMeasuredSwitchComesFirst() async throws {
+        let lines = try await brief().components(separatedBy: "\n")
+        #expect(lines[0] == "Fix GitHub issue #10 in kstrat2001/hcr: Tablet sizing looks off.")
+        #expect(lines[1] == "Start here (measured in the preview; this decides the change): @media (max-width: 768px) in inertia/css/app.css switches section.hero.container.flex to a column at 768px, but it's a row at 820px. Make it a column from 769px to 1024px too.", "\(lines)")
+    }
+
+    @Test func theIssuesOwnExpectedIsSecondary() async throws {
+        let text = try await brief()
+        #expect(!text.contains("\nExpected: Adjust the animation timing"), "\(text)")
+        #expect(text.contains("The issue also says (secondary; the measurement above decides): Adjust the animation timing"))
+    }
+
+    @Test func withoutASwitchTheIssuesExpectedStays() async throws {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: overflowingAt820(), 1440: fitsAt(1440)])
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        let text = try #require(bot.runs?.first?.brief)
+        #expect(text.contains("\nExpected: Adjust the animation timing"), "\(text)")
+        #expect(!text.contains("Start here"))
     }
 }

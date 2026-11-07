@@ -745,6 +745,14 @@ final class BotBrain {
         if let done = m.doneWhen, let i = lines.firstIndex(where: { $0.hasPrefix("Done when:") }) {
             lines[i] = "Done when: \(done)"
         }
+        // A measured layout switch decides the change: lead with it, and keep
+        // the issue's own Expected only as secondary (it can point elsewhere).
+        if let lead = m.switchLead {
+            if let i = lines.firstIndex(where: { $0.hasPrefix("Expected:") }) {
+                lines[i] = "The issue also says (secondary; the measurement above decides):" + lines[i].dropFirst("Expected:".count)
+            }
+            lines.insert("Start here (measured in the preview; this decides the change): \(lead)", at: min(1, lines.count))
+        }
         return lines.joined(separator: "\n")
     }
 

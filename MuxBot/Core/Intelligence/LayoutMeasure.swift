@@ -101,6 +101,13 @@ enum LayoutMeasure {
         var foundProblem: Bool
         /// A section laid out differently at the next preset down, and why.
         var layoutSwitch: String? = nil
+        /// The @media rule (and file) behind that switch.
+        var switchRule: String? = nil
+        /// The widths the change should cover ("769–1024px").
+        var targetRange: String? = nil
+        /// One sentence a brief leads with: the rule, what it switches, and
+        /// the range to change.
+        var switchLead: String? = nil
     }
 
     static func summarize(_ facts: [LayoutFacts], focus: Int?) -> Measured {
@@ -169,6 +176,9 @@ enum LayoutMeasure {
         // The same section arranged differently at the next preset down (a
         // row at 820px, a column at 768px), and the @media rule that switches it.
         var switchLine: String?
+        var switchRule: String?
+        var targetRange: String?
+        var switchLead: String?
         if let focus, let at = facts.first(where: { $0.viewport == focus }),
            let below = facts.filter({ $0.viewport < focus }).max(by: { $0.viewport < $1.viewport }) {
             for s in at.sections {
@@ -178,9 +188,19 @@ enum LayoutMeasure {
                 switchLine = "At \(focus)px \(s.selector) is \(s.arrangementText); at \(below.viewport)px it's \(other.arrangementText)\(from)."
                 lines.insert(switchLine!, at: 0)
                 if let f = rule.flatMap({ file($0.source) }) { files.insert(f, at: 0) }
+                // The range to change: just above the smaller preset up to the
+                // largest tablet preset ("769–1024px").
+                let low = below.viewport + 1
+                let high = presets.filter { $0 > below.viewport }.max() ?? focus
+                targetRange = "\(low)–\(high)px"
+                let wanted = Self.short(other.arrangementText), now = Self.short(s.arrangementText)
+                switchRule = rule.map { r in "@media \(r.media)\(file(r.source).map { " in \($0)" } ?? "")" }
+                switchLead = (switchRule.map { "\($0) switches \(s.selector) to \(wanted) at \(below.viewport)px" }
+                              ?? "\(s.selector) is \(wanted) at \(below.viewport)px")
+                    + ", but it's \(now) at \(focus)px. Make it \(wanted) from \(low)px to \(high)px too."
                 if done == nil {
                     let keep = facts.contains { $0.viewport == desktop } ? ", and \(desktop)px looks the same as now" : ""
-                    done = "at \(focus)px \(s.selector) is \(other.arrangementText.replacingOccurrences(of: #" \(.*\)"#, with: "", options: .regularExpression)), as at \(below.viewport)px\(keep)."
+                    done = "from \(low)px to \(high)px \(s.selector) is \(wanted), as at \(below.viewport)px\(keep)."
                 }
                 break
             }
@@ -188,7 +208,8 @@ enum LayoutMeasure {
         // Deduplicate lines while keeping their order.
         var seen = Set<String>()
         lines = lines.filter { seen.insert($0).inserted }
-        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine)
+        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine,
+                        switchRule: switchRule, targetRange: targetRange, switchLead: switchLead)
     }
 
     /// The block a brief carries.
@@ -201,6 +222,11 @@ enum LayoutMeasure {
         let lines = brief.components(separatedBy: "\n")
         guard let start = lines.firstIndex(of: "Measured in the preview:") else { return [] }
         return Array(lines[(start + 1)...].prefix { $0.hasPrefix("- ") }.map { String($0.dropFirst(2)) })
+    }
+
+    /// "a row (402px and 378px side by side)" → "a row".
+    private static func short(_ arrangement: String) -> String {
+        arrangement.replacingOccurrences(of: #" \(.*\)"#, with: "", options: .regularExpression)
     }
 
     /// "16px" → 16.
