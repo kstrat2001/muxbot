@@ -32,7 +32,12 @@ struct BotThreadView: View {
     private let isWide = true
     #endif
 
-    private var previewURL: URL? { bot?.previewURL }
+    private var previewURL: URL? { bot.flatMap(brain.previewURL(for:)) }
+    /// darkmux's preview while it starts or after it failed (no URL yet).
+    private var pendingPreview: LivePreview? {
+        guard previewURL == nil, let bot else { return nil }
+        return brain.livePreviews[bot.id]
+    }
 
     /// The viewports the bot's preview recipe lists, if it's loaded.
     private var recipeViewports: [String]? {
@@ -45,15 +50,21 @@ struct BotThreadView: View {
     var body: some View {
         Group {
             #if os(macOS)
-            if let url = previewURL, router.showPreview {
+            if router.showPreview, previewURL != nil || pendingPreview != nil {
                 // One layout per size class whose structure never changes:
                 // the preview stays at the same place in the tree, so its
                 // web view is never rebuilt. (Swapping layouts made SwiftUI
                 // build a second WebView for the same WebPage, which traps.)
                 let full = router.previewFullScreen
-                let panel = PreviewPanel(url: url, recipeViewports: recipeViewports) {
-                    router.showPreview = false
-                    router.previewFullScreen = false
+                let panel = Group {
+                    if let url = previewURL {
+                        PreviewPanel(url: url, recipeViewports: recipeViewports) {
+                            router.showPreview = false
+                            router.previewFullScreen = false
+                        }
+                    } else if let pending = pendingPreview, let bot {
+                        PreviewStatusView(preview: pending, retry: { Task { await brain.ensurePreview(for: bot) } })
+                    }
                 }
                 .safeAreaInset(edge: .bottom) { if full { BotBar() } }
                 if isWide {
@@ -86,7 +97,7 @@ struct BotThreadView: View {
         .toolbar {
             if bot != nil {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if previewURL != nil {
+                    if let bot, brain.canPreview(bot) {
                         // A panel symbol; the toggle's highlight shows it's open.
                         @Bindable var router = router
                         Toggle(isOn: $router.showPreview) {
@@ -105,6 +116,10 @@ struct BotThreadView: View {
             }
         }
         .onAppear { markRead() }
+        .task(id: router.showPreview) {
+            // darkmux runs the preview from the repo's recipe when you open it.
+            if router.showPreview, let bot { await brain.ensurePreview(for: bot) }
+        }
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         #if DEBUG
         .task {

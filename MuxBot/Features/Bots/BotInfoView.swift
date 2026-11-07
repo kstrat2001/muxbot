@@ -49,6 +49,17 @@ struct BotInfoView: View {
                 }
             }
             Section("Preview") {
+                if bot.workspaceName != nil, let live = brain.livePreviews[bot.id] {
+                    HStack {
+                        Label(live.status.text, systemImage: live.status == .ready ? "play.circle.fill" : live.status.isFailed ? "exclamationmark.triangle" : "circle.dotted")
+                        Spacer()
+                        if live.status == .ready || live.status == .starting || live.status == .installing {
+                            Button("Stop", systemImage: "stop.circle") { Task { await brain.stopPreview(for: bot) } }
+                        } else {
+                            Button("Start", systemImage: "play") { Task { await brain.ensurePreview(for: bot) } }
+                        }
+                    }
+                }
                 ForEach(bot.repoSlugs, id: \.self) { repo in
                     recipeRow(repo)
                 }

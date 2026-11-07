@@ -808,6 +808,51 @@ final class BotBrain {
         blocker(for: run)?.message
     }
 
+    // MARK: Live previews
+
+    /// darkmux-run previews, by bot.
+    var livePreviews: [UUID: LivePreview] = [:]
+
+    /// The URL the preview panel shows for a bot.
+    func previewURL(for bot: Bot) -> URL? {
+        LivePreview.url(darkmux: livePreviews[bot.id], resource: bot.previewURL)
+    }
+
+    /// Whether a preview can be shown: darkmux can run one in the bot's work
+    /// copy, or you added a preview link.
+    func canPreview(_ bot: Bot) -> Bool {
+        (bot.workspaceName != nil && connection?.isPaired == true) || bot.previewURL != nil
+    }
+
+    /// Has darkmux run the bot's preview, and follows it until it's ready or
+    /// fails. Does nothing without a work copy or pairing (a preview link
+    /// is shown as is).
+    func ensurePreview(for bot: Bot) async {
+        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
+        if let status = livePreviews[bot.id]?.status, status != .stopped, !(status.isFailed) { return }
+        livePreviews[bot.id] = LivePreview(status: .starting)
+        do {
+            var p = try await connection.client.startPreview(token: token, workspace: name).live
+            livePreviews[bot.id] = p
+            let deadline = Date().addingTimeInterval(15 * 60)
+            while [.starting, .installing].contains(p.status), Date() < deadline {
+                try await Task.sleep(for: .seconds(1))
+                p = try await connection.client.previewStatus(token: token, workspace: name).live
+                livePreviews[bot.id] = p
+            }
+        } catch let error as DarkmuxClient.ClientError where error.status == 404 {
+            livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
+        } catch {
+            livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
+        }
+    }
+
+    func stopPreview(for bot: Bot) async {
+        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
+        try? await connection.client.stopPreview(token: token, workspace: name)
+        livePreviews[bot.id] = LivePreview(status: .stopped)
+    }
+
     // MARK: Work copies
 
     enum WorkCopySetup: Equatable { case settingUp, failed(String) }

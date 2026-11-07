@@ -122,6 +122,41 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(Reply.self, from: data).recipe
     }
 
+    struct Preview: Decodable, Sendable {
+        var status: String
+        var url: String?
+        var error: String?
+        var logTail: String?
+        enum CodingKeys: String, CodingKey { case status, url, error; case logTail = "log_tail" }
+
+        var live: LivePreview {
+            let s: LivePreview.Status = switch status {
+            case "ready": .ready
+            case "installing": .installing
+            case "stopped": .stopped
+            case "failed": .failed(error ?? "unknown error")
+            default: .starting
+            }
+            return LivePreview(status: s, url: url.flatMap(URL.init(string:)), log: logTail)
+        }
+    }
+
+    /// Starts (or finds) the workspace's preview; darkmux picks the ports.
+    func startPreview(token: String, workspace: String) async throws -> Preview {
+        let data = try await send("POST", "/client/workspaces/\(workspace)/preview", body: [String: String](),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 30)
+        return try JSONDecoder().decode(Preview.self, from: data)
+    }
+
+    func previewStatus(token: String, workspace: String) async throws -> Preview {
+        let data = try await send("GET", "/client/workspaces/\(workspace)/preview", headers: ["Authorization": "Bearer \(token)"])
+        return try JSONDecoder().decode(Preview.self, from: data)
+    }
+
+    func stopPreview(token: String, workspace: String) async throws {
+        _ = try await send("DELETE", "/client/workspaces/\(workspace)/preview", headers: ["Authorization": "Bearer \(token)"], timeout: 15)
+    }
+
     struct KeepResult: Decodable, Sendable, Equatable {
         var commit: String
         var branch: String
