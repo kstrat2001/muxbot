@@ -115,6 +115,8 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
 /// per IP. A GitHub sign-in comes later.
 struct RESTGitHubClient: GitHubClient {
     var session: URLSession = .shared
+    /// Your GitHub sign-in, when there is one (private repos, higher limits).
+    var token: @Sendable () async -> String? = { KeychainHelper().get(key: GitHubAuth.tokenKey) }
     /// Responses by URL with their ETag: a 304 reply (unchanged) doesn't
     /// count against the 60-an-hour limit.
     private let cache = ETagCache()
@@ -130,6 +132,7 @@ struct RESTGitHubClient: GitHubClient {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+        if let token = await token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let cached = cache[url]
         if let etag = cached?.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)

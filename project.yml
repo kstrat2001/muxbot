@@ -44,6 +44,8 @@ targets:
         # iCloud sync of bots, runs and threads: on only in builds that set
         # MUXBOT_CLOUD_SYNC = YES and the iCloud entitlements (Config/*.xcconfig).
         MuxBotCloudSync: $(MUXBOT_CLOUD_SYNC)
+        MuxBotGitHubClientID: $(MUXBOT_GITHUB_CLIENT_ID)
+        MuxBotGitHubAppSlug: $(MUXBOT_GITHUB_APP_SLUG)
         # Tailnet previews are plain http until tailnet HTTPS certificates
         # are enabled; allow it for *.ts.net only.
         NSAppTransportSecurity:

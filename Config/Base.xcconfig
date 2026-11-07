@@ -5,5 +5,9 @@
 MUXBOT_CLOUD_SYNC = NO
 MUXBOT_ENTITLEMENTS_MAC = MuxBot.entitlements
 MUXBOT_ENTITLEMENTS_IOS = MuxBot.entitlements
+// The Mux Bot GitHub App (public client ID; device-flow sign-in, no secret).
+// Forks register their own app and override these in Local.xcconfig.
+MUXBOT_GITHUB_CLIENT_ID = Iv23lia70IF0WLGlkV2i
+MUXBOT_GITHUB_APP_SLUG =
 
 #include? "Local.xcconfig"
