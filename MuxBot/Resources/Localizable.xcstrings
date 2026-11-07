@@ -14,6 +14,9 @@
         }
       }
     },
+    "%@ changed nothing and has a question" : {
+
+    },
     "%@ has no %@" : {
       "localizations" : {
         "en" : {
@@ -56,6 +59,16 @@
     "%lld bots" : {
 
     },
+    "%lld. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld. %2$@"
+          }
+        }
+      }
+    },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
 
     },
@@ -89,6 +102,9 @@
     "Allow notifications" : {
 
     },
+    "Answer…" : {
+
+    },
     "Apple Intelligence is ready. Bots answer on this device." : {
 
     },
@@ -102,6 +118,9 @@
 
     },
     "Back" : {
+
+    },
+    "Back to chat" : {
 
     },
     "Back to chat (Esc)" : {
@@ -137,6 +156,9 @@
     "Cancel" : {
 
     },
+    "Cancel pick" : {
+
+    },
     "Canceled" : {
 
     },
@@ -150,6 +172,9 @@
 
     },
     "Clear Conversation…" : {
+
+    },
+    "Close" : {
 
     },
     "Close preview" : {
@@ -223,6 +248,9 @@
     "Discard" : {
 
     },
+    "Discard them" : {
+
+    },
     "Dispatch to %@" : {
 
     },
@@ -268,6 +296,9 @@
     "Hide preview" : {
 
     },
+    "How this app reaches darkmux" : {
+
+    },
     "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
@@ -275,6 +306,9 @@
 
     },
     "Keep running" : {
+
+    },
+    "Keep them" : {
 
     },
     "Kind" : {
@@ -346,6 +380,9 @@
     "Not set up on this Mac yet" : {
 
     },
+    "Nothing changed, so closing undoes nothing" : {
+
+    },
     "Nothing found." : {
 
     },
@@ -353,6 +390,9 @@
 
     },
     "Notifications" : {
+
+    },
+    "On iPhone and iPad, runs start from the Mac app for now." : {
 
     },
     "On-device model" : {
@@ -374,6 +414,9 @@
 
     },
     "Opens your conversation with %@" : {
+
+    },
+    "Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later." : {
 
     },
     "Pair with darkmux" : {
@@ -431,6 +474,9 @@
 
     },
     "Remove" : {
+
+    },
+    "Replaced by the next run" : {
 
     },
     "Resources" : {
@@ -528,6 +574,9 @@
     "The code expired. Cancel and pair again." : {
 
     },
+    "The last run's changes (“%@”) are still waiting. Keep or Discard them first?" : {
+
+    },
     "The messages go; runs stay in Activity." : {
 
     },
@@ -535,6 +584,9 @@
 
     },
     "Tweak" : {
+
+    },
+    "Tweak the last run" : {
 
     },
     "Tweak: %@" : {
@@ -569,6 +621,9 @@
 
     },
     "What this bot is about" : {
+
+    },
+    "Work copies are set up from the Mac app for now." : {
 
     },
     "Work copy" : {
