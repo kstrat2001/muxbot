@@ -26,6 +26,11 @@ struct LayoutFacts: Sendable, Equatable, Codable {
         var paddingRight: String
         var fontSize: String
         var maxWidth: String
+        /// Where its text starts and ends (the nearest text inside it):
+        /// a full-width section with 0px padding is fine when an inner
+        /// container keeps the text in.
+        var textLeft: Int? = nil
+        var textRight: Int? = nil
     }
 
     var viewport: Int
@@ -81,7 +86,10 @@ enum LayoutMeasure {
             let at = "At \(f.viewport)px:"
             let over = f.scrollWidth - f.clientWidth
             let wide = f.wide.filter { $0.width > f.viewport || $0.right > f.viewport }
-            let edges = f.sections.filter { $0.left <= 0 && px($0.paddingLeft) == 0 && px($0.paddingRight) == 0 && $0.width >= f.viewport - 1 }
+            let edges = f.sections.filter { s in
+                guard px(s.paddingLeft) == 0 || px(s.paddingRight) == 0 else { return false }
+                return (s.textLeft.map { $0 <= 1 } ?? false) || (s.textRight.map { $0 >= f.viewport - 1 } ?? false)
+            }
             if over > 0 {
                 lines.append("\(at) the page is \(over)px wider than the screen (scrollWidth \(f.scrollWidth)).")
             }
@@ -101,18 +109,21 @@ enum LayoutMeasure {
                 lines.append("\(at) \(s.selector) \(what).")
             }
             for s in edges {
-                lines.append("\(at) \(s.selector) touches the page edges (0px side padding).")
+                lines.append("\(at) \(s.selector)'s text touches the page edges (0px side padding).")
             }
-            let matching = f.media.filter(\.matches)
-            if matching.isEmpty, !f.media.isEmpty, f.viewport != desktop {
-                let rules = f.media.prefix(3).map { "\($0.media)\(file($0.source).map { " in \($0)" } ?? "")" }
-                let only = f.media.count == 1 ? "the only one is" : "there are"
+            // Vite lists a stylesheet twice (by URL and by absolute path): one rule each.
+            var seenRules = Set<String>()
+            let media = f.media.filter { seenRules.insert("\($0.media)|\($0.selectors.joined(separator: ","))").inserted }
+            let matching = media.filter(\.matches)
+            if matching.isEmpty, !media.isEmpty, f.viewport != desktop {
+                let rules = media.prefix(3).map { "\($0.media)\(file($0.source).map { " in \($0)" } ?? "")" }
+                let only = media.count == 1 ? "the only one is" : "there are"
                 lines.append("\(at) no @media rule matches; \(only) \(rules.joined(separator: ", ")).")
             } else if !matching.isEmpty {
                 let rules = matching.prefix(3).map { "\($0.media)\(file($0.source).map { " in \($0)" } ?? "")" }
                 lines.append("\(at) @media \(rules.joined(separator: ", ")) applies.")
             }
-            files += f.media.compactMap { file($0.source) }
+            files += media.compactMap { file($0.source) }
             let broken = over > 0 || !wide.isEmpty || !edges.isEmpty
             if broken {
                 problem = true
@@ -198,8 +209,20 @@ enum LayoutMeasure {
         const sections = Array.from(new Set(nodes)).slice(0, 12).map(el => {
           const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
           const cols = cs.display.includes('grid') && cs.gridTemplateColumns !== 'none' ? cs.gridTemplateColumns.split(' ').length : null;
+          // Where its text actually sits: the leftmost and rightmost text boxes inside it.
+          let textLeft = null, textRight = null;
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          for (let n = walker.nextNode(), seen = 0; n && seen < 400; n = walker.nextNode(), seen++) {
+            if (!n.textContent.trim()) continue;
+            const range = document.createRange(); range.selectNodeContents(n);
+            const b = range.getBoundingClientRect();
+            if (b.width === 0) continue;
+            textLeft = textLeft === null ? b.left : Math.min(textLeft, b.left);
+            textRight = textRight === null ? b.right : Math.max(textRight, b.right);
+          }
           return { selector: sel(el), width: Math.round(r.width), left: Math.round(r.left), display: cs.display, columns: cols,
-                   paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight, fontSize: cs.fontSize, maxWidth: cs.maxWidth };
+                   paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight, fontSize: cs.fontSize, maxWidth: cs.maxWidth,
+                   textLeft: textLeft === null ? null : Math.round(textLeft), textRight: textRight === null ? null : Math.round(textRight) };
         });
         return JSON.stringify({ viewport: vw, scrollWidth: de.scrollWidth, clientWidth: de.clientWidth,
                                 wide: wide.slice(0, 8), media, sections });

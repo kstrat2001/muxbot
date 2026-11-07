@@ -79,9 +79,36 @@ struct LayoutMeasureTests {
     @Test func zeroPaddingAtThePageEdgeIsAProblem() {
         var f = fitsAt(820)
         f.sections[0].paddingLeft = "0px"; f.sections[0].paddingRight = "0px"
+        f.sections[0].textLeft = 0; f.sections[0].textRight = 820
         let m = LayoutMeasure.summarize([f], focus: 820)
-        #expect(m.lines.contains("At 820px: section.hero.container touches the page edges (0px side padding)."), "\(m.lines)")
+        #expect(m.lines.contains("At 820px: section.hero.container's text touches the page edges (0px side padding)."), "\(m.lines)")
         #expect(m.doneWhen == "at 820px section.hero.container keeps side padding.")
+        #expect(m.foundProblem)
+    }
+
+    /// hcr's real home page at 820px (2026-11-07): full-width sections with
+    /// 0px padding whose inner .container keeps the text 20px in, and Vite
+    /// listing app.css twice (by URL and by absolute path).
+    @Test func realHcrAt820HasNoEdgeProblemAndOneMediaRule() {
+        let rule = LayoutFacts.Media(media: "(max-width: 768px)", matches: false, selectors: [":root", ".container"], source: "/inertia/css/app.css")
+        var twin = rule
+        twin.source = "/Users/kain/.darkmux/worktrees/hcr-humancodereader/inertia/css/app.css"
+        let header = LayoutFacts.Section(selector: "header.header", width: 820, left: 0, display: "block", columns: nil,
+                                         paddingLeft: "0px", paddingRight: "0px", fontSize: "16px", maxWidth: "none",
+                                         textLeft: 20, textRight: 800)
+        let f = LayoutFacts(viewport: 820, scrollWidth: 820, clientWidth: 820, wide: [], media: [rule, twin], sections: [header])
+        let m = LayoutMeasure.summarize([f], focus: 820)
+        #expect(!m.foundProblem, "\(m.lines)")
+        #expect(m.lines.contains("At 820px: no @media rule matches; the only one is (max-width: 768px) in inertia/css/app.css."), "\(m.lines)")
+        #expect(m.likelyFile == "inertia/css/app.css")
+    }
+
+    @Test func textAtThePageEdgeIsAProblem() {
+        let bare = LayoutFacts.Section(selector: "section.cta", width: 820, left: 0, display: "block", columns: nil,
+                                       paddingLeft: "0px", paddingRight: "0px", fontSize: "16px", maxWidth: "none",
+                                       textLeft: 0, textRight: 820)
+        let m = LayoutMeasure.summarize([LayoutFacts(viewport: 820, scrollWidth: 820, clientWidth: 820, wide: [], media: [], sections: [bare])], focus: 820)
+        #expect(m.lines.contains("At 820px: section.cta's text touches the page edges (0px side padding)."), "\(m.lines)")
         #expect(m.foundProblem)
     }
 
