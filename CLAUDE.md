@@ -16,7 +16,7 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 
 ## Design philosophy
 
-Mux Bot is about getting work done, not managing machines. Lead with the work (runs, results, what needs you); machines, models and config appear only as details of a run or in conversation with a bot. Only bots act, always behind an Approve card; other screens are read-only.
+Mux Bot is about getting work done, not managing machines. Lead with the work (runs, results, what needs you); machines, models and config appear only as details of a run or in conversation with a bot. Only bots act, always behind an Approve card; other screens are read-only. Status is shown with icons and motion, not words (`StatusBadge`; words only in accessibility labels).
 
 ## Rules
 

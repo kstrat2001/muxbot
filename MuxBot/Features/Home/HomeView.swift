@@ -18,7 +18,15 @@ struct HomeView: View {
                     let group = roles.filter { $0.state == state }
                     if !group.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.md) {
-                            SectionHeader(title: state.label, count: group.count)
+                            HStack(spacing: Spacing.sm) {
+                                StatusBadge(kind: state.kind)
+                                Text("\(group.count)")
+                                    .font(AppFont.caption(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("\(group.count) bots")
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(.isHeader)
                             LazyVGrid(columns: columns, spacing: Spacing.md) {
                                 ForEach(group) { role in
                                     Button { router.navigate(to: .bot(role.id)) } label: {
@@ -54,7 +62,11 @@ struct RoleTile: View {
     var body: some View {
         CardView {
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                RoleAvatar(role: role, tint: tint)
+                HStack(alignment: .top) {
+                    RoleAvatar(role: role, tint: tint)
+                    Spacer()
+                    StatusBadge(kind: role.state.kind)
+                }
                 Text(role.name).font(AppFont.headline())
                 Text(detail)
                     .font(AppFont.footnote())
@@ -73,7 +85,6 @@ struct RoleTile: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityValue(role.state.label)
         .accessibilityHint("Opens \(role.name)")
     }
 

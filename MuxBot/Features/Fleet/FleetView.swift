@@ -60,9 +60,7 @@ private struct RunRow: View {
             HStack {
                 Text(run.title).font(AppFont.body(.semibold))
                 Spacer()
-                Text(run.status.label)
-                    .font(AppFont.caption(.semibold))
-                    .foregroundStyle(tint)
+                StatusBadge(kind: run.status.kind)
             }
             Text("\(run.botName) · \(run.machine) · \(run.model) · \(run.minutesElapsed) min")
                 .font(AppFont.caption())
@@ -72,16 +70,6 @@ private struct RunRow: View {
                     .font(AppFont.footnote(.semibold))
                     .buttonStyle(.borderless)
             }
-        }
-    }
-
-    private var tint: Color {
-        switch run.status {
-        case .running: .brandBlue
-        case .queued: .secondary
-        case .needsYou: .brandOrange
-        case .done: .brandGreenAccessible
-        case .failed: .brandRed
         }
     }
 }

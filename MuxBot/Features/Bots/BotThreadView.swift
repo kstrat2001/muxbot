@@ -37,9 +37,7 @@ struct BotThreadView: View {
         .toolbar {
             if let bot {
                 ToolbarItem(placement: .primaryAction) {
-                    Label(bot.state.label, systemImage: bot.systemImage)
-                        .font(AppFont.footnote(.semibold))
-                        .foregroundStyle(.secondary)
+                    StatusBadge(kind: bot.state.kind)
                 }
             }
         }
