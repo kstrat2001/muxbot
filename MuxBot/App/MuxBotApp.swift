@@ -18,7 +18,6 @@ struct MuxBotApp: App {
             fatalError("Could not create the model container: \(error)")
         }
         BotStore(context: container.mainContext).seedIfEmpty()
-        BackgroundTaskService.register()
     }
 
     var body: some Scene {
@@ -33,7 +32,6 @@ struct MuxBotApp: App {
                     brain.pageInspector = preview
                     brain.connection = connection
                     brain.resumeFollowing(store: BotStore(context: container.mainContext))
-                    BackgroundTaskService.scheduleRefresh()
                 }
         }
         .modelContainer(container)

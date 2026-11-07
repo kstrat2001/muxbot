@@ -106,6 +106,26 @@ struct BotStore {
         return task
     }
 
+    /// Saves an action (hand-off, new bot, new resource) as an Approve card
+    /// in the thread it came from. Several can wait at once.
+    @discardableResult
+    func proposeAction(_ action: BotAction, in chat: ChatContext) -> ChatMessage {
+        let message = append(.assistant, Self.cardTitle(for: action), kind: .actionCard, to: conversation(for: chat))
+        message.actionJSON = (try? JSONEncoder().encode(action)).flatMap { String(data: $0, encoding: .utf8) }
+        message.actionState = .waiting
+        try? context.save()
+        return message
+    }
+
+    static func cardTitle(for action: BotAction) -> String {
+        switch action {
+        case let .handOff(_, toName, task): "Hand to \(toName): \(task)"
+        case let .createBot(draft): "New bot: \(draft.name)"
+        case let .dispatch(crew, task): "Dispatch to \(crew.name): \(task)"
+        case let .addResource(kind, value): "Add \(kind.label.lowercased()): \(value)"
+        }
+    }
+
     /// A bot proposes work for its crew: the run starts as a dispatch
     /// card in the bot's thread, waiting on Approve.
     @discardableResult
@@ -152,7 +172,7 @@ struct BotStore {
             run.details = details
             run.summary = reason
             append(.assistant, reason, kind: .resultCard, runId: run.id, to: thread)
-        case .cancel, .discard, .openPR, .skipPR, .closeSimulation:
+        case .cancel, .discard, .openPR, .skipPR:
             try? context.save()
         }
         refreshState(of: bot)

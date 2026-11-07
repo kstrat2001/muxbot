@@ -22,7 +22,7 @@ struct ElementExplainerTests {
     }
 
     @Test func explainsTheHeadingFromItsFacts() {
-        let text = ElementExplainer.explain(heading)
+        let text = ElementExplainer.explain(heading, pageFile: "inertia/pages/{page}.tsx")
         #expect(text.contains("the page's main heading"))
         #expect(text.contains("Human_Models"))
         #expect(text.contains("/pricing"))
@@ -35,7 +35,7 @@ struct ElementExplainerTests {
     }
 
     @Test func explainsTheTaglineFromItsFacts() {
-        let text = ElementExplainer.explain(tagline)
+        let text = ElementExplainer.explain(tagline, pageFile: "inertia/pages/{page}.tsx")
         #expect(text.contains("paragraph"))
         #expect(text.contains("inertia/pages/home.tsx"))
         #expect(text.contains("390px"))

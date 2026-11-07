@@ -21,12 +21,15 @@ struct FleetPairingView: View {
                         .foregroundStyle(.secondary)
                 }
                 if case let .failed(message) = connection.state {
-                    Section { Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                        CommandBox(command: connection.serveCommand)
+                    }
                 }
                 Section {
                     Button("Pair with darkmux", systemImage: "link") { connection.pair() }
                 } footer: {
-                    Text("Needs `darkmux client serve` running on this Mac.")
+                    Text("darkmux's app connection has to be running on this Mac (the command above starts it).")
                 }
             case let .waiting(code, expires):
                 Section {
@@ -65,19 +68,21 @@ struct FleetPairingView: View {
                         CommandBox(command: connection.serveCommand)
                     }
                 }
-            case let .paired(name, profiles):
+            case let .paired(name):
                 Section {
                     Label("Paired as \(name)", systemImage: "checkmark.circle.fill")
                         .font(AppFont.headline())
                         .foregroundStyle(Color.brandGreen)
-                    Text(profiles.isEmpty ? "Runs use whatever darkmux on this Mac allows apps to use, in work folders under ~/.darkmux/worktrees."
-                                          : "Profiles: \(profiles.joined(separator: ", ")) · work folders under ~/.darkmux/worktrees")
+                    Text("darkmux on this Mac decides which models apps may use.")
                         .font(AppFont.footnote()).foregroundStyle(.secondary)
                 }
                 Section {
                     Button("Unpair this app", role: .destructive) { connection.unpair() }
                 } footer: {
-                    Text("To revoke on the Mac: `darkmux client revoke \(name)`.")
+                    VStack(alignment: .leading) {
+                        Text("You can also revoke it in Terminal:")
+                        CommandBox(command: "\(connection.cliCommand) client revoke \(name)")
+                    }
                 }
             }
         }

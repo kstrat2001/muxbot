@@ -92,6 +92,17 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
     var port: Int?
     var pages: [String]?
     var viewports: [String]?
+    /// A sentence or two on how the repo is laid out, passed to the crew
+    /// with every run ("Page components are in inertia/pages/.").
+    var conventions: String?
+    /// Where a page's source lives, with `{page}` for the route's last
+    /// segment ("inertia/pages/{page}.tsx"); `/` is "home".
+    var pageFile: String?
+
+    enum CodingKeys: String, CodingKey {
+        case command, port, pages, viewports, conventions
+        case pageFile = "page_file"
+    }
 
     var summary: String {
         var parts = ["\(command)\(port.map { " on port \($0)" } ?? "")"]

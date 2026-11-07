@@ -39,16 +39,17 @@ enum IssueBrief {
         return parts
     }
 
-    /// Inertia apps keep a page per route under inertia/pages/.
-    static func likelyFile(forPage page: String?) -> String? {
-        guard let page else { return nil }
-        let name = page.split(separator: "/").last.map(String.init) ?? "home"
-        return "inertia/pages/\(name.isEmpty ? "home" : name).tsx"
+    /// The page's source file, from the repo's own `page_file` pattern in
+    /// its preview recipe; nil when the repo doesn't say (no guessing).
+    static func likelyFile(forPage page: String?, pattern: String?) -> String? {
+        guard let page, let pattern, pattern.contains("{page}") else { return nil }
+        let name = page.split(separator: "?").first.flatMap { $0.split(separator: "/").last }.map(String.init) ?? ""
+        return pattern.replacingOccurrences(of: "{page}", with: name.isEmpty ? "home" : name)
     }
 
     /// The brief, or nil when the issue says neither where nor what: then
     /// the bot asks first instead of sending a model to search blind.
-    static func compose(issue: GitHubIssue, repo: String, crew: CrewRole) -> String? {
+    static func compose(issue: GitHubIssue, repo: String, crew: CrewRole, pageFile: String? = nil) -> String? {
         let parts = parse(issue.body ?? "")
         guard parts.page != nil || parts.selector != nil else { return nil }
         let verb = crew == .coder ? "Fix" : "Review the code for"
@@ -57,7 +58,7 @@ enum IssueBrief {
         if let page = parts.page { lines.append("Page: \(page)\(parts.viewport.map { " (at \($0)px wide)" } ?? "")") }
         if let selector = parts.selector { lines.append("Element: \(selector)") }
         for fact in parts.facts.prefix(3) { lines.append("Measured: \(String(fact.prefix(220)))") }
-        if let file = likelyFile(forPage: parts.page) { lines.append("Likely file: \(file) (check it first)") }
+        if let file = likelyFile(forPage: parts.page, pattern: pageFile) { lines.append("Likely file: \(file) (check it first)") }
         lines.append("Expected: \(parts.expected ?? "the problem above no longer happens")")
         lines.append("Done when: the expected result holds on that page, with no other visual change.")
         return lines.joined(separator: "\n")

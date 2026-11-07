@@ -10,7 +10,7 @@ import FoundationModels
 enum LeadBot {
     static let name = "Mux Bot"
     static let systemImage = "crown"
-    static let persona = "You orchestrate the other bots, which are the user's projects and themes: hand work to the right bot, set up new bots, and answer questions about the darkmux fleet. Short, confident, friendly."
+    static let persona = "You orchestrate the other bots, which are the user's projects and themes: hand work to the right bot, and set up new bots. Short, confident, friendly."
 }
 
 /// Which conversation the user is in. Follows navigation.
@@ -34,7 +34,7 @@ struct BotSummary: Sendable, Equatable {
 }
 
 /// A new bot proposed in conversation. Saved only when the user approves.
-struct BotDraft: Sendable, Equatable {
+struct BotDraft: Sendable, Equatable, Codable {
     var name: String
     var instructions: String
     var modelName: String = ""
@@ -42,7 +42,7 @@ struct BotDraft: Sendable, Equatable {
 }
 
 /// Something a bot wants to do. Every action waits for Approve.
-enum BotAction: Sendable, Equatable {
+enum BotAction: Sendable, Equatable, Codable {
     /// Pass work to another bot's thread.
     case handOff(toId: UUID, toName: String, task: String)
     case createBot(BotDraft)
@@ -62,8 +62,8 @@ struct BotTurn: Sendable, Equatable {
 
 /// Answers without the on-device model: the lead bot routes to a bot by
 /// name, theme or resources; a bot dispatches to a crew role by keyword or
-/// picks up a pasted repo, folder or link; anyone can draft a new bot or
-/// read the fleet briefing. Used when Foundation
+/// picks up a pasted repo, folder or link; anyone can draft a new bot.
+/// Fleet questions get an honest "can't see it yet". Used when Foundation
 /// Models is unavailable or gives an unusable answer.
 enum FallbackBrain {
     private static let newBotPhrases = ["new bot", "create a bot", "add a bot", "make a bot",
@@ -75,7 +75,7 @@ enum FallbackBrain {
     ]
 
     /// `speaker` is the bot whose thread this is; `nil` means the lead bot.
-    static func turn(for request: String, speaker: BotSummary?, bots: [BotSummary], fleet: FleetSnapshot) -> BotTurn {
+    static func turn(for request: String, speaker: BotSummary?, bots: [BotSummary]) -> BotTurn {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = text.lowercased()
         let others = bots.filter { $0.id != speaker?.id }
@@ -96,7 +96,7 @@ enum FallbackBrain {
                            action: .addResource(kind: kind, value: value))
         }
         if tokens(lower).contains(where: { word in fleetWords.contains { word.hasPrefix($0) } }) {
-            return BotTurn(reply: fleetAnswer(fleet), action: nil)
+            return BotTurn(reply: fleetAnswer, action: nil)
         }
         guard speaker != nil else {
             if let best = bestMatch(for: lower, in: others) { return handOff(text, to: best) }
@@ -107,9 +107,9 @@ enum FallbackBrain {
                            action: .dispatch(crew: crew, task: text))
         }
         if text.hasSuffix("?") {
-            return BotTurn(reply: "I can't answer that without the on-device model. I can list open issues, check the fleet, or send work to the crew.", action: nil)
+            return BotTurn(reply: "I can't answer that without the on-device model. I can list open issues or send work to the crew.", action: nil)
         }
-        return BotTurn(reply: "Noted. Tell me what to build, review, evaluate or research and I'll line up the crew.", action: nil)
+        return BotTurn(reply: "Without the on-device model I can only act on clear requests: tell me what to build, review, test or research, or ask about open issues.", action: nil)
     }
 
     /// "The border has no padding", "the cards overlap the footer": the
@@ -171,16 +171,8 @@ enum FallbackBrain {
             .first { $0.hasPrefix("http://") || $0.hasPrefix("https://") || $0.hasPrefix("~/") || ($0.hasPrefix("/") && $0.count > 1) }
     }
 
-    static func fleetAnswer(_ fleet: FleetSnapshot) -> String {
-        let active = fleet.runs.filter { $0.status == .running || $0.status == .queued }.count
-        var answer = "\(active) run\(active == 1 ? "" : "s") active."
-        if let roomy = fleet.roomiestMachine {
-            answer += " \(roomy.name) has the most room: \(roomy.freeMemoryGB) GB free"
-            answer += roomy.loadedModels.isEmpty ? "." : ", with \(roomy.loadedModels.joined(separator: ", ")) loaded."
-        }
-        if !fleet.isConnected { answer += " (Sample data: the fleet isn't connected yet.)" }
-        return answer
-    }
+    /// darkmux doesn't report its machines to apps yet: say so.
+    static let fleetAnswer = "I can't see the fleet yet: darkmux doesn't share its machines with this app. Runs this app starts show in Activity."
 
     private static func handOff(_ text: String, to bot: BotSummary) -> BotTurn {
         BotTurn(reply: "That's a job for \(bot.name). Approve to hand it over.",
@@ -273,16 +265,9 @@ enum GeneratedCrew {
 /// the thread; any proposed action waits on an Approve / Cancel card.
 @MainActor @Observable
 final class BotBrain {
-    struct Pending: Equatable {
-        var context: ChatContext
-        var action: BotAction
-    }
-
     var isThinking = false
-    var pending: Pending?
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
-    var fleet = FleetSnapshot.sample
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true
     var github: any GitHubClient = RESTGitHubClient()
@@ -297,11 +282,11 @@ final class BotBrain {
     /// The on-device model has a ~4K-token context, shared by these
     /// instructions, the tool schema, the request and the answer. Each turn
     /// is a fresh session (no history), so only this has to stay small:
-    /// short roster lines, the fleet briefing only when asked about, and a
+    /// short roster lines, a "can't see the fleet" line only when asked, and a
     /// compact form (identity and rules only) for the retry after an
     /// overflow.
     nonisolated static func instructions(for request: String, speaker: BotSummary?, bots: [BotSummary],
-                                         fleet: FleetSnapshot, compact: Bool) -> String {
+                                         compact: Bool) -> String {
         let lower = request.lowercased()
         let crewList = CrewRole.allCases.map(\.name).joined(separator: ", ")
         let identity = speaker.map {
@@ -321,7 +306,8 @@ final class BotBrain {
         return [identity, rules,
                 "Hand work to another bot only when the user asks or it clearly belongs to that bot.",
                 "Other bots:\n" + (roster.isEmpty ? "(none yet)" : roster),
-                wantsFleet ? String(fleet.briefing.prefix(900)) : ""].filter { !$0.isEmpty }.joined(separator: "\n")
+                wantsFleet ? "You can't see the darkmux fleet yet (its machines, models or load). If asked, say so plainly; never guess." : ""]
+            .filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     /// Errors about one turn (too long, refused, malformed), not about the
@@ -438,7 +424,8 @@ final class BotBrain {
         // "what's this?" about a picked element: explain it from its facts.
         if let element, explicit == nil || explicit == .ask, ElementExplainer.isWhatsThis(text) {
             message.intentRaw = Intent.ask.rawValue
-            store.append(.assistant, ElementExplainer.explain(element), to: conversation)
+            let pageFile = context.botId.flatMap(store.bot(id:)).flatMap(recipe(for:))?.pageFile
+            store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
             return
         }
         let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
@@ -447,7 +434,6 @@ final class BotBrain {
 
         isThinking = true
         defer { isThinking = false }
-        pending = nil
         fallbackNote = nil
 
         // A bot reads its own repos; the lead bot reads every bot's.
@@ -477,7 +463,8 @@ final class BotBrain {
                     store.append(.assistant, "I can't find an open issue #\(number) on \(repo).", to: conversation)
                     return
                 }
-                guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew) else {
+                guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
+                                                          pageFile: bot.flatMap(recipe(for:))?.pageFile) else {
                     // Never send a model to search blind on a title.
                     store.append(.assistant, "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.", to: conversation)
                     return
@@ -519,13 +506,13 @@ final class BotBrain {
         }
         if turn == nil, let reason = unavailableReason, useOnDeviceModel, !toldFallback.contains(context) {
             toldFallback.insert(context)
-            store.append(.system, "The on-device model isn't working here (\(reason)). I'm using simple keyword matching: I can list issues, check the fleet and send work to the crew, but I can't hold a real conversation.", to: conversation)
+            store.append(.system, "The on-device model isn't working here (\(reason)). I'm using simple keyword matching: I can list issues and send work to the crew, but I can't hold a real conversation.", to: conversation)
         }
         fallbackNote = !useOnDeviceModel || turn != nil ? nil
             : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
             : turnNote.map { "\($0) I used keyword matching for this message." }
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
-        var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
+        var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
         if intent == .ask { result.action = nil }   // a question never proposes work
         apply(result, context: context, store: store, conversation: conversation)
     }
@@ -537,7 +524,7 @@ final class BotBrain {
             // Dispatches become a card in the thread, not a bar card.
             if let bot = context.botId.flatMap(store.bot(id:)) { store.proposeRun(task: task, crew: crew, on: bot) }
         case let action?:
-            pending = Pending(context: context, action: action)
+            store.proposeAction(action, in: context)
         case nil:
             break
         }
@@ -627,17 +614,42 @@ final class BotBrain {
         if event == .approve { _ = startRealRun(run, message: run.brief ?? run.task, store: store) }
     }
 
-    /// Every darkmux run gets the same working rules after its task.
-    nonisolated static func workBrief(_ task: String) -> String {
-        task + """
+    /// Every darkmux run gets the same working rules after its task, plus
+    /// the repo's own hints from its `.darkmux/preview.json`, never a guess
+    /// about how some other kind of project is laid out.
+    nonisolated static func workBrief(_ task: String, recipe: PreviewManifest? = nil) -> String {
+        let hints = recipe?.conventions.map { "\n\nAbout this repository: \($0)" } ?? ""
+        return task + hints + """
 
 
-            You are working in this repository (the current directory). Find the file responsible \
-            (page components are under inertia/pages/ in Inertia apps), make the smallest change that \
-            does it, and change nothing else. Don't run installs, builds or the dev server. If you \
-            can't find where to change, stop and say what you searched instead of repeating searches. \
-            When done, list the files you changed.
+            You are working in this repository (the current directory). Find the file responsible, \
+            make the smallest change that does it, and change nothing else. Don't run installs, builds \
+            or the dev server. If you can't find where to change, stop and say what you searched instead \
+            of repeating searches. When done, list the files you changed.
             """
+    }
+
+    /// The recipe already read for a bot's repo, if any.
+    func recipe(for bot: Bot) -> PreviewManifest? {
+        guard let repo = bot.repoSlugs.first, case let .ready(manifest, _)? = recipes[repo] else { return nil }
+        return manifest
+    }
+
+    /// darkmux refusing or not answering a submit fails the run; it is never
+    /// a result to Keep.
+    nonisolated static func startFailure(_ error: any Error) -> RunEvent {
+        .fail(reason: "Couldn't start on darkmux", details: error.localizedDescription)
+    }
+
+    /// A Tweak re-sends the original brief, what the run changed, and the
+    /// change you asked for, so the crew has the whole picture.
+    static func tweakMessage(for run: BotRun, change: String) -> String {
+        var parts = ["Earlier task:\n\(run.brief ?? run.task)"]
+        if !run.changedFiles.isEmpty {
+            parts.append("You already changed: \(run.changedFiles.joined(separator: ", ")).")
+        }
+        parts.append("Now change this: \(change)")
+        return parts.joined(separator: "\n\n")
     }
 
     /// Polls a darkmux run until it ends, then posts its result (or notes
@@ -751,6 +763,10 @@ final class BotBrain {
 
     /// Why a run can't go to darkmux right now, or nil when it can.
     func whyRunCannotStart(_ run: BotRun) -> String? {
+        #if os(iOS)
+        // Phone pairing over the tailnet isn't built yet.
+        return "runs start from the Mac app for now"
+        #endif
         guard connection?.isPaired == true, connection?.token != nil else { return "this app isn't paired with darkmux" }
         guard run.crew.darkmuxRole != nil else { return "\(run.crew.name) has no darkmux role yet" }
         guard let bot = run.bot, FleetConnection.workdir(for: bot) != nil else {
@@ -771,13 +787,14 @@ final class BotBrain {
             do {
                 // darkmux picks the profile for this role (its role binding, else
                 // the default) and checks it against what the owner granted.
-                let (workId, profile) = try await connection.client.submitWork(token: token, role: role, message: Self.workBrief(message),
+                let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
+                                                                               message: Self.workBrief(message, recipe: recipe(for: bot)),
                                                                                profile: nil, workdir: workdir)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, token: token, client: connection.client, store: store)
             } catch {
-                store.apply(.finish(summary: "Couldn't run on darkmux: \(error.localizedDescription)"), to: run)
+                store.apply(Self.startFailure(error), to: run)
             }
         }
         return true
@@ -794,7 +811,7 @@ final class BotBrain {
             return
         }
         guard store.apply(.tweak, to: run) else { return }
-        _ = startRealRun(run, message: "Follow-up on: \(run.task)\nChange: \(text)", store: store)
+        _ = startRealRun(run, message: Self.tweakMessage(for: run, change: text), store: store)
     }
 
 
@@ -812,35 +829,33 @@ final class BotBrain {
 
 
 
-    func cancel() {
-        pending = nil
-    }
-
-    /// Carries out the pending action and notes it in the thread it came from.
-    func approve(in store: BotStore) {
-        guard let pending else { return }
-        let from = pending.context.botId.flatMap { store.bot(id: $0)?.name } ?? LeadBot.name
+    /// Approve or Cancel on an action card. Each card is decided once.
+    func resolve(_ card: ChatMessage, approve: Bool, store: BotStore) {
+        guard card.kind == .actionCard, card.actionState == .waiting, let action = card.action else { return }
+        let chat: ChatContext = card.conversation?.roleId.map { .bot($0) } ?? .lead
+        card.actionState = approve ? .approved : .canceled
+        defer { try? store.context.save() }
+        guard approve else { return }
+        let from = chat.botId.flatMap { store.bot(id: $0)?.name } ?? LeadBot.name
         let note: String
-        switch pending.action {
+        switch action {
         case let .handOff(toId, toName, task):
-            guard let target = store.bot(id: toId) else { self.pending = nil; return }
+            guard let target = store.bot(id: toId) else { return }
             store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task)"
         case let .createBot(draft):
             store.add(name: draft.name, instructions: draft.instructions, modelName: draft.modelName, systemImage: draft.systemImage)
             note = "Added bot \(draft.name)."
         case let .dispatch(crew, task):
-            guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
+            guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             store.proposeRun(task: task, crew: crew, on: bot)
-            self.pending = nil
             return
         case let .addResource(kind, value):
-            guard let bot = pending.context.botId.flatMap(store.bot(id:)) else { self.pending = nil; return }
+            guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             store.addResource(kind, value, to: bot)
             note = "Added \(kind.label.lowercased()): \(value)"
         }
-        store.append(.system, note, to: store.conversation(for: pending.context))
-        self.pending = nil
+        store.append(.system, note, to: store.conversation(for: chat))
     }
 
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],
@@ -852,7 +867,7 @@ final class BotBrain {
         let issueTool = OpenIssuesTool(repos: repos, client: github)
         let tools: [any Tool] = compact || repos.isEmpty || !wantsIssues ? [] : [issueTool]
         let session = LanguageModelSession(tools: tools, instructions: Self.instructions(
-            for: request, speaker: speaker, bots: bots, fleet: fleet, compact: compact))
+            for: request, speaker: speaker, bots: bots, compact: compact))
         do {
             var g: GeneratedTurn
             do {

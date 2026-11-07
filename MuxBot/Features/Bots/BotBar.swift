@@ -3,8 +3,7 @@ import SwiftData
 
 /// The one chat bar, owned by the Bots tab so it stays on screen across
 /// navigation. It talks to whichever bot you are looking at (the lead bot
-/// on Home). A proposed action shows here with Approve / Cancel. The mic is
-/// a placeholder until speech input lands.
+/// on Home). Proposed actions are cards in the thread, not here.
 struct BotBar: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -28,11 +27,6 @@ struct BotBar: View {
     var body: some View {
         @Bindable var router = router
         VStack(spacing: Spacing.md) {
-            if let pending = brain.pending, pending.context == router.context {
-                ActionCard(action: pending.action,
-                           approve: { brain.approve(in: BotStore(context: context)) },
-                           cancel: { brain.cancel() })
-            }
             if let note = brain.fallbackNote {
                 Label(note, systemImage: "info.circle")
                     .font(AppFont.caption())
@@ -74,10 +68,6 @@ struct BotBar: View {
                     .labelStyle(.iconOnly)
                     .font(.title2)
                     .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking)
-                Button("Talk (coming soon)", systemImage: "mic.fill") {}
-                    .labelStyle(.iconOnly)
-                    .font(.title3)
-                    .disabled(true)
             }
         }
         .padding(.horizontal, Spacing.lg)
@@ -102,38 +92,5 @@ struct BotBar: View {
             return
         }
         Task { await brain.send(text, in: chat, store: store, element: element) }
-    }
-}
-
-private struct ActionCard: View {
-    let action: BotAction
-    let approve: () -> Void
-    let cancel: () -> Void
-
-    var body: some View {
-        CardView {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                switch action {
-                case let .handOff(_, toName, task):
-                    Text("Hand to \(toName)").font(AppFont.headline())
-                    Text(task).font(AppFont.body())
-                case let .createBot(draft):
-                    Text("New bot: \(draft.name)").font(AppFont.headline())
-                    Text(draft.instructions).font(AppFont.body())
-                case let .dispatch(crew, task):
-                    Label("Dispatch to \(crew.name)", systemImage: crew.systemImage).font(AppFont.headline())
-                    Text(task).font(AppFont.body())
-                case let .addResource(kind, value):
-                    Label("Add \(kind.label.lowercased())", systemImage: kind.systemImage).font(AppFont.headline())
-                    Text(value).font(AppFont.body()).textSelection(.enabled)
-                }
-                HStack {
-                    Button("Cancel", role: .cancel, action: cancel).buttonStyle(.bordered)
-                    Spacer()
-                    Button("Approve", action: approve).buttonStyle(.borderedProminent)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 }

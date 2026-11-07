@@ -75,18 +75,6 @@ enum StatusKind {
     }
 }
 
-extension RunStatus {
-    var kind: StatusKind {
-        switch self {
-        case .running: .running
-        case .queued: .queued
-        case .needsYou: .needsYou
-        case .done: .done
-        case .failed: .failed
-        }
-    }
-}
-
 extension BotState {
     var kind: StatusKind {
         switch self {

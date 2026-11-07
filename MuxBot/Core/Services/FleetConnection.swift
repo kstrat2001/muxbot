@@ -8,7 +8,7 @@ final class FleetConnection {
     enum State: Equatable {
         case unpaired
         case waiting(code: String, expires: Date)
-        case paired(name: String, profiles: [String])
+        case paired(name: String)
         case failed(String)
     }
 
@@ -17,12 +17,11 @@ final class FleetConnection {
     private let keychain = KeychainHelper()
     private static let tokenKey = "darkmux.client.token"
     private static let nameKey = "darkmux.client.name"
-    private static let profilesKey = "darkmux.client.profiles"
     private var pairing: Task<Void, Never>?
 
     init() {
         if keychain.get(key: Self.tokenKey) != nil, let name = UserDefaults.standard.string(forKey: Self.nameKey) {
-            state = .paired(name: name, profiles: UserDefaults.standard.stringArray(forKey: Self.profilesKey) ?? [])
+            state = .paired(name: name)
         }
     }
 
@@ -38,8 +37,6 @@ final class FleetConnection {
     }
     var approveCommand: String { "\(cliCommand) client approve" }
     var serveCommand: String { "\(cliCommand) client serve" }
-    /// The profiles the Mac's owner let this app use.
-    var allowedProfiles: [String] { if case let .paired(_, profiles) = state { profiles } else { [] } }
     var isPaired: Bool { if case .paired = state { true } else { false } }
 
     /// Starts a pairing request and waits for `darkmux client approve`. The
@@ -52,8 +49,7 @@ final class FleetConnection {
         state = .waiting(code: code, expires: Date().addingTimeInterval(10 * 60))
         pairing = Task {
             do {
-                let scopes = DarkmuxClient.Scopes(profiles: [], workspace: true)
-                let id = try await client.requestPairing(deviceName: device, code: code, secret: secret, scopes: scopes)
+                let id = try await client.requestPairing(deviceName: device, code: code, secret: secret)
                 while !Task.isCancelled {
                     try await Task.sleep(for: .seconds(2))
                     let status = try await client.pairStatus(requestId: id, secret: secret)
@@ -61,10 +57,8 @@ final class FleetConnection {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
                         keychain.save(key: Self.tokenKey, value: token)
-                        let profiles = status.scopes?.profiles ?? []   // informational only
                         UserDefaults.standard.set(name, forKey: Self.nameKey)
-                        UserDefaults.standard.set(profiles, forKey: Self.profilesKey)
-                        state = .paired(name: name, profiles: profiles)
+                        state = .paired(name: name)
                         return
                     case "denied": state = .failed("The request was denied."); return
                     case "expired": state = .failed("The request expired. Try again."); return
@@ -73,7 +67,7 @@ final class FleetConnection {
                 }
             } catch is CancellationError {
             } catch {
-                state = .failed("\(error.localizedDescription) Is `darkmux client serve` running?")
+                state = .failed(Self.plainError(error))
             }
         }
     }
@@ -86,8 +80,17 @@ final class FleetConnection {
     func unpair() {
         keychain.delete(key: Self.tokenKey)
         UserDefaults.standard.removeObject(forKey: Self.nameKey)
-        UserDefaults.standard.removeObject(forKey: Self.profilesKey)
         state = .unpaired
+    }
+
+    /// A pairing failure in plain words. The endpoint not answering is the
+    /// usual one; the pairing screen shows the command to start it.
+    static func plainError(_ error: any Error) -> String {
+        if let url = error as? URLError,
+           [.cannotConnectToHost, .networkConnectionLost, .timedOut, .cannotFindHost].contains(url.code) {
+            return "darkmux isn't answering on this Mac. Start it in Terminal with the command below, then try again."
+        }
+        return "Pairing didn't work: \(error.localizedDescription)"
     }
 
     /// The real home folder (a sandboxed app's NSHomeDirectory is its container).

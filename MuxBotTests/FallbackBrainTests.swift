@@ -7,12 +7,11 @@ struct FallbackBrainTests {
         BotSummary(id: UUID(), name: $0.name, instructions: $0.instructions, state: .ready,
                    resources: $0.resources.map(\.1))
     }
-    let fleet = FleetSnapshot.sample
 
     private var hcr: BotSummary { bots[0] }
 
     private func turn(_ text: String, speaker: BotSummary? = nil) -> BotTurn {
-        FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
+        FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
     }
 
     private func handOffTarget(_ turn: BotTurn) -> String? {
@@ -78,16 +77,21 @@ struct FallbackBrainTests {
         #expect(!value.hasSuffix("."))
     }
 
-    @Test func fleetQuestionNamesTheRoomiestOnlineMachine() {
-        let result = turn("which machine is free for a big model?")
-        #expect(result.action == nil)
-        #expect(result.reply.contains("MacBook Pro"))
-        #expect(result.reply.contains("74 GB free"))
-        #expect(result.reply.contains("Sample data"))
+    // No fake fleet: until darkmux reports machines, say so.
+    @Test(arguments: ["which machine is free for a big model?", "what's loaded on the fleet?"])
+    func fleetQuestionsAreAnsweredHonestly(question: String) {
+        for speaker in [nil, hcr] {
+            let result = turn(question, speaker: speaker)
+            #expect(result.action == nil)
+            #expect(result.reply.contains("can't see the fleet yet"))
+            #expect(!result.reply.contains("GB"))
+        }
     }
 
-    @Test func roomiestMachineSkipsOfflineMachines() {
-        #expect(fleet.roomiestMachine?.name == "MacBook Pro")
+    @Test func aStatementNeverGetsAFakeNoted() {
+        let result = turn("the launch went well yesterday", speaker: hcr)
+        #expect(!result.reply.lowercased().hasPrefix("noted"))
+        #expect(result.action == nil)
     }
 
     @Test func newBotRequestDraftsABot() {

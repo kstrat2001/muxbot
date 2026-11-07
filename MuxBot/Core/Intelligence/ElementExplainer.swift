@@ -29,10 +29,11 @@ enum ElementExplainer {
         }
     }
 
-    static func explain(_ e: PickedElement) -> String {
+    /// `pageFile` is the repo's own `page_file` pattern, if its recipe has one.
+    static func explain(_ e: PickedElement, pageFile: String? = nil) -> String {
         let text = e.label.trimmingCharacters(in: .whitespaces)
         var parts = ["That's \(role(of: e)) on \(e.url)" + (text.isEmpty || text == e.tag ? "." : ", showing “\(text.prefix(60))”.")]
-        if let file = IssueBrief.likelyFile(forPage: e.url) {
+        if let file = IssueBrief.likelyFile(forPage: e.url, pattern: pageFile) {
             parts.append("It's most likely in \(file).")
         }
         var look: [String] = []

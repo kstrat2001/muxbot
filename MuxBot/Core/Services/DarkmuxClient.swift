@@ -6,19 +6,11 @@ import Foundation
 struct DarkmuxClient: Sendable {
     var baseURL = URL(string: "http://127.0.0.1:8767")!
 
-    /// What a pairing asks for. darkmux decides what apps may actually run
-    /// (a machine setting), so the reply may carry less or nothing.
-    struct Scopes: Codable, Sendable, Equatable {
-        var profiles: [String]?
-        var workspace: Bool?
-    }
-
     struct PairStatus: Decodable, Sendable {
         var status: String
         var clientName: String?
         var token: String?
-        var scopes: Scopes?
-        enum CodingKeys: String, CodingKey { case status, token, scopes; case clientName = "client_name" }
+        enum CodingKeys: String, CodingKey { case status, token; case clientName = "client_name" }
     }
 
     struct WorkStatus: Decodable, Sendable {
@@ -51,10 +43,12 @@ struct DarkmuxClient: Sendable {
         var errorDescription: String? { message }
     }
 
-    func requestPairing(deviceName: String, code: String, secret: String, scopes: Scopes) async throws -> String {
-        struct Body: Encodable { var device_name: String; var code: String; var pair_secret: String; var scopes: Scopes }
+    /// darkmux decides what apps may run (a machine setting), so a pairing
+    /// asks for nothing beyond itself.
+    func requestPairing(deviceName: String, code: String, secret: String) async throws -> String {
+        struct Body: Encodable { var device_name: String; var code: String; var pair_secret: String }
         struct Reply: Decodable { var request_id: String }
-        let data = try await send("POST", "/client/pair", body: Body(device_name: deviceName, code: code, pair_secret: secret, scopes: scopes))
+        let data = try await send("POST", "/client/pair", body: Body(device_name: deviceName, code: code, pair_secret: secret))
         return try JSONDecoder().decode(Reply.self, from: data).request_id
     }
 

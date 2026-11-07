@@ -84,7 +84,7 @@ struct PickedElementFlowTests {
         let (store, bot, brain, _) = setUp()
         await brain.send("ask: fix the crash bugs in the footer", in: .bot(bot.id), store: store)
         #expect(bot.runs?.isEmpty ?? true)
-        #expect(brain.pending == nil)
+        #expect(!(store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.kind == .actionCard })
     }
 
     @Test func reinterpretingAMessageAnswersAgainUnderTheNewIntent() async throws {
@@ -159,23 +159,18 @@ struct PromptTrimmingTests {
 
     @Test func fullInstructionsStayWellUnderTheOnDeviceBudget() {
         let text = BotBrain.instructions(for: "where should this run? which machine is free?", speaker: speaker,
-                                         bots: bots, fleet: .sample, compact: false)
+                                         bots: bots, compact: false)
         // ~4K tokens shared with the tool schema, request and answer: keep
         // instructions under ~2,600 characters (~650 tokens).
         #expect(text.count < 2600)
-        #expect(text.contains("Machines:"))
+        #expect(!text.contains("Machines:"), "no sample fleet")
+        #expect(text.contains("can't see the darkmux fleet yet"))
     }
 
-    @Test func fleetBriefingOnlyWhenAsked() {
-        let text = BotBrain.instructions(for: "fix the footer", speaker: speaker, bots: bots, fleet: .sample, compact: false)
-        #expect(!text.contains("Machines:"))
-    }
-
-    @Test func compactRetryDropsRosterAndFleet() {
-        let text = BotBrain.instructions(for: "which machine is free?", speaker: speaker, bots: bots, fleet: .sample, compact: true)
+    @Test func compactRetryDropsTheRoster() {
+        let text = BotBrain.instructions(for: "which machine is free?", speaker: speaker, bots: bots, compact: true)
         #expect(!text.contains("Other bots"))
-        #expect(!text.contains("Machines:"))
-        #expect(text.count < 700)
+        #expect(text.count < 800)
     }
 }
 
@@ -257,6 +252,7 @@ struct FixBriefFlowTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(issues: [GitHubIssue(number: 8, title: "No padding", body: "Open /pricing; selector `main > div`")])
+        brain.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
         await brain.send("fix #8", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         #expect(run.task == "Fix #8: No padding (kstrat2001/hcr)")

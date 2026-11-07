@@ -80,9 +80,11 @@ struct ContentView: View {
 
     private var split: some View {
         @Bindable var router = router
+        // Full-window preview hides the sidebar; otherwise the toggle is yours.
+        let fullWindow = router.previewFullScreen && router.showPreview
         let columns = Binding<NavigationSplitViewVisibility>(
-            get: { router.previewFullScreen && router.showPreview ? .detailOnly : .all },
-            set: { _ in })
+            get: { fullWindow ? .detailOnly : router.columnVisibility },
+            set: { if !fullWindow { router.columnVisibility = $0 } })
         return NavigationSplitView(columnVisibility: columns) {
             BotSidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)

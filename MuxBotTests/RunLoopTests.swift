@@ -101,7 +101,7 @@ struct RunLoopStoreTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         await brain.send("Fix the crash bugs in the footer", in: .bot(bot.id), store: store)
-        #expect(brain.pending == nil)
+        #expect(!(store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.kind == .actionCard })
         #expect(bot.runs?.first?.crew == .coder)
         #expect(kinds(store, bot) == [.dispatchCard])
     }

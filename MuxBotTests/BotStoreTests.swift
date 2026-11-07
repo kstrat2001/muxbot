@@ -45,8 +45,8 @@ struct BotStoreTests {
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.pending = .init(context: .bot(bot.id), action: .addResource(kind: .repo, value: "https://github.com/kstrat2001/hcr"))
-        brain.approve(in: store)
+        let card = store.proposeAction(.addResource(kind: .repo, value: "https://github.com/kstrat2001/hcr"), in: .bot(bot.id))
+        brain.resolve(card, approve: true, store: store)
         #expect(store.bot(id: bot.id)?.sortedResources.map(\.value) == ["https://github.com/kstrat2001/hcr"])
         #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content.hasPrefix("Added repo:") })
     }
@@ -56,9 +56,9 @@ struct BotStoreTests {
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.pending = .init(context: .lead, action: .dispatch(crew: .coder, task: "x"))
-        brain.approve(in: store)
-        #expect(brain.pending == nil)
+        let card = store.proposeAction(.dispatch(crew: .coder, task: "x"), in: .lead)
+        brain.resolve(card, approve: true, store: store)
+        #expect(card.actionState != .waiting)
         #expect(store.bot(id: bot.id)?.tasks?.isEmpty ?? true)
     }
 
@@ -99,9 +99,9 @@ struct BotStoreTests {
         let role = store.add(name: "darkmux", instructions: "CLI", modelName: "")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "darkmux", task: "Check PR 12"))
-        brain.approve(in: store)
-        #expect(brain.pending == nil)
+        let card = store.proposeAction(.handOff(toId: role.id, toName: "darkmux", task: "Check PR 12"), in: .lead)
+        brain.resolve(card, approve: true, store: store)
+        #expect(card.actionState != .waiting)
         #expect(store.bot(id: role.id)?.state == .working)
         #expect((store.conversation(for: .lead).messages ?? []).contains { $0.content == "Handed to darkmux: Check PR 12" })
     }
@@ -110,8 +110,8 @@ struct BotStoreTests {
         let store = TestStore.fresh()
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.pending = .init(context: .lead, action: .createBot(BotDraft(name: "Life coach", instructions: "Keeps me on track")))
-        brain.approve(in: store)
+        let card = store.proposeAction(.createBot(BotDraft(name: "Life coach", instructions: "Keeps me on track")), in: .lead)
+        brain.resolve(card, approve: true, store: store)
         #expect(store.allBots().map(\.name) == ["Life coach"])
     }
 
@@ -120,9 +120,9 @@ struct BotStoreTests {
         let role = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "humancodereader", task: "x"))
-        brain.cancel()
-        #expect(brain.pending == nil)
+        let card = store.proposeAction(.handOff(toId: role.id, toName: "humancodereader", task: "x"), in: .lead)
+        brain.resolve(card, approve: false, store: store)
+        #expect(card.actionState != .waiting)
         #expect(store.bot(id: role.id)?.state == .ready)
         #expect(role.tasks?.isEmpty ?? true)
     }

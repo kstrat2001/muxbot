@@ -38,16 +38,16 @@ struct IssueBriefParsingTests {
     }
 
     @Test func likelyFileForAnInertiaPage() {
-        #expect(IssueBrief.likelyFile(forPage: "/pricing") == "inertia/pages/pricing.tsx")
-        #expect(IssueBrief.likelyFile(forPage: "/") == "inertia/pages/home.tsx")
-        #expect(IssueBrief.likelyFile(forPage: nil) == nil)
+        #expect(IssueBrief.likelyFile(forPage: "/pricing", pattern: "inertia/pages/{page}.tsx") == "inertia/pages/pricing.tsx")
+        #expect(IssueBrief.likelyFile(forPage: "/", pattern: "inertia/pages/{page}.tsx") == "inertia/pages/home.tsx")
+        #expect(IssueBrief.likelyFile(forPage: nil, pattern: "inertia/pages/{page}.tsx") == nil)
     }
 }
 
 struct IssueBriefCompositionTests {
     @Test func briefIsCompactAndComplete() throws {
         let issue = GitHubIssue(number: 8, title: "No padding on left/right of the border", body: draftedBody)
-        let brief = try #require(IssueBrief.compose(issue: issue, repo: "kstrat2001/hcr", crew: .coder))
+        let brief = try #require(IssueBrief.compose(issue: issue, repo: "kstrat2001/hcr", crew: .coder, pageFile: "inertia/pages/{page}.tsx"))
         #expect(brief.hasPrefix("Fix GitHub issue #8 in kstrat2001/hcr: No padding on left/right of the border."))
         #expect(brief.contains("Page: /pricing (at 681px wide)"))
         #expect(brief.contains("Element: div.layout > main > section.container > div:nth-of-type(2) > div"))
@@ -73,6 +73,7 @@ struct IssueDispatchFlowTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(issues: [issue])
+        brain.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
         return (store, bot, brain)
     }
 

@@ -13,6 +13,14 @@ enum MessageKind: String, Codable, Sendable {
     case text, dispatchCard, runCard, resultCard, prCard
     /// A drafted bug report; `content` holds the `BugDraft` as JSON.
     case bugCard
+    /// An action other than a dispatch (hand-off, new bot, new resource)
+    /// waiting for Approve; `actionJSON` holds the `BotAction`.
+    case actionCard
+}
+
+/// Where an action card stands.
+enum ActionState: String, Codable, Sendable {
+    case waiting, approved, canceled
 }
 
 @Model
@@ -27,7 +35,19 @@ final class ChatMessage {
     var intentRaw: String?
     /// For your messages: the preview element it was about, as JSON.
     var elementJSON: String?
+    /// For action cards: the proposed `BotAction` as JSON, and its state.
+    var actionJSON: String?
+    var actionStateRaw: String?
     var conversation: ChatConversation?
+
+    var action: BotAction? {
+        actionJSON.flatMap { try? JSONDecoder().decode(BotAction.self, from: Data($0.utf8)) }
+    }
+
+    var actionState: ActionState {
+        get { actionStateRaw.flatMap(ActionState.init(rawValue:)) ?? .waiting }
+        set { actionStateRaw = newValue.rawValue }
+    }
 
     init(role: ChatRole, content: String, kind: MessageKind = MessageKind.text, runId: UUID? = nil) {
         self.role = role

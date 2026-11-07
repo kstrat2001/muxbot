@@ -24,7 +24,7 @@ struct ChatView: View {
     /// The newest card of each kind for each run; older ones are history.
     private var latestCardIds: Set<UUID> {
         var latest: [String: ChatMessage] = [:]
-        for message in messages where message.kind != .text {
+        for message in messages where message.runId != nil {
             latest["\(message.runId?.uuidString ?? "")-\(message.kind.rawValue)"] = message
         }
         return Set(latest.values.map(\.id))
@@ -40,6 +40,8 @@ struct ChatView: View {
                                 ChatBubbleView(role: message.role, content: message.content, repo: repo)
                             } else if message.kind == .bugCard {
                                 BugCardView(message: message)
+                            } else if message.kind == .actionCard {
+                                ActionCardView(message: message)
                             } else {
                                 RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
                                     .overlay {

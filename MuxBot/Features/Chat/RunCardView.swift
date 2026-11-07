@@ -41,7 +41,7 @@ struct RunCardView: View {
             Text(Linkify.attributed(run.task, repo: repo(run))).font(AppFont.body())
             RefChips(refs: refs(run))
             DisclosureGroup("What \(run.crew.name) gets") {
-                Text(BotBrain.workBrief(run.brief ?? run.task))
+                Text(BotBrain.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -53,10 +53,12 @@ struct RunCardView: View {
                     HStack {
                         Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
                         Spacer()
+                        #if os(macOS)
                         if connection.isPaired == false {
                             Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }
                                 .buttonStyle(.borderedProminent)
                         }
+                        #endif
                     }
                 } else {
                     buttons([("Cancel", .cancel, false), ("Approve", .approve, true)], run: run)
@@ -68,7 +70,6 @@ struct RunCardView: View {
             HStack(spacing: Spacing.sm) {
                 StatusBadge(kind: isLatest && run.phase == .running ? .running : run.phase == .canceled ? .failed : .done)
                 Label(run.crew.name, systemImage: run.crew.systemImage).font(AppFont.headline())
-                if run.isSimulated { SimulationBadge() }
                 Spacer()
                 if isLatest && run.phase == .running {
                     Button("Stop this run", systemImage: "stop.circle") { confirmStop = true }
@@ -80,21 +81,14 @@ struct RunCardView: View {
                             Button("Keep running", role: .cancel) {}
                         }
                 }
-                if run.previewURL.flatMap(URL.init(string:)) != nil {
+                if run.bot?.previewURL != nil {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
-                } else {
-                    Button("Live", systemImage: "play.rectangle") {}
-                        .disabled(true)
-                        .accessibilityHint("The live preview appears once the fleet is connected.")
                 }
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
             RefChips(refs: refs(run))
-            if run.isSimulated {
-                SimulationBadge()
-                Text(message.content).font(AppFont.body()).foregroundStyle(.secondary)
-            } else if run.phase == .failed || (run.phase == .canceled && message.content.hasPrefix("darkmux reported")) {
+            if run.phase == .failed || (run.phase == .canceled && message.content.hasPrefix("darkmux reported")) {
                 Label(run.phase == .failed ? run.summary : "Stopped",
                       systemImage: run.phase == .failed ? "exclamationmark.triangle" : "stop.circle")
                     .font(AppFont.body())
@@ -165,7 +159,7 @@ struct RunCardView: View {
             default:
                 Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)
             }
-        case .text, .bugCard:
+        case .text, .bugCard, .actionCard:
             EmptyView()
         }
     }
@@ -194,18 +188,6 @@ struct RunCardView: View {
 
     private func outcome(_ kind: StatusKind) -> some View {
         StatusBadge(kind: kind)
-    }
-}
-
-/// Marks a run that didn't really happen.
-struct SimulationBadge: View {
-    var body: some View {
-        Label("Simulation", systemImage: "theatermasks")
-            .font(AppFont.caption(.semibold))
-            .padding(.horizontal, Spacing.sm)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color.secondary.opacity(0.2)))
-            .foregroundStyle(.secondary)
     }
 }
 

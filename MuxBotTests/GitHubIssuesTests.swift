@@ -75,7 +75,7 @@ struct IssuesTurnTests {
 
     @Test func questionsGetAnHonestAnswerNotNoted() {
         let bots = [BotSummary(id: UUID(), name: "humancodereader", instructions: "Website", state: .ready)]
-        let turn = FallbackBrain.turn(for: "what do you think of the design?", speaker: bots[0], bots: bots, fleet: .sample)
+        let turn = FallbackBrain.turn(for: "what do you think of the design?", speaker: bots[0], bots: bots)
         #expect(turn.reply.hasPrefix("I can't answer that without the on-device model"))
     }
 }
@@ -141,8 +141,9 @@ struct LeadBotIssueTests {
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(issues: [issue(3445, "Crash on empty brief", labels: ["bug"])])
         await brain.send("any bug tickets on darkmux?", in: .lead, store: store)
-        #expect(brain.pending?.action == .handOff(toId: bot.id, toName: "darkmux", task: "Fix #3445: Crash on empty brief (kstrat2001/darkmux)"))
-        let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant }.last?.content ?? ""
+        let card = (store.conversation(for: .lead).messages ?? []).first { $0.kind == .actionCard }
+        #expect(card?.action == .handOff(toId: bot.id, toName: "darkmux", task: "Fix #3445: Crash on empty brief (kstrat2001/darkmux)"))
+        let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant && $0.kind == .text }.last?.content ?? ""
         #expect(reply.contains("#3445 Crash on empty brief"))
         #expect(reply.hasSuffix("I'll hand it over."))
     }
@@ -210,7 +211,7 @@ struct VisualReportTests {
 
     @Test func describedVisualProblemBecomesACoderFixNotAVerdict() {
         let text = "the Start_a_Project border looks like it has no padding on left and right."
-        let turn = FallbackBrain.turn(for: text, speaker: bot, bots: [bot], fleet: .sample)
+        let turn = FallbackBrain.turn(for: text, speaker: bot, bots: [bot])
         #expect(turn.action == .dispatch(crew: .coder, task: "Fix: \(text)"))
         #expect(turn.reply.hasPrefix("I can't see the preview"))
     }

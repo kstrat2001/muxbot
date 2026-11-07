@@ -17,6 +17,8 @@ final class AppRouter {
     /// directly, with no Home grid and no back button.
     var usesSidebar = false
     var sidebar: SidebarItem? = .lead
+    /// The Mac / iPad sidebar's own show-hide state (the toolbar toggle).
+    var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
     var showPairing = false
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".

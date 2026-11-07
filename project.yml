@@ -58,10 +58,6 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        UIBackgroundModes:
-          - fetch
-        BGTaskSchedulerPermittedIdentifiers:
-          - com.darklyenergized.darkmuxapp.refresh
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp
