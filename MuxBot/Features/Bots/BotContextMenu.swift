@@ -15,6 +15,12 @@ struct BotContextMenu: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contextMenu {
+                #if os(macOS)
+                if let bot {
+                    Button("Bot Info…", systemImage: "info.circle") { router.infoBotId = bot.id }
+                    Divider()
+                }
+                #endif
                 Button("Clear Conversation…", systemImage: "eraser") { confirmClear = true }
                 if bot != nil {
                     Divider()

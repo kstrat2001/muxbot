@@ -33,6 +33,14 @@ final class AppRouter {
     var previewFullScreen = false
     /// A run to scroll to (and briefly highlight) in its bot's conversation.
     var focusRunId: UUID?
+    /// The bot whose info is open (macOS: a popover on its sidebar row).
+    var infoBotId: UUID?
+
+    /// Whether the thread on screen is a bot's (the lead bot has no info).
+    var canShowInfo: Bool { context.botId != nil }
+
+    /// ⌘I: the info of the bot on screen.
+    func showInfo() { infoBotId = context.botId }
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.

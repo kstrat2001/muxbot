@@ -31,6 +31,9 @@ struct BotSidebar: View {
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
                         .botContextMenu(bot)
+                        #if os(macOS)
+                        .modifier(SidebarInfoButton(bot: bot))
+                        #endif
                 }
                 Button { router.showNewBot = true } label: {
                     plainRow("New bot", systemImage: "plus")
@@ -155,3 +158,38 @@ struct BotSidebar: View {
         return nil
     }
 }
+
+#if os(macOS)
+/// The (i) on a bot's sidebar row, shown while the row is hovered or
+/// selected: Bot info in a popover anchored to the row (also ⌘I and the
+/// row's context menu).
+struct SidebarInfoButton: ViewModifier {
+    let bot: Bot
+    @Environment(AppRouter.self) private var router
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        let open = router.infoBotId == bot.id
+        content
+            .overlay(alignment: .trailing) {
+                if hovering || open || router.sidebar == .bot(bot.id) {
+                    Button { router.infoBotId = bot.id } label: {
+                        Image(systemName: open ? "info.circle.fill" : "info.circle")
+                            .padding(4)
+                            .background(Circle().fill(.background))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Bot info (⌘I)")
+                    .accessibilityLabel("\(bot.name) info")
+                }
+            }
+            .onHover { hovering = $0 }
+            .popover(isPresented: Binding(get: { router.infoBotId == bot.id },
+                                          set: { if !$0, router.infoBotId == bot.id { router.infoBotId = nil } }),
+                     arrowEdge: .trailing) {
+                NavigationStack { BotInfoView(bot: bot) }
+                    .frame(width: 440, height: 580)
+            }
+    }
+}
+#endif

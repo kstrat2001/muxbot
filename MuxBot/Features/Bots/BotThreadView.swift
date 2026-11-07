@@ -125,8 +125,11 @@ struct BotThreadView: View {
                             .help("Open a pull request with this bot's committed changes")
                         }
                     }
+                    #if !os(macOS)
+                    // On the Mac, info is the (i) on the bot's sidebar row (and ⌘I).
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
                         .help("Bot info and resources")
+                    #endif
                 }
             }
         }

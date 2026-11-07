@@ -19,6 +19,11 @@ struct MuxBotCommands: Commands {
                 .keyboardShortcut("l")
             Button(router.showPreview ? "Hide Preview" : "Show Preview") { router.showPreview.toggle() }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
+            #if os(macOS)
+            Button("Bot Info…") { router.showInfo() }
+                .keyboardShortcut("i")
+                .disabled(!router.canShowInfo)
+            #endif
             Divider()
             Button("Pair with darkmux…") { router.showPairing = true }
         }
