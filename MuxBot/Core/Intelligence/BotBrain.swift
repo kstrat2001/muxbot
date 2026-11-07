@@ -512,7 +512,15 @@ final class BotBrain {
     /// Open PR, Not now. Approve starts the (simulated) run.
     func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
         guard store.apply(event, to: run) else { return }
-        if event == .approve, !startRealRun(run, message: run.task, store: store) { simulateFinish(run, store: store) }
+        if event == .approve, !startRealRun(run, message: run.task, store: store) {
+            if let bot = run.bot {
+                let why = connection?.isPaired == true
+                    ? "this bot has no work folder under ~/.darkmux/worktrees, or \(run.crew.name) has no darkmux role yet"
+                    : "this app isn't paired with darkmux (link button on Home)"
+                store.append(.system, "Simulated run: \(why).", to: store.conversation(for: .bot(bot.id)))
+            }
+            simulateFinish(run, store: store)
+        }
     }
 
     /// Sends the run to darkmux when this app is paired, the crew role maps

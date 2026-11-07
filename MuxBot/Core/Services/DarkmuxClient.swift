@@ -68,7 +68,7 @@ struct DarkmuxClient: Sendable {
                       headers: [String: String] = [:]) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = method
-        request.timeoutInterval = 10
+        request.timeoutInterval = 5
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
