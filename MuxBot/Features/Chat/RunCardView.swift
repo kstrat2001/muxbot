@@ -41,19 +41,19 @@ struct RunCardView: View {
             Text(Linkify.attributed(run.task, repo: repo(run))).font(AppFont.body())
             RefChips(refs: refs(run))
             DisclosureGroup("What \(run.crew.name) gets") {
-                Text(BotBrain.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.recipe(for:))))
+                Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(AppFont.footnote())
             if run.phase == .proposed {
-                if case let .needsWorkCopy(what)? = brain.blocker(for: run), let bot = run.bot {
+                if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
-                } else if let reason = brain.whyRunCannotStart(run) {
+                } else if let reason = brain.runs.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
                     HStack {
-                        Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+                        Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
                         Spacer()
                         #if os(macOS)
                         if connection.isPaired == false {
@@ -79,7 +79,7 @@ struct RunCardView: View {
                         .buttonStyle(.borderless)
                         .help("Stop this run")
                         .confirmationDialog("Stop this run?", isPresented: $confirmStop) {
-                            Button("Stop", role: .destructive) { Task { await brain.stop(run, store: store) } }
+                            Button("Stop", role: .destructive) { Task { await brain.runs.stop(run, store: store) } }
                             Button("Keep running", role: .cancel) {}
                         }
                 }
@@ -87,7 +87,7 @@ struct RunCardView: View {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
                 }
             }
-            if isLatest && brain.unreachableRuns.contains(run.id) {
+            if isLatest && brain.runs.unreachableRuns.contains(run.id) {
                 Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
                     .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
             }
@@ -129,21 +129,21 @@ struct RunCardView: View {
                 }
                 if isLatest && run.phase == .result {
                     HStack {
-                        Button("Discard", systemImage: "trash", role: .destructive) { brain.decide(.discard, on: run, store: store) }
+                        Button("Discard", systemImage: "trash", role: .destructive) { brain.runs.decide(.discard, on: run, store: store) }
                             .buttonStyle(.bordered)
                             .help("Put the changed files back as they were")
                         Button("Tweak", systemImage: "pencil") {
-                            brain.tweakRunId = run.id
+                            brain.runs.tweakRunId = run.id
                             router.barDraft = ""
                         }
                         .buttonStyle(.bordered)
                         Spacer()
-                        if brain.deciding.contains(run.id) { ProgressView().controlSize(.small) }
-                        Button("Keep", systemImage: "checkmark") { brain.decide(.keep, on: run, store: store) }
+                        if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
+                        Button("Keep", systemImage: "checkmark") { brain.runs.decide(.keep, on: run, store: store) }
                             .buttonStyle(.borderedProminent)
                             .help("Commit these changes to the work copy's branch")
                     }
-                    .disabled(brain.deciding.contains(run.id))
+                    .disabled(brain.runs.deciding.contains(run.id))
                 } else {
                     outcome(isLatest && run.phase == .discarded ? .failed : .done)
                 }
@@ -155,9 +155,9 @@ struct RunCardView: View {
             case .kept:
                 Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(.secondary)
                 HStack {
-                    Button("Not now") { brain.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
+                    Button("Not now") { brain.runs.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
                     Spacer()
-                    Button("Pass to \(LeadBot.name)") { brain.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
+                    Button("Pass to \(LeadBot.name)") { brain.runs.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
                 }
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
@@ -177,7 +177,7 @@ struct RunCardView: View {
     /// (Approve), then the card becomes the usual dispatch card.
     @ViewBuilder private func workCopyAsk(_ what: String, bot: Bot, run: BotRun) -> some View {
         let machine = FleetConnection.machineName
-        switch brain.workCopySetup[bot.id] {
+        switch brain.runs.workCopySetup[bot.id] {
         case .settingUp?:
             HStack(spacing: Spacing.sm) {
                 ProgressView().controlSize(.small)
@@ -195,9 +195,9 @@ struct RunCardView: View {
 
     private func buttonsForSetup(bot: Bot, run: BotRun, retry: Bool) -> some View {
         HStack {
-            Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
             Spacer()
-            Button(retry ? "Try again" : "Approve") { Task { await brain.setUpWorkCopy(for: bot, store: store) } }
+            Button(retry ? "Try again" : "Approve") { Task { await brain.runs.setUpWorkCopy(for: bot, store: store) } }
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -214,9 +214,9 @@ struct RunCardView: View {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 if index == items.count - 1 { Spacer() }
                 if item.2 {
-                    Button(item.0) { brain.decide(item.1, on: run, store: store) }.buttonStyle(.borderedProminent)
+                    Button(item.0) { brain.runs.decide(item.1, on: run, store: store) }.buttonStyle(.borderedProminent)
                 } else {
-                    Button(item.0) { brain.decide(item.1, on: run, store: store) }.buttonStyle(.bordered)
+                    Button(item.0) { brain.runs.decide(item.1, on: run, store: store) }.buttonStyle(.bordered)
                 }
             }
         }

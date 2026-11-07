@@ -72,14 +72,14 @@ struct BotInfoView: View {
                 }
             }
             Section("Preview") {
-                if bot.workspaceName != nil, let live = brain.livePreviews[bot.id] {
+                if bot.workspaceName != nil, let live = brain.runs.livePreviews[bot.id] {
                     HStack {
                         Label(live.status.text, systemImage: live.status == .ready ? "play.circle.fill" : live.status.isFailed ? "exclamationmark.triangle" : "circle.dotted")
                         Spacer()
                         if live.status == .ready || live.status == .starting || live.status == .installing {
-                            Button("Stop", systemImage: "stop.circle") { Task { await brain.stopPreview(for: bot) } }
+                            Button("Stop", systemImage: "stop.circle") { Task { await brain.runs.stopPreview(for: bot) } }
                         } else {
-                            Button("Start", systemImage: "play") { Task { await brain.ensurePreview(for: bot) } }
+                            Button("Start", systemImage: "play") { Task { await brain.runs.ensurePreview(for: bot) } }
                         }
                     }
                 }
@@ -111,13 +111,13 @@ struct BotInfoView: View {
         }
         .formStyle(.grouped)
         .task {
-            for repo in bot.repoSlugs { await brain.loadRecipe(for: repo, workspace: bot.workspaceName) }
+            for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
             await refreshBranch()
         }
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case let .success(url) = result else { return }
             Task {
-                folderProblem = await brain.addFolder(url, to: bot, store: BotStore(context: context))
+                folderProblem = await brain.runs.addFolder(url, to: bot, store: BotStore(context: context))
                 await refreshBranch()
             }
         }
@@ -132,7 +132,7 @@ struct BotInfoView: View {
     private var workCopySection: some View {
         Section {
             HStack(spacing: Spacing.sm) {
-                switch (brain.workCopySetup[bot.id], bot.workspaceName) {
+                switch (brain.runs.workCopySetup[bot.id], bot.workspaceName) {
                 case (.settingUp?, _):
                     ProgressView().controlSize(.small)
                     Text("Setting up on \(FleetConnection.machineName)…")
@@ -164,9 +164,9 @@ struct BotInfoView: View {
             #if os(macOS)
             HStack {
                 Button(bot.folderBookmark == nil ? "Add folder…" : "Change folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
-                if bot.workspaceName == nil, brain.workCopySetup[bot.id] != .settingUp,
+                if bot.workspaceName == nil, brain.runs.workCopySetup[bot.id] != .settingUp,
                    bot.folderBookmark != nil || !bot.repoSlugs.isEmpty {
-                    Button("Set up now") { Task { await brain.setUpWorkCopy(for: bot, store: BotStore(context: context)); await refreshBranch() } }
+                    Button("Set up now") { Task { await brain.runs.setUpWorkCopy(for: bot, store: BotStore(context: context)); await refreshBranch() } }
                 }
             }
             #endif
@@ -187,7 +187,7 @@ struct BotInfoView: View {
     }
 
     @ViewBuilder private func recipeRow(_ repo: String) -> some View {
-        switch brain.recipes[repo] {
+        switch brain.runs.recipes.recipes[repo] {
         case let .ready(manifest, fromLocalCopy)?:
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")

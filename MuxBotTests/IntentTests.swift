@@ -237,7 +237,7 @@ struct PreviewViewportTests {
 
 struct BriefTests {
     @Test func workBriefAddsRulesThatStopBlindSearchLoops() {
-        let text = BotBrain.workBrief("Fix #8")
+        let text = RunCoordinator.workBrief("Fix #8")
         #expect(text.hasPrefix("Fix #8"))
         #expect(text.contains("stop and say what you searched instead of repeating searches"))
     }
@@ -252,7 +252,7 @@ struct FixBriefFlowTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(issues: [GitHubIssue(number: 8, title: "No padding", body: "Open /pricing; selector `main > div`")])
-        brain.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
+        brain.runs.recipes.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
         await brain.send("fix #8", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         #expect(run.task == "Fix #8: No padding (kstrat2001/hcr)")

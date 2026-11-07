@@ -117,7 +117,7 @@ private struct StopButton: View {
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
             .confirmationDialog("Stop this run?", isPresented: $confirm) {
-                Button("Stop", role: .destructive) { Task { await brain.stop(run, store: BotStore(context: context)) } }
+                Button("Stop", role: .destructive) { Task { await brain.runs.stop(run, store: BotStore(context: context)) } }
                 Button("Keep running", role: .cancel) {}
             }
     }
@@ -160,7 +160,7 @@ private struct ActivityRow: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .confirmationDialog("Stop this run?", isPresented: $confirmStop) {
-                        Button("Stop", role: .destructive) { Task { await brain.stop(run, store: BotStore(context: context)) } }
+                        Button("Stop", role: .destructive) { Task { await brain.runs.stop(run, store: BotStore(context: context)) } }
                         Button("Keep running", role: .cancel) {}
                     }
             }

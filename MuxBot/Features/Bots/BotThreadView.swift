@@ -33,17 +33,17 @@ struct BotThreadView: View {
     private let isWide = true
     #endif
 
-    private var previewURL: URL? { bot.flatMap(brain.previewURL(for:)) }
+    private var previewURL: URL? { bot.flatMap(brain.runs.previewURL(for:)) }
     /// darkmux's preview while it starts or after it failed (no URL yet).
     private var pendingPreview: LivePreview? {
         guard previewURL == nil, let bot else { return nil }
-        return brain.livePreviews[bot.id]
+        return brain.runs.livePreviews[bot.id]
     }
 
     /// The viewports the bot's preview recipe lists, if it's loaded.
     private var recipeViewports: [String]? {
         for repo in bot?.repoSlugs ?? [] {
-            if case let .ready(manifest, _)? = brain.recipes[repo] { return manifest.viewports }
+            if case let .ready(manifest, _)? = brain.runs.recipes.recipes[repo] { return manifest.viewports }
         }
         return nil
     }
@@ -64,7 +64,7 @@ struct BotThreadView: View {
                             router.previewFullScreen = false
                         }
                     } else if let pending = pendingPreview, let bot {
-                        PreviewStatusView(preview: pending, retry: { Task { await brain.ensurePreview(for: bot) } })
+                        PreviewStatusView(preview: pending, retry: { Task { await brain.runs.ensurePreview(for: bot) } })
                     }
                 }
                 .safeAreaInset(edge: .bottom) { if full { BotBar() } }
@@ -101,7 +101,7 @@ struct BotThreadView: View {
         .toolbar {
             if bot != nil {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if let bot, brain.canPreview(bot) {
+                    if let bot, brain.runs.canPreview(bot) {
                         // A panel symbol; the toggle's highlight shows it's open.
                         @Bindable var router = router
                         Toggle(isOn: $router.showPreview) {
@@ -123,7 +123,7 @@ struct BotThreadView: View {
         .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
             // darkmux runs the preview from the repo's recipe when you open it
             // (again once the darkmux connection is ready at launch).
-            if router.showPreview, let bot { await brain.ensurePreview(for: bot) }
+            if router.showPreview, let bot { await brain.runs.ensurePreview(for: bot) }
         }
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         #if DEBUG
@@ -132,7 +132,7 @@ struct BotThreadView: View {
             // checkout, as Add folder does, without the Open panel.
             guard let path = UserDefaults.standard.string(forKey: "useFolder"), let bot, bot.workspaceName == nil || bot.folderName == nil else { return }
             bot.folderName = (path as NSString).lastPathComponent
-            await brain.setUpWorkCopy(for: bot, store: BotStore(context: modelContext), sourcePath: (path as NSString).expandingTildeInPath)
+            await brain.runs.setUpWorkCopy(for: bot, store: BotStore(context: modelContext), sourcePath: (path as NSString).expandingTildeInPath)
         }
         .task {
             // `-toggleFullWindowAfter 2`: flip the preview's full-window mode
@@ -157,7 +157,7 @@ struct BotThreadView: View {
             }
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
-                await brain.loadRecipe(for: repo, workspace: bot?.workspaceName)
+                await brain.runs.recipes.load(for: repo, workspace: bot?.workspaceName, connection: brain.connection, github: brain.github)
             }
         }
         #if os(iOS)

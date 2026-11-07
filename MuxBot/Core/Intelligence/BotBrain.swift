@@ -268,13 +268,20 @@ final class BotBrain {
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
     /// Off in tests, so turns are deterministic keyword-fallback turns.
-    var useOnDeviceModel = true
-    var github: any GitHubClient = RESTGitHubClient()
+    var useOnDeviceModel = true { didSet { runs.useOnDeviceModel = useOnDeviceModel } }
+    var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
+    /// Runs, work copies and previews.
+    let runs = RunCoordinator()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
-    var connection: FleetConnection?
-    /// Posts "result ready" / "didn't finish" notifications.
-    var notifier: NotificationService?
+    var connection: FleetConnection? {
+        get { runs.connection }
+        set { runs.connection = newValue }
+    }
+    var notifier: NotificationService? {
+        get { runs.notifier }
+        set { runs.notifier = newValue }
+    }
     /// Reads facts and snapshots from the live preview, when one is open.
     weak var pageInspector: (any PageInspecting)?
     /// Threads already told that the on-device model isn't working here.
@@ -337,7 +344,9 @@ final class BotBrain {
     /// Why the on-device model can't be used, or nil when it reports ready.
     /// (The simulator can report ready and still fail at inference when the
     /// Mac has Apple Intelligence off; that failure is caught per turn.)
-    var onDeviceUnavailableReason: String? {
+    var onDeviceUnavailableReason: String? { Self.modelUnavailableReason }
+
+    nonisolated static var modelUnavailableReason: String? {
         #if canImport(FoundationModels)
         switch SystemLanguageModel.default.availability {
         case .available: nil
@@ -425,7 +434,7 @@ final class BotBrain {
         // "what's this?" about a picked element: explain it from its facts.
         if let element, explicit == nil || explicit == .ask, ElementExplainer.isWhatsThis(text) {
             message.intentRaw = Intent.ask.rawValue
-            let pageFile = context.botId.flatMap(store.bot(id:)).flatMap(recipe(for:))?.pageFile
+            let pageFile = context.botId.flatMap(store.bot(id:)).flatMap(runs.recipes.recipe(for:))?.pageFile
             store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
             return
         }
@@ -469,7 +478,7 @@ final class BotBrain {
                     return
                 }
                 guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
-                                                          pageFile: bot.flatMap(recipe(for:))?.pageFile) else {
+                                                          pageFile: bot.flatMap(runs.recipes.recipe(for:))?.pageFile) else {
                     // Never send a model to search blind on a title.
                     store.append(.assistant, "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.", to: conversation)
                     return
@@ -571,435 +580,6 @@ final class BotBrain {
         return nil
         #endif
     }
-
-    // MARK: Preview recipes
-
-    enum RecipeState: Equatable {
-        case loading, ready(PreviewManifest, fromLocalCopy: Bool), missing, failed(String)
-    }
-
-    /// `.darkmux/preview.json` per repo: from the bot's workspace when
-    /// darkmux lets this app read it, else read-only from GitHub.
-    var recipes: [String: RecipeState] = [:]
-
-    func loadRecipe(for repo: String, workspace: String? = nil) async {
-        if case .ready? = recipes[repo] { return }
-        recipes[repo] = .loading
-        if let workspace, let connection, let token = connection.token,
-           let local = try? await connection.client.recipe(token: token, workspace: workspace) {
-            recipes[repo] = .ready(local, fromLocalCopy: true)
-            return
-        }
-        do {
-            guard let data = try await github.file(repo: repo, path: PreviewManifest.path) else {
-                recipes[repo] = .missing
-                return
-            }
-            recipes[repo] = .ready(try JSONDecoder().decode(PreviewManifest.self, from: data), fromLocalCopy: false)
-        } catch {
-            recipes[repo] = .failed(error.localizedDescription)
-        }
-    }
-
-    // MARK: Run loop
-
-    /// The run a Tweak is aimed at; the next message in its bot's thread
-    /// goes to that run instead of starting a new conversation turn.
-    var tweakRunId: UUID?
-
-    /// A person's decision on a run card: Approve, Cancel, Keep, Discard,
-    /// Open PR, Not now. Approve starts the run on darkmux.
-    func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
-        // Nothing fake ever runs: a run that can't go to darkmux isn't started.
-        if event == .approve, let reason = whyRunCannotStart(run) {
-            if let bot = run.bot { store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id))) }
-            return
-        }
-        // Keep and Discard act on the files first; the card moves only when
-        // darkmux has done it, and says what it did.
-        if event == .keep || event == .discard, run.darkmuxWorkId != nil {
-            Task { await applyOnDisk(event, to: run, store: store) }
-            return
-        }
-        guard store.apply(event, to: run) else { return }
-        if event == .approve { _ = startRealRun(run, message: run.brief ?? run.task, store: store) }
-    }
-
-    /// Runs with Keep or Discard in flight (their buttons wait).
-    var deciding: Set<UUID> = []
-
-    private func applyOnDisk(_ event: RunEvent, to run: BotRun, store: BotStore) async {
-        guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
-              let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
-            if let bot = run.bot, connection?.token == nil {
-                store.append(.system, "Can't do that yet: \(RunBlocker.unpaired.message).", to: store.conversation(for: .bot(bot.id)))
-            }
-            return
-        }
-        let thread = store.conversation(for: .bot(bot.id))
-        deciding.insert(run.id)
-        defer { deciding.remove(run.id) }
-        do {
-            if event == .keep {
-                let kept = try await connection.client.keepWork(token: token, workId: workId, message: run.task)
-                run.keptBranch = kept.branch
-                run.keptCommit = kept.commit
-                store.append(.system, RunResultText.kept(files: kept.files, branch: kept.branch, commit: kept.commit), to: thread)
-            } else {
-                let put = try await connection.client.discardWork(token: token, workId: workId)
-                store.append(.system, RunResultText.discarded(restored: put.restored, removed: put.removed), to: thread)
-            }
-            store.apply(event, to: run)
-        } catch {
-            store.append(.system, "Couldn't \(event == .keep ? "keep" : "discard") it: \(error.localizedDescription)", to: thread)
-        }
-    }
-
-    /// Every darkmux run gets the same working rules after its task, plus
-    /// the repo's own hints from its `.darkmux/preview.json`, never a guess
-    /// about how some other kind of project is laid out.
-    nonisolated static func workBrief(_ task: String, recipe: PreviewManifest? = nil) -> String {
-        let hints = recipe?.conventions.map { "\n\nAbout this repository: \($0)" } ?? ""
-        return task + hints + """
-
-
-            You are working in this repository (the current directory). Find the file responsible, \
-            make the smallest change that does it, and change nothing else. Don't run installs, builds \
-            or the dev server. If you can't find where to change, stop and say what you searched instead \
-            of repeating searches. When done, list the files you changed.
-            """
-    }
-
-    /// The recipe already read for a bot's repo, if any.
-    func recipe(for bot: Bot) -> PreviewManifest? {
-        guard let repo = bot.repoSlugs.first, case let .ready(manifest, _)? = recipes[repo] else { return nil }
-        return manifest
-    }
-
-    /// darkmux refusing or not answering a submit fails the run; it is never
-    /// a result to Keep.
-    nonisolated static func startFailure(_ error: any Error) -> RunEvent {
-        .fail(reason: "Couldn't start on darkmux", details: error.localizedDescription)
-    }
-
-    /// A Tweak re-sends the original brief, what the run changed, and the
-    /// change you asked for, so the crew has the whole picture.
-    static func tweakMessage(for run: BotRun, change: String) -> String {
-        var parts = ["Earlier task:\n\(run.brief ?? run.task)"]
-        if !run.changedFiles.isEmpty {
-            parts.append("You already changed: \(run.changedFiles.joined(separator: ", ")).")
-        }
-        parts.append("Now change this: \(change)")
-        return parts.joined(separator: "\n\n")
-    }
-
-    /// Polls a darkmux run until it ends, then posts its result (or notes
-    /// that it was stopped).
-    /// Runs whose darkmux can't be reached right now (the card says so).
-    var unreachableRuns: Set<UUID> = []
-
-    private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
-        var backoff = PollBackoff()
-        defer { unreachableRuns.remove(run.id) }
-        while run.phase == .running, run.darkmuxWorkId == workId {
-            try? await Task.sleep(for: .seconds(backoff.delay))
-            let status: DarkmuxClient.WorkStatus
-            do {
-                status = try await client.workStatus(token: token, workId: workId)
-                backoff.succeeded()
-                unreachableRuns.remove(run.id)
-            } catch let error as DarkmuxClient.ClientError where error.status == 404 {
-                // darkmux no longer knows this run (restarted, or it ended long ago):
-                // show it as stopped rather than spinning forever.
-                store.apply(.stop, to: run)
-                return
-            } catch {
-                // darkmux unreachable: back off, say so after three misses, keep trying.
-                backoff.failed()
-                if backoff.isUnreachable { unreachableRuns.insert(run.id) }
-                continue
-            }
-            switch status.status {
-            case "running", "cancelling": continue
-            case "cancelled": store.apply(.stop, to: run); return
-            case "done":
-                let report = status.finalAssistant ?? ""
-                run.notes = report.isEmpty ? nil : report
-                run.changedFiles = (status.changes?.files ?? []).map { f in
-                    "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
-                }
-                run.diff = status.changes?.diff
-                let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
-                store.apply(.finish(summary: summary), to: run)
-                if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
-                return
-            default:
-                switch RunResultText.classify(error: status.error ?? "", reason: status.reason) {
-                case .stopped: store.apply(.stop, to: run)
-                case let .failed(why):
-                    store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
-                    if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
-                }
-                return
-            }
-        }
-    }
-
-    /// One or two friendly sentences in the bot's own voice about what was
-    /// wrong and what changed: the on-device model when it can, else a
-    /// plain template.
-    private func summarize(report: String, files: [String], botName: String?) async -> String {
-        let fallback = RunResultText.fallbackSummary(report: report, files: files)
-        #if canImport(FoundationModels)
-        guard useOnDeviceModel, onDeviceUnavailableReason == nil, !report.isEmpty else { return fallback }
-        let session = LanguageModelSession(instructions: """
-            You are \(botName ?? "a bot") in Mux Bot. In one or two short, friendly sentences, in the first person, \
-            plain text with no markdown, say what was wrong and what you changed. Mention the file by name.
-            """)
-        let prompt = "Report:\n\(String(RunResultText.plain(report).prefix(1500)))\nFiles changed: \(files.joined(separator: ", "))"
-        guard let line = try? await session.respond(to: prompt).content.trimmingCharacters(in: .whitespacesAndNewlines),
-              !line.isEmpty, line.count < 400, !line.contains("**") else { return fallback }
-        return line
-        #else
-        return fallback
-        #endif
-    }
-
-    /// The app can't open pull requests yet (no GitHub sign-in): pass the
-    /// request to the lead bot's thread, honestly, and close the card.
-    func passPRToLead(_ run: BotRun, store: BotStore) {
-        guard let bot = run.bot else { return }
-        let workCopy = bot.workspaceName.map { " Work copy: darkmux workspace \($0) on \(bot.workspaceMachine ?? "this Mac")." } ?? ""
-        store.append(.system, "From \(bot.name): open a pull request for “\(run.task)”.\(workCopy)", to: store.conversation(for: .lead))
-        store.append(.system, "Passed to \(LeadBot.name).", to: store.conversation(for: .bot(bot.id)))
-        store.apply(.skipPR, to: run)
-    }
-
-    /// After a relaunch, pick up runs that were still going on darkmux.
-    func resumeFollowing(store: BotStore) {
-        guard let connection, let token = connection.token else { return }
-        let runs = (try? store.context.fetch(FetchDescriptor<BotRun>())) ?? []
-        // Earlier builds stored a raw darkmux error as the result; show those as
-        // a plain outcome now.
-        for run in runs where run.phase == .result {
-            guard run.summary.hasPrefix("darkmux reported an error") else { continue }
-            let raw = String(run.summary.dropFirst("darkmux reported an error: ".count))
-            run.details = RunResultText.withoutPlumbing(raw)
-            switch RunResultText.classify(error: raw, reason: nil) {
-            case .stopped: run.phase = .canceled
-            case let .failed(why): run.phase = .failed; run.summary = "Didn't finish: \(why)"
-            }
-            if let bot = run.bot { store.refreshState(of: bot) }
-        }
-        for run in runs where run.phase == .running {
-            guard let workId = run.darkmuxWorkId else { continue }
-            Task { await follow(run, workId: workId, token: token, client: connection.client, store: store) }
-        }
-    }
-
-    /// Stops a running run: darkmux cancels it (TERM, then KILL, and its
-    /// container); the card shows it stopped.
-    func stop(_ run: BotRun, store: BotStore) async {
-        guard run.phase == .running else { return }
-        if let workId = run.darkmuxWorkId, let connection, let token = connection.token {
-            do {
-                try await connection.client.cancelWork(token: token, workId: workId)
-            } catch {
-                if let bot = run.bot {
-                    store.append(.system, "Couldn't stop it on darkmux: \(error.localizedDescription)", to: store.conversation(for: .bot(bot.id)))
-                }
-                return
-            }
-        }
-        store.apply(.stop, to: run)
-    }
-
-    /// What stops a run going to darkmux right now, or nil when it can.
-    func blocker(for run: BotRun) -> RunBlocker? {
-        guard let bot = run.bot else { return .noCode }
-        return RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot)
-    }
-
-    /// Why a run can't go to darkmux right now, or nil when it can.
-    func whyRunCannotStart(_ run: BotRun) -> String? {
-        blocker(for: run)?.message
-    }
-
-    // MARK: Live previews
-
-    /// darkmux-run previews, by bot.
-    var livePreviews: [UUID: LivePreview] = [:]
-
-    /// The URL the preview panel shows for a bot.
-    func previewURL(for bot: Bot) -> URL? {
-        LivePreview.url(darkmux: livePreviews[bot.id], resource: bot.previewURL)
-    }
-
-    /// Whether a preview can be shown: darkmux can run one in the bot's work
-    /// copy, or you added a preview link.
-    func canPreview(_ bot: Bot) -> Bool {
-        (bot.workspaceName != nil && connection?.isPaired == true) || bot.previewURL != nil
-    }
-
-    /// Has darkmux run the bot's preview, and follows it until it's ready or
-    /// fails. Does nothing without a work copy or pairing (a preview link
-    /// is shown as is).
-    func ensurePreview(for bot: Bot) async {
-        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
-        if let status = livePreviews[bot.id]?.status, status != .stopped, !(status.isFailed) { return }
-        livePreviews[bot.id] = LivePreview(status: .starting)
-        do {
-            var p = try await connection.client.startPreview(token: token, workspace: name).live
-            livePreviews[bot.id] = p
-            let deadline = Date().addingTimeInterval(15 * 60)
-            while [.starting, .installing].contains(p.status), Date() < deadline {
-                try await Task.sleep(for: .seconds(1))
-                p = try await connection.client.previewStatus(token: token, workspace: name).live
-                livePreviews[bot.id] = p
-            }
-        } catch let error as DarkmuxClient.ClientError where error.status == 404 {
-            livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
-        } catch {
-            livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
-        }
-    }
-
-    func stopPreview(for bot: Bot) async {
-        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
-        try? await connection.client.stopPreview(token: token, workspace: name)
-        livePreviews[bot.id] = LivePreview(status: .stopped)
-    }
-
-    // MARK: Work copies
-
-    enum WorkCopySetup: Equatable { case settingUp, failed(String) }
-    /// Work copies being set up (or that failed), by bot.
-    var workCopySetup: [UUID: WorkCopySetup] = [:]
-
-    /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
-    /// folder you picked (on its own branch, from the fetched default
-    /// branch), else a clone of its GitHub repo. Stores only the name.
-    func setUpWorkCopy(for bot: Bot, store: BotStore, sourcePath: String? = nil) async {
-        guard let connection, let token = connection.token else {
-            workCopySetup[bot.id] = .failed(RunBlocker.unpaired.message)
-            return
-        }
-        let bodyAndAccess = sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
-            ?? workspaceRequest(for: bot)
-        guard let body = bodyAndAccess.body else {
-            workCopySetup[bot.id] = .failed(RunBlocker.noCode.message)
-            return
-        }
-        defer { bodyAndAccess.release() }
-        workCopySetup[bot.id] = .settingUp
-        do {
-            let made = try await connection.client.setUpWorkspace(token: token, body)
-            bot.workspaceName = made.workspace
-            bot.workspaceMachine = FleetConnection.machineName
-            if bot.repoSlugs.isEmpty, let repo = made.repo, let slug = GitHubIssue.repoSlug(from: repo) {
-                store.addResource(.repo, "https://github.com/\(slug)", to: bot)
-            }
-            store.save()
-            workCopySetup[bot.id] = nil
-            let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
-            store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
-            if let repo = bot.repoSlugs.first { recipes[repo] = nil; await loadRecipe(for: repo, workspace: made.workspace) }
-        } catch {
-            workCopySetup[bot.id] = .failed(error.localizedDescription)
-        }
-    }
-
-    /// The request for a bot's workspace, with folder access held until
-    /// `release` (the picked folder is security-scoped).
-    private func workspaceRequest(for bot: Bot) -> (body: DarkmuxClient.WorkspaceBody?, release: () -> Void) {
-        if let data = bot.folderBookmark, let url = Self.resolve(bookmark: data) {
-            let accessing = url.startAccessingSecurityScopedResource()
-            return (DarkmuxClient.WorkspaceBody(repoURL: nil, sourcePath: url.path, bot: bot.name),
-                    { if accessing { url.stopAccessingSecurityScopedResource() } })
-        }
-        if let repo = bot.repoSlugs.first {
-            return (DarkmuxClient.WorkspaceBody(repoURL: "https://github.com/\(repo)", sourcePath: nil, bot: bot.name), {})
-        }
-        return (nil, {})
-    }
-
-    nonisolated static func resolve(bookmark: Data) -> URL? {
-        var stale = false
-        #if os(macOS)
-        return try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)
-        #else
-        return try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
-        #endif
-    }
-
-    /// A folder you picked with the Open panel: it must be a git checkout.
-    /// Its GitHub repo (from `origin`) becomes the bot's repo, and darkmux
-    /// makes a worktree of it so runs never touch your own working tree.
-    /// Returns a plain sentence when the folder can't be used.
-    @discardableResult
-    func addFolder(_ url: URL, to bot: Bot, store: BotStore) async -> String? {
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-        guard GitRemote.isRepository(url) else {
-            return "\(url.lastPathComponent) isn't a git repository. Pick the top folder of a project you cloned with git."
-        }
-        #if os(macOS)
-        let bookmark = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
-        #else
-        let bookmark = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-        #endif
-        bot.folderBookmark = bookmark ?? Data()
-        bot.folderName = url.lastPathComponent
-        bot.workspaceName = nil
-        if let slug = GitRemote.originSlug(of: url), !bot.repoSlugs.contains(slug) {
-            store.addResource(.repo, "https://github.com/\(slug)", to: bot)
-        }
-        store.save()
-        guard bookmark != nil else { return "I couldn't keep access to \(url.lastPathComponent). Pick it again." }
-        if connection?.isPaired == true { await setUpWorkCopy(for: bot, store: store) }
-        return nil
-    }
-
-    /// Sends the run to darkmux when this app is paired, the crew role maps
-    /// to a darkmux role, and the bot has a workspace on this Mac.
-    /// Returns false otherwise.
-    private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
-        guard let connection, let token = connection.token,
-              let role = run.crew.darkmuxRole, let bot = run.bot,
-              let workspace = bot.workspaceName else { return false }
-        let thread = store.conversation(for: .bot(bot.id))
-        Task { @MainActor in
-            do {
-                // darkmux picks the profile for this role (its role binding, else
-                // the default) and checks it against what the owner granted.
-                let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
-                                                                               message: Self.workBrief(message, recipe: recipe(for: bot)),
-                                                                               profile: nil, workspace: workspace)
-                run.darkmuxWorkId = workId
-                store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
-                await follow(run, workId: workId, token: token, client: connection.client, store: store)
-            } catch {
-                store.apply(Self.startFailure(error), to: run)
-            }
-        }
-        return true
-    }
-
-    /// Sends a follow-up to the same run (and, once wired, the same worktree).
-    func tweak(_ request: String, run: BotRun, store: BotStore) {
-        let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let bot = run.bot else { return }
-        store.append(.user, text, to: store.conversation(for: .bot(bot.id)))
-        tweakRunId = nil
-        if let reason = whyRunCannotStart(run) {
-            store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id)))
-            return
-        }
-        guard store.apply(.tweak, to: run) else { return }
-        _ = startRealRun(run, message: Self.tweakMessage(for: run, change: text), store: store)
-    }
-
-
 
     /// Drops any sentence that names a tool or tells the user to use one.
     nonisolated static func withoutToolTalk(_ reply: String) -> String {

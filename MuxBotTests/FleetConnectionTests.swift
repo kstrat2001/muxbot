@@ -16,8 +16,8 @@ struct FleetConnectionTests {
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
-        #expect(brain.whyRunCannotStart(run) == "this app isn't paired with darkmux")
-        brain.decide(.approve, on: run, store: store)
+        #expect(brain.runs.whyRunCannotStart(run) == "this app isn't paired with darkmux")
+        brain.runs.decide(.approve, on: run, store: store)
         #expect(run.phase == .proposed)
         #expect(run.darkmuxWorkId == nil)
         #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." })
@@ -27,7 +27,7 @@ struct FleetConnectionTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
-        BotBrain().decide(.cancel, on: run, store: store)
+        BotBrain().runs.decide(.cancel, on: run, store: store)
         #expect(run.phase == .canceled)
     }
 }

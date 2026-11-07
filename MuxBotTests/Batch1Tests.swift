@@ -55,7 +55,7 @@ struct RunStartFailureTests {
     /// darkmux refusing a run is a failure, never a result to Keep.
     @Test func aRefusedSubmitFailsTheRun() {
         struct Refused: LocalizedError { var errorDescription: String? { "role coder is not defined on this machine" } }
-        let event = BotBrain.startFailure(Refused())
+        let event = RunCoordinator.startFailure(Refused())
         #expect(RunPhase.running.next(on: event) == .failed)
         guard case let .fail(reason, details) = event else { Issue.record("expected .fail"); return }
         #expect(reason == "Couldn't start on darkmux")
@@ -65,10 +65,10 @@ struct RunStartFailureTests {
 
 struct WorkBriefTests {
     @Test func hintsComeFromTheRepoNotFromAGuess() {
-        let plain = BotBrain.workBrief("Fix the gutter")
+        let plain = RunCoordinator.workBrief("Fix the gutter")
         #expect(!plain.contains("inertia"))
         let recipe = PreviewManifest(command: "npm run dev", conventions: "Page components are in inertia/pages/.")
-        let hinted = BotBrain.workBrief("Fix the gutter", recipe: recipe)
+        let hinted = RunCoordinator.workBrief("Fix the gutter", recipe: recipe)
         #expect(hinted.contains("Page components are in inertia/pages/."))
     }
 
@@ -93,7 +93,7 @@ struct TweakMessageTests {
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "Fix #8: gutter", crew: .coder, on: bot, brief: "Fix GitHub issue #8 ... Page: /pricing")
         run.changedFiles = ["inertia/pages/pricing.tsx +1 −1"]
-        let message = BotBrain.tweakMessage(for: run, change: "use 24px instead")
+        let message = RunCoordinator.tweakMessage(for: run, change: "use 24px instead")
         #expect(message.contains("Fix GitHub issue #8 ... Page: /pricing"))
         #expect(message.contains("inertia/pages/pricing.tsx"))
         #expect(message.contains("use 24px instead"))

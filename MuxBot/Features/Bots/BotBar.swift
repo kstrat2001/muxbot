@@ -16,7 +16,7 @@ struct BotBar: View {
 
     /// The run a Tweak is aimed at, if it belongs to the thread on screen.
     private var tweakRun: BotRun? {
-        guard let id = brain.tweakRunId, let run = runs.first(where: { $0.id == id }),
+        guard let id = brain.runs.tweakRunId, let run = runs.first(where: { $0.id == id }),
               run.bot?.id == router.context.botId else { return nil }
         return run
     }
@@ -40,7 +40,7 @@ struct BotBar: View {
                         .font(AppFont.caption())
                         .lineLimit(1)
                     Spacer()
-                    Button("Stop tweaking", systemImage: "xmark.circle.fill") { brain.tweakRunId = nil }
+                    Button("Stop tweaking", systemImage: "xmark.circle.fill") { brain.runs.tweakRunId = nil }
                         .labelStyle(.iconOnly)
                         .keyboardShortcut(.cancelAction)
                         .help("Stop tweaking (Esc)")
@@ -112,7 +112,7 @@ struct BotBar: View {
         let chat = router.context
         let store = BotStore(context: context)
         if let run = tweakRun {
-            brain.tweak(text, run: run, store: store)
+            brain.runs.tweak(text, run: run, store: store)
             return
         }
         Task { await brain.send(text, in: chat, store: store, element: element) }

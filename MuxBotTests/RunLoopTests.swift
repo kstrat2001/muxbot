@@ -113,9 +113,9 @@ struct RunLoopStoreTests {
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         store.apply(.finish(summary: "s"), to: run)
-        brain.tweakRunId = run.id
-        brain.tweak("make it bigger", run: run, store: store)
-        #expect(brain.tweakRunId == nil)
+        brain.runs.tweakRunId = run.id
+        brain.runs.tweak("make it bigger", run: run, store: store)
+        #expect(brain.runs.tweakRunId == nil)
         #expect(run.phase == .result)
         #expect(run.tweaks == 0)
     }
@@ -129,7 +129,7 @@ struct StopRunTests {
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
-        await BotBrain().stop(run, store: store)
+        await BotBrain().runs.stop(run, store: store)
         #expect(run.phase == .canceled)
         #expect(bot.state == .ready)
         #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content == "Stopped." })

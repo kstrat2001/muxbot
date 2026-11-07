@@ -24,7 +24,7 @@ struct MuxBotApp: App {
                         brain.pageInspector = preview
                         brain.connection = connection
                         brain.notifier = notifications
-                        brain.resumeFollowing(store: BotStore(context: container.mainContext))
+                        brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
                     }
             } else {
                 StoreRecoveryView(loader: store)

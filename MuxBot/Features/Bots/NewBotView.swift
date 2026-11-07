@@ -103,7 +103,7 @@ struct NewBotView: View {
             let kind = ResourceKind.guess(for: value)
             store.addResource(ResourceKind.addable.contains(kind) ? kind : .note, value, to: bot)
         }
-        if let folder { Task { await brain.addFolder(folder, to: bot, store: store) } }
+        if let folder { Task { await brain.runs.addFolder(folder, to: bot, store: store) } }
         dismiss()
     }
 }

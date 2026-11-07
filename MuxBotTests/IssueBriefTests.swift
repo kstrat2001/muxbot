@@ -73,7 +73,7 @@ struct IssueDispatchFlowTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.github = MockGitHub(issues: [issue])
-        brain.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
+        brain.runs.recipes.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
         return (store, bot, brain)
     }
 
