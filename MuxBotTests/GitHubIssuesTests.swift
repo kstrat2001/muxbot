@@ -84,7 +84,7 @@ struct IssuesTurnTests {
 struct BotIssueLookupTests {
     private func setUp(issues: [GitHubIssue] = [], error: (any Error)? = nil, repo: Bool = true) -> (BotStore, Bot, BotBrain) {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         if repo { store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot) }
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -135,7 +135,7 @@ struct ToolTalkFilterTests {
 struct LeadBotIssueTests {
     @Test func leadBotChecksTheNamedBotsRepoAndOffersAHandoff() async {
         let store = TestStore.fresh()
-        let bot = store.add(name: "darkmux", instructions: "CLI", modelName: "")
+        let bot = store.add(name: "darkmux", instructions: "CLI")
         store.addResource(.repo, "https://github.com/kstrat2001/darkmux", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -150,9 +150,9 @@ struct LeadBotIssueTests {
 
     @Test func leadBotAsksWhichRepoWhenItCannotTell() async {
         let store = TestStore.fresh()
-        let a = store.add(name: "darkmux", instructions: "CLI", modelName: "")
+        let a = store.add(name: "darkmux", instructions: "CLI")
         store.addResource(.repo, "https://github.com/kstrat2001/darkmux", to: a)
-        let b = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let b = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: b)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -196,12 +196,10 @@ struct PreviewRecipeTests {
         #expect(ResourceKind.guess(for: "https://example.com") == .link)
     }
 
-    @Test func runsCarryTheBotsPreviewURL() {
+    @Test func aPreviewLinkIsTheBotsOwn() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.previewURL, "http://mac.tail123.ts.net:8445/", to: bot)
-        let run = store.proposeRun(task: "x", crew: .coder, on: bot)
-        #expect(run.previewURL == "http://mac.tail123.ts.net:8445/")
         #expect(bot.previewURL?.port == 8445)
     }
 }

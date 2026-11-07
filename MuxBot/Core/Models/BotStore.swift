@@ -7,21 +7,11 @@ import SwiftData
 struct BotStore {
     let context: ModelContext
 
-    /// Starter bots: projects and themes, not roles. Edit or delete freely.
-    nonisolated static let defaults: [(name: String, systemImage: String, instructions: String, resources: [(ResourceKind, String)])] = [
-        ("humancodereader", "eyeglasses",
-         "The humancodereader.com website: a humorous AI code-review site. Site changes, previews and reviews.",
-         [(.repo, "https://github.com/kstrat2001/hcr")]),
-        ("darkmux", "square.stack.3d.up",
-         "darkmux, the local-LLM orchestration CLI: features, fixes, evals and releases.",
-         [(.repo, "https://github.com/kstrat2001/darkmux")]),
-        ("Personal brand", "megaphone",
-         "Posts, threads and articles in your voice, for X and Substack.",
-         []),
-        ("Daily update", "calendar",
-         "A short daily briefing: what ran, what finished, what needs you, what's next.",
-         []),
-    ]
+    /// The example bot a new user can add from the empty Home screen. Added
+    /// on request only, never seeded, so a second device syncing the same
+    /// iCloud data never makes a duplicate.
+    nonisolated static let example = (name: "My website", systemImage: "globe",
+                                      instructions: "Your website: changes, fixes and reviews. Add its project folder or GitHub repo in this bot's info.")
 
     func allBots() -> [Bot] {
         let descriptor = FetchDescriptor<Bot>(sortBy: [SortDescriptor(\.createdAt)])
@@ -32,22 +22,11 @@ struct BotStore {
         allBots().first { $0.id == id }
     }
 
-    /// Inserts the starter bots on first launch only.
-    func seedIfEmpty() {
-        guard allBots().isEmpty else { return }
-        let start = Date()
-        for (offset, item) in Self.defaults.enumerated() {
-            let bot = Bot(name: item.name, instructions: item.instructions, systemImage: item.systemImage)
-            bot.createdAt = start.addingTimeInterval(Double(offset))
-            context.insert(bot)
-            for (index, (kind, value)) in item.resources.enumerated() {
-                let resource = BotResource(kind: kind, value: value)
-                resource.createdAt = bot.createdAt.addingTimeInterval(Double(index) / 10)
-                context.insert(resource)
-                resource.bot = bot
-            }
-        }
-        try? context.save()
+    /// Adds the example bot, once.
+    @discardableResult
+    func addExample() -> Bot {
+        if let existing = allBots().first(where: { $0.name == Self.example.name }) { return existing }
+        return add(name: Self.example.name, instructions: Self.example.instructions, systemImage: Self.example.systemImage)
     }
 
     /// Earlier builds kept a darkmux work folder as a folder resource
@@ -69,11 +48,10 @@ struct BotStore {
     }
 
     @discardableResult
-    func add(name: String, instructions: String, modelName: String, systemImage: String = "sparkles") -> Bot {
+    func add(name: String, instructions: String, systemImage: String = "sparkles") -> Bot {
         let role = Bot(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             instructions: instructions.trimmingCharacters(in: .whitespacesAndNewlines),
-            modelName: modelName.trimmingCharacters(in: .whitespacesAndNewlines),
             systemImage: systemImage
         )
         context.insert(role)
@@ -120,7 +98,6 @@ struct BotStore {
         let run = BotRun(task: task, crew: crew)
         run.brief = brief
         // Until darkmux reports a run's own live URL, runs share the bot's.
-        run.previewURL = bot.sortedResources.last { $0.kind == .previewURL }?.value
         context.insert(run)
         run.bot = bot
         append(.assistant, task, kind: .dispatchCard, runId: run.id, to: conversation(for: .bot(bot.id)))

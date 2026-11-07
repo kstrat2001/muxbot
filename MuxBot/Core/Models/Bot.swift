@@ -48,20 +48,10 @@ final class Bot {
     var name: String = ""
     /// The persona: what this bot is about, in plain words. Routing reads it.
     var instructions: String = ""
-    /// Preferred local model. Empty means the default.
-    var modelName: String = ""
     var systemImage: String = "sparkles"
     @Attribute(.externalStorage) var avatarImageData: Data?
     var state: BotState = BotState.ready
     var createdAt: Date = Date()
-    /// This Mac's darkmux workspace for the bot (a name darkmux resolves
-    /// under its worktrees; never a path) and the machine it's on.
-    var workspaceName: String?
-    var workspaceMachine: String?
-    /// A local checkout you picked (security-scoped bookmark) and its
-    /// folder name for display. darkmux makes a worktree of it.
-    var folderBookmark: Data?
-    var folderName: String?
 
     @Relationship(deleteRule: .cascade, inverse: \BotTask.bot)
     var tasks: [BotTask]? = []
@@ -72,12 +62,34 @@ final class Bot {
     @Relationship(deleteRule: .cascade, inverse: \BotRun.bot)
     var runs: [BotRun]? = []
 
-    init(name: String, instructions: String, modelName: String = "", systemImage: String = "sparkles", state: BotState = BotState.ready) {
+    init(name: String, instructions: String, systemImage: String = "sparkles", state: BotState = BotState.ready) {
         self.name = name
         self.instructions = instructions
-        self.modelName = modelName
         self.systemImage = systemImage
         self.state = state
+    }
+
+    // MARK: This machine only (`LocalBotState`, never synced)
+
+    /// This Mac's darkmux workspace for the bot (a name darkmux resolves
+    /// under its worktrees; never a path) and the machine it's on.
+    var workspaceName: String? {
+        get { LocalBotState.shared[id]?.workspaceName }
+        set { LocalBotState.shared.update(id) { $0.workspaceName = newValue } }
+    }
+    var workspaceMachine: String? {
+        get { LocalBotState.shared[id]?.workspaceMachine }
+        set { LocalBotState.shared.update(id) { $0.workspaceMachine = newValue } }
+    }
+    /// A local checkout you picked (security-scoped bookmark) and its
+    /// folder name for display. darkmux makes a worktree of it.
+    var folderBookmark: Data? {
+        get { LocalBotState.shared[id]?.folderBookmark }
+        set { LocalBotState.shared.update(id) { $0.folderBookmark = newValue } }
+    }
+    var folderName: String? {
+        get { LocalBotState.shared[id]?.folderName }
+        set { LocalBotState.shared.update(id) { $0.folderName = newValue } }
     }
 
     /// The newest task.
@@ -89,12 +101,9 @@ final class Bot {
         (resources ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Where to watch this bot's work: the newest run's live URL, else a
-    /// preview URL resource (today a temporary test server).
+    /// A preview link you added (used when darkmux isn't running one).
     var previewURL: URL? {
-        let fromRun = (runs ?? []).sorted { $0.createdAt < $1.createdAt }.last?.previewURL
-        let fromResource = sortedResources.last { $0.kind == .previewURL }?.value
-        return (fromRun ?? fromResource).flatMap(URL.init(string:))
+        sortedResources.last { $0.kind == .previewURL }.flatMap { URL(string: $0.value) }
     }
 
     var repoSlugs: [String] {

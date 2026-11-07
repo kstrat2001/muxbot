@@ -63,7 +63,7 @@ struct GitRemoteTests {
 struct WorkCopyTests {
     @Test func anOldWorkFolderBecomesAWorkspaceName() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         store.addResource(.folder, "~/.darkmux/worktrees/hcr-preview", to: bot)
         store.addResource(.previewURL, "http://example.test:8445/", to: bot)
@@ -79,10 +79,10 @@ struct WorkCopyTests {
 
     @Test func whatBlocksARun() {
         let store = TestStore.fresh()
-        let bare = store.add(name: "Personal brand", instructions: "Posts", modelName: "")
-        let repo = store.add(name: "hcr", instructions: "Site", modelName: "")
+        let bare = store.add(name: "Personal brand", instructions: "Posts")
+        let repo = store.add(name: "hcr", instructions: "Site")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: repo)
-        let ready = store.add(name: "ready", instructions: "Site", modelName: "")
+        let ready = store.add(name: "ready", instructions: "Site")
         ready.workspaceName = "hcr-preview"
         #expect(RunBlocker.check(paired: false, crew: .coder, bot: repo) == .unpaired)
         #expect(RunBlocker.check(paired: true, crew: .evalRunner, bot: repo) == .noRole("Eval runner"))
@@ -93,7 +93,7 @@ struct WorkCopyTests {
 
     @Test func aPickedFolderIsAWorkCopySourceToo() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "site", instructions: "Site", modelName: "")
+        let bot = store.add(name: "site", instructions: "Site")
         bot.folderBookmark = Data([1, 2, 3])
         bot.folderName = "site"
         #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot) == .needsWorkCopy("site"))

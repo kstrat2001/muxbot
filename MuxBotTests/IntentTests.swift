@@ -45,7 +45,7 @@ struct PickedElementFlowTests {
 
     private func setUp() -> (BotStore, Bot, BotBrain, MockInspector) {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -138,7 +138,7 @@ struct IssueReferenceTests {
 struct FixIssueFlowTests {
     @Test func fixWithAnIssueLinkDispatchesThatIssueByTitle() async {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -196,7 +196,7 @@ struct CorrectionTests {
 struct CorrectionFlowTests {
     @Test func noItsAQuestionCancelsTheProposedRunAndAnswersInstead() async throws {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         await brain.send("fix: why does the pricing box touch the edges", in: .bot(bot.id), store: store)
@@ -247,7 +247,7 @@ struct BriefTests {
 struct FixBriefFlowTests {
     @Test func fixIssueRunsCarryTheIssueBodyAsTheBrief() async throws {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false

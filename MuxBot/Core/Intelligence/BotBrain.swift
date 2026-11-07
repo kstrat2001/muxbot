@@ -37,7 +37,6 @@ struct BotSummary: Sendable, Equatable {
 struct BotDraft: Sendable, Equatable, Codable {
     var name: String
     var instructions: String
-    var modelName: String = ""
     var systemImage: String = "sparkles"
 }
 
@@ -1012,7 +1011,7 @@ final class BotBrain {
             store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task)"
         case let .createBot(draft):
-            store.add(name: draft.name, instructions: draft.instructions, modelName: draft.modelName, systemImage: draft.systemImage)
+            store.add(name: draft.name, instructions: draft.instructions, systemImage: draft.systemImage)
             note = "Added bot \(draft.name)."
         case let .dispatch(crew, task):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }

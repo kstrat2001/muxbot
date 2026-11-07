@@ -24,6 +24,8 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
+	<key>MuxBotCloudSync</key>
+	<string>$(MUXBOT_CLOUD_SYNC)</string>
 	<key>MuxBotDarkmuxCLI</key>
 	<string>$(MUXBOT_DARKMUX_CLI)</string>
 	<key>NSAppTransportSecurity</key>
@@ -46,6 +48,10 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

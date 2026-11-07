@@ -13,7 +13,7 @@ struct FleetConnectionTests {
 
     @Test func unpairedApprovalDoesNotStartAnythingAndSaysWhy() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
         #expect(brain.whyRunCannotStart(run) == "this app isn't paired with darkmux")
@@ -25,7 +25,7 @@ struct FleetConnectionTests {
 
     @Test func cancelStillWorksWhenUnpaired() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         BotBrain().decide(.cancel, on: run, store: store)
         #expect(run.phase == .canceled)

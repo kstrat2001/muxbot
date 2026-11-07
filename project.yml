@@ -31,11 +31,6 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: MuxBot
-    entitlements:
-      path: MuxBot/MuxBot.entitlements
-      properties:
-        # Keep access to a folder you picked (Add folder) across launches.
-        com.apple.security.files.bookmarks.app-scope: true
     info:
       path: MuxBot/Info.plist
       properties:
@@ -46,6 +41,9 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         MuxBotDarkmuxCLI: $(MUXBOT_DARKMUX_CLI)
+        # iCloud sync of bots, runs and threads: on only in builds that set
+        # MUXBOT_CLOUD_SYNC = YES and the iCloud entitlements (Config/*.xcconfig).
+        MuxBotCloudSync: $(MUXBOT_CLOUD_SYNC)
         # Tailnet previews are plain http until tailnet HTTPS certificates
         # are enabled; allow it for *.ts.net only.
         NSAppTransportSecurity:
@@ -59,6 +57,9 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # CloudKit sync pushes (iOS); harmless while sync is off.
+        UIBackgroundModes:
+          - remote-notification
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp
@@ -74,6 +75,10 @@ targets:
         # Add folder: read a project folder you pick (its git remote), and
         # keep access to it with a security-scoped bookmark.
         ENABLE_USER_SELECTED_FILES: readonly
+        # Entitlements per platform; the iCloud variants are chosen in
+        # Config/Local.xcconfig once the iCloud container exists.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": MuxBot/$(MUXBOT_ENTITLEMENTS_MAC)
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphone*]": MuxBot/$(MUXBOT_ENTITLEMENTS_IOS)
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_EMIT_LOC_STRINGS: YES
 

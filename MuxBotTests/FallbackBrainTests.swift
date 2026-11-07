@@ -3,7 +3,7 @@ import Testing
 @testable import MuxBot
 
 struct FallbackBrainTests {
-    let bots: [BotSummary] = BotStore.defaults.map {
+    let bots: [BotSummary] = Fixtures.defaults.map {
         BotSummary(id: UUID(), name: $0.name, instructions: $0.instructions, state: .ready,
                    resources: $0.resources.map(\.1))
     }

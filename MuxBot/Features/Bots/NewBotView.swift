@@ -51,7 +51,7 @@ struct NewBotView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     let store = BotStore(context: context)
-                    let bot = store.add(name: name, instructions: instructions, modelName: "")
+                    let bot = store.add(name: name, instructions: instructions)
                     let value = resource.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !value.isEmpty {
                         let kind = ResourceKind.guess(for: value)

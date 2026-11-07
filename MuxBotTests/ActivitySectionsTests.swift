@@ -13,7 +13,7 @@ struct ActivitySectionsTests {
 
     @Test func groupsNeedsYouThenRunningThenFinished() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let done = run(store, bot, "old fix", to: .done, minutesAgo: 30)
         let stopped = run(store, bot, "stopped one", to: .canceled, minutesAgo: 20)
         let running = run(store, bot, "fixing now", to: .running, minutesAgo: 2)
@@ -29,7 +29,7 @@ struct ActivitySectionsTests {
 
     @Test func finishedKeepsOnlyTheRecentOnes() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "b", instructions: "", modelName: "")
+        let bot = store.add(name: "b", instructions: "")
         let runs = (0..<30).map { run(store, bot, "t\($0)", to: .done, minutesAgo: Double($0)) }
         #expect(ActivitySections(runs: runs).finished.count == 20)
     }
@@ -64,7 +64,7 @@ struct ActivityTimeTextTests {
 struct WorkSortTests {
     @Test func statusRankPutsNeedsYouThenRunningThenFinished() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "b", instructions: "", modelName: "")
+        let bot = store.add(name: "b", instructions: "")
         let a = store.proposeRun(task: "a", crew: .coder, on: bot); a.phase = .done
         let b = store.proposeRun(task: "b", crew: .coder, on: bot); b.phase = .running
         let c = store.proposeRun(task: "c", crew: .coder, on: bot); c.phase = .result
@@ -73,7 +73,7 @@ struct WorkSortTests {
 
     @Test func approveAndFinishStampTheRunsTimes() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "b", instructions: "", modelName: "")
+        let bot = store.add(name: "b", instructions: "")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         #expect(run.startedAt == nil)
         store.apply(.approve, to: run)

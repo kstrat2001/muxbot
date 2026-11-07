@@ -24,23 +24,9 @@ enum TestStore {
 
 @Suite(.serialized) @MainActor
 struct BotStoreTests {
-    @Test func seedsProjectAndThemeBotsOnce() {
-        let store = TestStore.fresh()
-        store.seedIfEmpty()
-        store.seedIfEmpty()
-        let bots = store.allBots()
-        #expect(bots.map(\.name) == ["humancodereader", "darkmux", "Personal brand", "Daily update"])
-        #expect(bots.allSatisfy { $0.state == .ready })
-        // Only the repo: no work folder or preview link is seeded.
-        let hcr = bots[0].sortedResources
-        #expect(hcr.map(\.kind) == [.repo])
-        #expect(hcr.first?.value == "https://github.com/kstrat2001/hcr")
-        #expect(bots[0].workspaceName == nil)
-    }
-
     @Test func approvingAddResourceSavesItOnTheThreadsBot() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         let card = store.proposeAction(.addResource(kind: .repo, value: "https://github.com/kstrat2001/hcr"), in: .bot(bot.id))
@@ -51,7 +37,7 @@ struct BotStoreTests {
 
     @Test func dispatchFromTheLeadThreadIsIgnored() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         let card = store.proposeAction(.dispatch(crew: .coder, task: "x"), in: .lead)
@@ -62,11 +48,10 @@ struct BotStoreTests {
 
     @Test func addSavesTrimmedFields() {
         let store = TestStore.fresh()
-        store.add(name: "  Release helper ", instructions: " Tags releases ", modelName: " qwen ")
+        store.add(name: "  Release helper ", instructions: " Tags releases ")
         let role = try! #require(store.allBots().first)
         #expect(role.name == "Release helper")
         #expect(role.instructions == "Tags releases")
-        #expect(role.modelName == "qwen")
         #expect(role.state == .ready)
         #expect(role.avatarImageData == nil)
         #expect(role.sortedResources.isEmpty)
@@ -74,7 +59,7 @@ struct BotStoreTests {
 
     @Test func handOffRecordsTaskSetsWorkingAndPostsInTargetThread() {
         let store = TestStore.fresh()
-        let role = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let role = store.add(name: "humancodereader", instructions: "Website")
         store.handOff(task: "Fix the login bug", from: LeadBot.name, to: role)
 
         let reloaded = try! #require(store.bot(id: role.id))
@@ -86,7 +71,7 @@ struct BotStoreTests {
 
     @Test func leadAndBotThreadsAreSeparate() {
         let store = TestStore.fresh()
-        let role = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let role = store.add(name: "humancodereader", instructions: "Website")
         let lead = store.conversation(for: .lead)
         #expect(lead.id == store.conversation(for: .lead).id)
         #expect(lead.id != store.conversation(for: .bot(role.id)).id)
@@ -94,7 +79,7 @@ struct BotStoreTests {
 
     @Test func approvingAHandOffNotesItInTheSourceThread() {
         let store = TestStore.fresh()
-        let role = store.add(name: "darkmux", instructions: "CLI", modelName: "")
+        let role = store.add(name: "darkmux", instructions: "CLI")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         let card = store.proposeAction(.handOff(toId: role.id, toName: "darkmux", task: "Check PR 12"), in: .lead)
@@ -115,7 +100,7 @@ struct BotStoreTests {
 
     @Test func cancelLeavesTheStoreAlone() {
         let store = TestStore.fresh()
-        let role = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let role = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         let card = store.proposeAction(.handOff(toId: role.id, toName: "humancodereader", task: "x"), in: .lead)

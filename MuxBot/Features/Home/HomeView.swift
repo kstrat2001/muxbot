@@ -6,6 +6,7 @@ import SwiftData
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Bot.createdAt) private var roles: [Bot]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
@@ -42,7 +43,9 @@ struct HomeView: View {
                 }
                 if roles.isEmpty {
                     EmptyStateView(systemImage: "person.3", title: "No bots yet",
-                                   message: "Tap + to add one, or ask \(LeadBot.name) to set one up.")
+                                   message: "A bot is a project or theme you name, like your website. Tap + to add one, or ask \(LeadBot.name) to set one up.")
+                    Button("Add an example bot", systemImage: "sparkles") { BotStore(context: modelContext).addExample() }
+                        .frame(maxWidth: .infinity)
                 }
             }
             .padding(Spacing.lg)
