@@ -5,7 +5,20 @@ import WebKit
 /// snapshot, while the panel shows it.
 @MainActor @Observable
 final class PreviewController: PageInspecting {
-    let page = WebPage()
+    let page: WebPage
+    private let relay = PickRelay()
+
+    init() {
+        // The page posts picks to the app the moment they happen; the
+        // selection menu script is installed on every load.
+        var config = WebPage.Configuration()
+        let scripts = WKUserContentController()
+        scripts.addUserScript(WKUserScript(source: BugReport.pageScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        scripts.add(relay, name: BugReport.handlerName)
+        config.userContentController = scripts
+        page = WebPage(configuration: config)
+        relay.onPick = { [weak self] element in self?.received(element) }
+    }
     private(set) var loadedURL: URL?
     /// Pick mode: hover highlights, a click picks an element.
     private(set) var isPicking = false
@@ -19,19 +32,17 @@ final class PreviewController: PageInspecting {
         Task { _ = try? await page.callJavaScript(isPicking ? BugReport.pickerScript : BugReport.cancelPickScript) }
     }
 
-    /// While a page is shown, keep the selection menu installed and collect
-    /// anything picked or chosen from it.
-    private func watch() async {
-        while loadedURL != nil {
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !page.isLoading,
-                  let json = try? await page.callJavaScript(BugReport.ensureScript) as? String,
-                  let element = try? JSONDecoder().decode(PickedElement.self, from: Data(json.utf8)) else { continue }
-            isPicking = false
-            picked = element
-            let rect = CGRect(x: element.x - 12, y: element.y - 12, width: element.width + 24, height: element.height + 24)
-            pickedCrop = try? await page.exported(as: .image(region: .rect(rect)))
+    /// A pick or a menu choice the page just posted.
+    private func received(_ element: PickedElement) {
+        isPicking = false
+        picked = element
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "checkPagePick") {
+            try? element.selector.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-pick.txt"), atomically: true, encoding: .utf8)
         }
+        #endif
+        let rect = CGRect(x: element.x - 12, y: element.y - 12, width: element.width + 24, height: element.height + 24)
+        Task { pickedCrop = try? await page.exported(as: .image(region: .rect(rect))) }
     }
 
     /// The crop of the element in the last message sent, for its bug card.
@@ -45,10 +56,19 @@ final class PreviewController: PageInspecting {
 
     func show(_ url: URL) {
         guard loadedURL != url else { return }
-        let first = loadedURL == nil
         loadedURL = url
         _ = page.load(URLRequest(url: url))
-        if first { Task { await watch() } }
+        #if DEBUG
+        // `-checkPagePick YES`: once loaded, pick the first heading from inside
+        // the page, as a click would, to prove picks reach the app.
+        if UserDefaults.standard.bool(forKey: "checkPagePick") {
+            Task {
+                while page.isLoading { try? await Task.sleep(for: .milliseconds(200)) }
+                try? await Task.sleep(for: .seconds(1))
+                _ = try? await page.callJavaScript("window.__muxSend(window.__muxDescribe(document.querySelector('h1') || document.body)); return true;")
+            }
+        }
+        #endif
     }
 
     func facts(for terms: [String]) async -> PageFacts? {
@@ -68,5 +88,16 @@ final class PreviewController: PageInspecting {
     func snapshotPNG() async -> Data? {
         guard loadedURL != nil else { return nil }
         return try? await page.exported(as: .image())
+    }
+}
+
+/// Receives the page's posted picks (WebKit calls it on the main thread).
+final class PickRelay: NSObject, WKScriptMessageHandler {
+    @MainActor var onPick: ((PickedElement) -> Void)?
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        MainActor.assumeIsolated {
+            if let element = BugReport.decodePick(message.body) { onPick?(element) }
+        }
     }
 }

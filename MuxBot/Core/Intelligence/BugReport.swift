@@ -138,12 +138,18 @@ enum BugReport {
                         facts: facts.map(describe) ?? [], repo: repo)
     }
 
-    /// Installed on every poll (idempotent, so it survives reloads):
+    /// The page-to-app message handler's name.
+    static let handlerName = "muxbot"
+
+    /// Installed by the app at the end of every page load (a user script):
     /// `__muxDescribe` measures an element, and selecting text shows a small
     /// menu, "Ask about this" / "Report a bug here". A pick or a menu choice
-    /// lands in `__muxPicked`, which this script returns and clears.
-    static let ensureScript = """
+    /// is posted to the app at once through `__muxSend`; nothing polls.
+    static let pageScript = """
         if (!window.__muxDescribe) {
+          window.__muxSend = json => {
+            try { window.webkit.messageHandlers.\(handlerName).postMessage(json); } catch (e) {}
+          };
           const selector = el => {
             const parts = [];
             for (let n = el; n && n !== document.body && parts.length < 5; n = n.parentElement) {
@@ -179,7 +185,7 @@ enum BugReport {
               if (parseFloat(st.borderLeftWidth) > 0 || parseFloat(st.borderTopWidth) > 0) { el = n; break; }
             }
             const quote = sel.toString().trim().slice(0, 200);
-            window.__muxPicked = window.__muxDescribe(el, { intent: intent, selectedText: quote });
+            window.__muxSend(window.__muxDescribe(el, { intent: intent, selectedText: quote }));
             menu.style.display = 'none';
             sel.removeAllRanges();
           };
@@ -201,7 +207,6 @@ enum BugReport {
             menu.style.display = 'block';
           });
         }
-        const picked = window.__muxPicked; window.__muxPicked = null; return picked;
         """
 
     /// Pick mode: hover highlights, a click (or tap) picks the element.
@@ -219,12 +224,18 @@ enum BugReport {
           document.removeEventListener('click', pick, true);
           box.remove(); window.__muxPick = null;
         };
-        const pick = e => { e.preventDefault(); e.stopPropagation(); window.__muxPicked = window.__muxDescribe(e.target); cleanup(); };
+        const pick = e => { e.preventDefault(); e.stopPropagation(); window.__muxSend(window.__muxDescribe(e.target)); cleanup(); };
         document.addEventListener('mousemove', move, true);
         document.addEventListener('click', pick, true);
         window.__muxPick = { cleanup };
         return true;
         """
+
+    /// A pick posted by the page (a JSON string from `__muxDescribe`).
+    static func decodePick(_ body: Any) -> PickedElement? {
+        guard let json = body as? String else { return nil }
+        return try? JSONDecoder().decode(PickedElement.self, from: Data(json.utf8))
+    }
 
     static let cancelPickScript = "if (window.__muxPick) window.__muxPick.cleanup(); return true;"
 

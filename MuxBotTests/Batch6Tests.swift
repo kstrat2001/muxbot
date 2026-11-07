@@ -104,3 +104,21 @@ struct IssueLookupTests {
         #expect(reply == "#8 is already closed on kstrat2001/hcr.")
     }
 }
+
+struct PreviewMessagingTests {
+    @Test func picksArePostedToTheAppNotPolled() {
+        // The page script sends a pick to the app's handler the moment it happens.
+        #expect(BugReport.pageScript.contains("webkit.messageHandlers.\(BugReport.handlerName).postMessage"))
+        #expect(!BugReport.pageScript.contains("return picked"))
+        #expect(BugReport.pickerScript.contains("__muxSend("))
+        #expect(!BugReport.pickerScript.contains("window.__muxPicked ="))
+    }
+
+    @Test func aPostedPickDecodes() throws {
+        let json = #"{"label":"Human_Models","selector":"h1","tag":"h1","url":"/pricing","viewport":683,"left":20,"right":20,"width":643,"height":48,"paddingLeft":"0px","paddingRight":"0px","marginLeft":"0px","marginRight":"0px","x":20,"y":80}"#
+        let element = try #require(BugReport.decodePick(json))
+        #expect(element.selector == "h1")
+        #expect(BugReport.decodePick("not json") == nil)
+        #expect(BugReport.decodePick(42) == nil)
+    }
+}
