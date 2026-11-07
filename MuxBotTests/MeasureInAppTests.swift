@@ -92,7 +92,7 @@ struct LayoutMeasureTests {
     @Test func realHcrAt820HasNoEdgeProblemAndOneMediaRule() {
         let rule = LayoutFacts.Media(media: "(max-width: 768px)", matches: false, selectors: [":root", ".container"], source: "/inertia/css/app.css")
         var twin = rule
-        twin.source = "/Users/kain/.darkmux/worktrees/hcr-humancodereader/inertia/css/app.css"
+        twin.source = "/Users/me/.darkmux/worktrees/hcr-site/inertia/css/app.css"
         let header = LayoutFacts.Section(selector: "header.header", width: 820, left: 0, display: "block", columns: nil,
                                          paddingLeft: "0px", paddingRight: "0px", fontSize: "16px", maxWidth: "none",
                                          textLeft: 20, textRight: 800)
