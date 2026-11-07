@@ -506,7 +506,9 @@ struct BotLookPicker: View {
     private func swatches(_ title: String, _ hexes: [String], selected: String, pick: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(title).font(AppFont.caption(.semibold)).foregroundStyle(.secondary)
-            HStack(spacing: Spacing.sm) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // A wrapping grid, not an HStack: 12 swatches are wider than a phone's form row.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 30, maximum: 34), spacing: Spacing.sm)], alignment: .leading, spacing: Spacing.sm) {
                 ForEach(Array(hexes.enumerated()), id: \.element) { index, hex in
                     Button { pick(hex) } label: {
                         Circle().fill(Color(hex: hex))
