@@ -6,7 +6,7 @@ import AppKit
 #endif
 
 /// Pair this app with darkmux on this Mac. The app shows a code; you approve
-/// it on the Mac with `darkmux client approve`. Until then runs are simulated.
+/// it on the Mac with `darkmux client approve`. Until then runs can't start.
 struct FleetPairingView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.dismiss) private var dismiss

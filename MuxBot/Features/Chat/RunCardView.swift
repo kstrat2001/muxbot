@@ -92,10 +92,41 @@ struct RunCardView: View {
             if run.isSimulated {
                 SimulationBadge()
                 Text(message.content).font(AppFont.body()).foregroundStyle(.secondary)
-                Button("Pair with darkmux to run it for real", systemImage: "link") { router.showPairing = true }
-                    .buttonStyle(.borderedProminent)
+            } else if run.phase == .failed || (run.phase == .canceled && message.content.hasPrefix("darkmux reported")) {
+                Label(run.phase == .failed ? run.summary : "Stopped",
+                      systemImage: run.phase == .failed ? "exclamationmark.triangle" : "stop.circle")
+                    .font(AppFont.body())
+                if let details = run.details, !details.isEmpty {
+                    DisclosureGroup("Details") {
+                        Text(details)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(AppFont.footnote())
+                }
             } else {
                 Text(message.content).font(AppFont.body())
+                if !run.changedFiles.isEmpty {
+                    DisclosureGroup {
+                        Text(run.diff ?? "No diff available.")
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
+                            .font(AppFont.footnote(.semibold))
+                    }
+                }
+                if let notes = run.notes {
+                    DisclosureGroup("\(run.crew.name)'s notes") {
+                        Text((try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes))
+                            .font(AppFont.footnote())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(AppFont.footnote())
+                }
                 if isLatest && run.phase == .result {
                     HStack {
                         Button("Discard", systemImage: "trash", role: .destructive) { brain.decide(.discard, on: run, store: store) }
@@ -114,12 +145,15 @@ struct RunCardView: View {
                 }
             }
         case .prCard:
-            Label("Open a pull request?", systemImage: "arrow.triangle.pull").font(AppFont.headline())
+            Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
             switch run.phase {
             case .kept:
-                buttons([("Not now", .skipPR, false), ("Approve", .openPR, true)], run: run)
-            case .prOpened:
-                Text("PR opened (sample: the fleet isn't connected yet).").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text(RunResultText.prUnavailable).font(AppFont.footnote()).foregroundStyle(.secondary)
+                HStack {
+                    Button("Not now") { brain.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
+                    Spacer()
+                    Button("Pass to \(LeadBot.name)") { brain.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
+                }
             default:
                 outcome(.done)
             }

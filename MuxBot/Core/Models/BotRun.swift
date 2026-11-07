@@ -5,16 +5,17 @@ import SwiftData
 /// proposed → running → result → kept / tweaked (back to running) /
 /// discarded; kept → PR opened or done.
 enum RunPhase: String, Codable, Sendable {
-    case proposed, canceled, running, result, kept, discarded, prOpened, done
+    case proposed, canceled, running, result, kept, discarded, prOpened, done, failed
 
     /// Whether the run still needs a person to act on it.
     var awaitsYou: Bool { self == .proposed || self == .result || self == .kept }
     var isActive: Bool { self == .running }
-    var isClosed: Bool { [.canceled, .discarded, .prOpened, .done].contains(self) }
+    var isClosed: Bool { [.canceled, .discarded, .prOpened, .done, .failed].contains(self) }
 }
 
 enum RunEvent: Equatable, Sendable {
     case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR, closeSimulation, stop
+    case fail(reason: String, details: String?)
 }
 
 extension RunPhase {
@@ -31,6 +32,7 @@ extension RunPhase {
         case (.kept, .skipPR): .done
         case (.result, .closeSimulation): .done
         case (.running, .stop): .canceled
+        case (.running, .fail): .failed
         default: nil
         }
     }
@@ -38,7 +40,6 @@ extension RunPhase {
 
 /// One piece of work a bot dispatches to its darkmux crew, followed
 /// through approval, the live run, the result, and what you decide.
-/// Sample data only until the fleet is connected.
 @Model
 final class BotRun {
     var id: UUID = UUID()
@@ -54,6 +55,13 @@ final class BotRun {
     var tweaks: Int = 0
     /// Set when the run was sent to darkmux for real (not simulated).
     var darkmuxWorkId: String?
+    /// The crew's full report (markdown), shown collapsed.
+    var notes: String?
+    /// Files the run changed ("path +a −r" lines) and the diff, from darkmux.
+    var changedFiles: [String] = []
+    var diff: String?
+    /// For a run that didn't finish: the log, without darkmux plumbing.
+    var details: String?
     /// Nothing really ran: the app isn't paired with darkmux (or can't
     /// send this run). Shown as a simulation, closed without a decision.
     var isSimulated: Bool = false

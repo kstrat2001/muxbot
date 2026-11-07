@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 /// This app's pairing with darkmux on this Mac, and the real runs it sends.
-/// Unpaired, runs stay simulated.
+/// Unpaired, runs can't start.
 @MainActor @Observable
 final class FleetConnection {
     enum State: Equatable {

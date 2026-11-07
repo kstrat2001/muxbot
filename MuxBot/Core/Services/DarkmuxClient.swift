@@ -22,15 +22,24 @@ struct DarkmuxClient: Sendable {
     }
 
     struct WorkStatus: Decodable, Sendable {
+        struct Changes: Decodable, Sendable {
+            struct File: Decodable, Sendable { var path: String; var added: Int?; var removed: Int? }
+            var files: [File]
+            var diff: String?
+        }
         var status: String
         var error: String?
+        var reason: String?
         var finalAssistant: String?
-        enum CodingKeys: String, CodingKey { case status, error, result }
+        var changes: Changes?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             status = try c.decode(String.self, forKey: .status)
             error = try c.decodeIfPresent(String.self, forKey: .error)
+            reason = try c.decodeIfPresent(String.self, forKey: .reason)
+            changes = try? c.decodeIfPresent(Changes.self, forKey: .changes)
             let result = try? c.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
             finalAssistant = try result?.decodeIfPresent(String.self, forKey: .finalAssistant)
         }
@@ -113,7 +122,7 @@ struct DarkmuxClient: Sendable {
 
 extension CrewRole {
     /// The darkmux built-in role that does this crew role's work; nil when
-    /// there isn't one yet (that crew role stays simulated).
+    /// there isn't one yet (that crew role can't run yet).
     var darkmuxRole: String? {
         switch self {
         case .coder: "coder"

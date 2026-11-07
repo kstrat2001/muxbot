@@ -146,6 +146,10 @@ struct BotStore {
             append(.assistant, "Kept. Open a pull request for it?", kind: .prCard, runId: run.id, to: thread)
         case .stop:
             append(.system, "Stopped.", to: thread)
+        case let .fail(reason, details):
+            run.details = details
+            run.summary = reason
+            append(.assistant, reason, kind: .resultCard, runId: run.id, to: thread)
         case .cancel, .discard, .openPR, .skipPR, .closeSimulation:
             try? context.save()
         }

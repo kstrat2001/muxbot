@@ -280,7 +280,7 @@ final class BotBrain {
     var useOnDeviceModel = true
     var github: any GitHubClient = RESTGitHubClient()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
-    /// to darkmux for real instead of being simulated.
+    /// to darkmux.
     weak var connection: FleetConnection?
     /// Reads facts and snapshots from the live preview, when one is open.
     weak var pageInspector: (any PageInspecting)?
@@ -602,7 +602,7 @@ final class BotBrain {
     var tweakRunId: UUID?
 
     /// A person's decision on a run card: Approve, Cancel, Keep, Discard,
-    /// Open PR, Not now. Approve starts the (simulated) run.
+    /// Open PR, Not now. Approve starts the run on darkmux.
     func decide(_ event: RunEvent, on run: BotRun, store: BotStore) {
         // Nothing fake ever runs: a run that can't go to darkmux isn't started.
         if event == .approve, let reason = whyRunCannotStart(run) {
@@ -645,16 +645,73 @@ final class BotBrain {
             switch status.status {
             case "running": continue
             case "cancelled": store.apply(.stop, to: run); return
-            case "done": store.apply(.finish(summary: String((status.finalAssistant ?? "\(run.crew.name) finished.").prefix(800))), to: run); return
-            default: store.apply(.finish(summary: "darkmux reported an error: \(status.error ?? "unknown")"), to: run); return
+            case "done":
+                let report = status.finalAssistant ?? ""
+                run.notes = report.isEmpty ? nil : report
+                run.changedFiles = (status.changes?.files ?? []).map { f in
+                    "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
+                }
+                run.diff = status.changes?.diff
+                let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
+                store.apply(.finish(summary: summary), to: run)
+                return
+            default:
+                switch RunResultText.classify(error: status.error ?? "", reason: status.reason) {
+                case .stopped: store.apply(.stop, to: run)
+                case let .failed(why):
+                    store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
+                }
+                return
             }
         }
+    }
+
+    /// One or two friendly sentences in the bot's own voice about what was
+    /// wrong and what changed: the on-device model when it can, else a
+    /// plain template.
+    private func summarize(report: String, files: [String], botName: String?) async -> String {
+        let fallback = RunResultText.fallbackSummary(report: report, files: files)
+        #if canImport(FoundationModels)
+        guard useOnDeviceModel, onDeviceUnavailableReason == nil, !report.isEmpty else { return fallback }
+        let session = LanguageModelSession(instructions: """
+            You are \(botName ?? "a bot") in Mux Bot. In one or two short, friendly sentences, in the first person, \
+            plain text with no markdown, say what was wrong and what you changed. Mention the file by name.
+            """)
+        let prompt = "Report:\n\(String(RunResultText.plain(report).prefix(1500)))\nFiles changed: \(files.joined(separator: ", "))"
+        guard let line = try? await session.respond(to: prompt).content.trimmingCharacters(in: .whitespacesAndNewlines),
+              !line.isEmpty, line.count < 400, !line.contains("**") else { return fallback }
+        return line
+        #else
+        return fallback
+        #endif
+    }
+
+    /// The app can't open pull requests yet (no GitHub sign-in): pass the
+    /// request to the lead bot's thread, honestly, and close the card.
+    func passPRToLead(_ run: BotRun, store: BotStore) {
+        guard let bot = run.bot else { return }
+        let workCopy = FleetConnection.workdir(for: bot).map { " Work copy: \($0)." } ?? ""
+        store.append(.system, "From \(bot.name): open a pull request for “\(run.task)”.\(workCopy)", to: store.conversation(for: .lead))
+        store.append(.system, "Passed to \(LeadBot.name).", to: store.conversation(for: .bot(bot.id)))
+        store.apply(.skipPR, to: run)
     }
 
     /// After a relaunch, pick up runs that were still going on darkmux.
     func resumeFollowing(store: BotStore) {
         guard let connection, let token = connection.token else { return }
         let runs = (try? store.context.fetch(FetchDescriptor<BotRun>())) ?? []
+        // Earlier builds stored a raw darkmux error as the result; show those as
+        // a plain outcome now.
+        for run in runs where run.phase == .result {
+            guard run.summary.hasPrefix("darkmux reported an error") else { continue }
+            let raw = String(run.summary.dropFirst("darkmux reported an error: ".count))
+            run.details = RunResultText.withoutPlumbing(raw)
+            switch RunResultText.classify(error: raw, reason: nil) {
+            case .stopped: run.phase = .canceled
+            case let .failed(why): run.phase = .failed; run.summary = "Didn't finish: \(why)"
+            }
+            if let bot = run.bot { store.refreshState(of: bot) }
+        }
         for run in runs where run.phase == .running {
             guard let workId = run.darkmuxWorkId else { continue }
             Task { await follow(run, workId: workId, token: token, client: connection.client, store: store) }
@@ -690,7 +747,7 @@ final class BotBrain {
 
     /// Sends the run to darkmux when this app is paired, the crew role maps
     /// to a darkmux role, and the bot has a folder under ~/.darkmux/worktrees.
-    /// Returns false (so the run is simulated) otherwise.
+    /// Returns false otherwise.
     private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
         guard let connection, let token = connection.token,
               let role = run.crew.darkmuxRole, let bot = run.bot,
