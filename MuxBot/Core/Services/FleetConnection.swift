@@ -61,7 +61,7 @@ final class FleetConnection {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
                         keychain.save(key: Self.tokenKey, value: token)
-                        let profiles = status.scopes?.profiles ?? []
+                        let profiles = status.scopes?.profiles ?? []   // informational only
                         UserDefaults.standard.set(name, forKey: Self.nameKey)
                         UserDefaults.standard.set(profiles, forKey: Self.profilesKey)
                         state = .paired(name: name, profiles: profiles)

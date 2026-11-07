@@ -6,9 +6,11 @@ import Foundation
 struct DarkmuxClient: Sendable {
     var baseURL = URL(string: "http://127.0.0.1:8767")!
 
+    /// What a pairing asks for. darkmux decides what apps may actually run
+    /// (a machine setting), so the reply may carry less or nothing.
     struct Scopes: Codable, Sendable, Equatable {
-        var profiles: [String]
-        var workspace: Bool
+        var profiles: [String]?
+        var workspace: Bool?
     }
 
     struct PairStatus: Decodable, Sendable {

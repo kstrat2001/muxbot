@@ -17,7 +17,7 @@ struct FleetPairingView: View {
             switch connection.state {
             case .unpaired, .failed:
                 Section {
-                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal and choose which profiles it may use; you can revoke it any time.")
+                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time.")
                         .foregroundStyle(.secondary)
                 }
                 if case let .failed(message) = connection.state {
@@ -40,7 +40,7 @@ struct FleetPairingView: View {
                     #endif
                     step(2, "Paste this command and press Return.") { EmptyView() }
                     CommandBox(command: connection.approveCommand)
-                    step(3, "Check that darkmux shows this code, type y, then choose which profiles this app may use (Return for all).") { EmptyView() }
+                    step(3, "Check that darkmux shows this code, then type y and press Return.") { EmptyView() }
                     Text(code)
                         .font(.system(.largeTitle, design: .monospaced, weight: .bold))
                         .frame(maxWidth: .infinity)
@@ -70,7 +70,8 @@ struct FleetPairingView: View {
                     Label("Paired as \(name)", systemImage: "checkmark.circle.fill")
                         .font(AppFont.headline())
                         .foregroundStyle(Color.brandGreen)
-                    Text("Profiles: \(profiles.joined(separator: ", ")) · work folders under ~/.darkmux/worktrees")
+                    Text(profiles.isEmpty ? "Runs use whatever darkmux on this Mac allows apps to use, in work folders under ~/.darkmux/worktrees."
+                                          : "Profiles: \(profiles.joined(separator: ", ")) · work folders under ~/.darkmux/worktrees")
                         .font(AppFont.footnote()).foregroundStyle(.secondary)
                 }
                 Section {
