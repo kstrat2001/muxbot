@@ -57,6 +57,9 @@ enum BotAction: Sendable, Equatable, Codable {
 struct BotTurn: Sendable, Equatable {
     var reply: String
     var action: BotAction?
+    /// The crew's brief for a `.dispatch` action (an issue's page, element
+    /// and expected result); nil sends the task text alone.
+    var brief: String? = nil
 }
 
 // MARK: - Keyword fallback
@@ -579,7 +582,21 @@ final class BotBrain {
             if let bot { store.proposeRun(task: task, crew: crew, on: bot, brief: brief) }
             return
         case .issues?:
-            let turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
+            var turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
+            // An offered fix carries the issue's brief; one that doesn't say
+            // where is asked about instead of sent to search blind.
+            if case let .dispatch(crew, task)? = turn.action, let number = Intent.issueNumber(in: task), let repo = repos.first?.repo {
+                let issue = try? await github.issue(repo: repo, number: number)
+                if let issue, let brief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
+                                                             pageFile: bot.flatMap(runs.recipes.recipe(for:))?.pageFile) {
+                    turn.brief = brief
+                } else {
+                    turn.action = nil
+                    turn.reply = turn.reply.replacingOccurrences(
+                        of: "Fix #\(number) with Coder?",
+                        with: "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.")
+                }
+            }
             apply(turn, context: context, store: store, conversation: conversation)
             return
         case .ask?, nil:
@@ -662,7 +679,7 @@ final class BotBrain {
         switch result.action {
         case let .dispatch(crew, task)?:
             // Dispatches become a card in the thread, not a bar card.
-            if let bot = context.botId.flatMap(store.bot(id:)) { store.proposeRun(task: task, crew: crew, on: bot) }
+            if let bot = context.botId.flatMap(store.bot(id:)) { store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief) }
         case let action?:
             store.proposeAction(action, in: context)
         case nil:

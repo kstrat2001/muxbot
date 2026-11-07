@@ -200,8 +200,14 @@ struct RunCardView: View {
     /// and Close. Never Keep or Discard: there's nothing to keep.
     @ViewBuilder private func questionCard(_ run: BotRun) -> some View {
         RefChips(refs: refs(run))
-        Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
-            .font(AppFont.headline())
+        if let claim = RunResultText.unbackedClaim(in: [run.notes ?? "", run.summary], crew: run.crew.name, changedFiles: run.changedFiles) {
+            // Its words say it edited something; darkmux saw no change.
+            Label(claim, systemImage: "exclamationmark.triangle")
+                .font(AppFont.headline()).foregroundStyle(Color.brandOrange)
+        } else {
+            Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
+                .font(AppFont.headline())
+        }
         if let notes = run.notes {
             Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
                                repo: repo(run), linkPaths: true))

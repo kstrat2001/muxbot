@@ -184,13 +184,19 @@ final class RunCoordinator {
         }
     }
 
+    /// Only a run that changed files gets the model's summary: asked "what
+    /// you changed" with none, it invents an edit (Fix #10, 2026-11-07).
+    nonisolated static func modelSummarizes(report: String, files: [String]) -> Bool {
+        !report.isEmpty && !files.isEmpty
+    }
+
     /// One or two friendly sentences in the bot's own voice about what was
     /// wrong and what changed: the on-device model when it can, else a
     /// plain template.
     private func summarize(report: String, files: [String], botName: String?) async -> String {
         let fallback = RunResultText.fallbackSummary(report: report, files: files)
         #if canImport(FoundationModels)
-        guard useOnDeviceModel, BotBrain.modelUnavailableReason == nil, !report.isEmpty else { return fallback }
+        guard useOnDeviceModel, BotBrain.modelUnavailableReason == nil, Self.modelSummarizes(report: report, files: files) else { return fallback }
         let session = LanguageModelSession(instructions: """
             You are \(botName ?? "a bot") in Mux Bot. In one or two short, friendly sentences, in the first person, \
             plain text with no markdown, say what was wrong and what you changed. Mention the file by name.
