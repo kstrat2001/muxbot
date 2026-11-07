@@ -273,6 +273,8 @@ final class BotBrain {
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection?
+    /// Posts "result ready" / "didn't finish" notifications.
+    var notifier: NotificationService?
     /// Reads facts and snapshots from the live preview, when one is open.
     weak var pageInspector: (any PageInspecting)?
     /// Threads already told that the on-device model isn't working here.
@@ -715,12 +717,14 @@ final class BotBrain {
                 run.diff = status.changes?.diff
                 let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
                 store.apply(.finish(summary: summary), to: run)
+                if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
             default:
                 switch RunResultText.classify(error: status.error ?? "", reason: status.reason) {
                 case .stopped: store.apply(.stop, to: run)
                 case let .failed(why):
                     store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
+                    if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 }
                 return
             }

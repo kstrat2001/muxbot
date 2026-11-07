@@ -107,10 +107,7 @@ struct RunCardView: View {
                 Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
                 if !run.changedFiles.isEmpty {
                     DisclosureGroup {
-                        Text(run.diff ?? "No diff available.")
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        DiffView(diff: run.diff ?? "No diff available.")
                     } label: {
                         Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
                             .font(AppFont.footnote(.semibold))
@@ -248,5 +245,33 @@ struct RefChips: View {
                 }
             }
         }
+    }
+}
+
+/// A unified diff with added lines green, removed red, hunks blue.
+struct DiffView: View {
+    let diff: String
+
+    var body: some View {
+        Text(colored)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var colored: AttributedString {
+        var out = AttributedString()
+        for line in diff.split(separator: "\n", omittingEmptySubsequences: false) {
+            var piece = AttributedString(String(line) + "\n")
+            switch DiffLine.kind(of: String(line)) {
+            case .added: piece.foregroundColor = .green; piece.backgroundColor = Color.green.opacity(0.08)
+            case .removed: piece.foregroundColor = .red; piece.backgroundColor = Color.red.opacity(0.08)
+            case .hunk: piece.foregroundColor = .blue
+            case .meta: piece.foregroundColor = .secondary
+            case .context: break
+            }
+            out += piece
+        }
+        return out
     }
 }

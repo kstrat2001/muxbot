@@ -1,7 +1,11 @@
 import Foundation
 import UserNotifications
+#if os(macOS)
+import AppKit
+#endif
 
-/// Local notifications, e.g. "a bot needs you". Nothing schedules them yet.
+/// Local notifications when a run has a result or didn't finish, and the
+/// app badge (runs waiting on you). On by default; off in Settings.
 @MainActor @Observable
 final class NotificationService {
     private let center = UNUserNotificationCenter.current()
@@ -23,18 +27,25 @@ final class NotificationService {
         isAuthorized = settings.authorizationStatus == .authorized
     }
 
-    /// Tell the user a role is waiting on them.
-    func notifyNeedsYou(roleId: UUID, roleName: String, detail: String) {
+    static let enabledKey = "notifyRuns"
+    /// Settings toggle; on unless turned off.
+    static var isEnabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+
+    /// A run finished with a result or didn't finish: tell the user.
+    func post(_ notice: RunNotice, runId: UUID) async {
+        guard Self.isEnabled else { return }
+        if !isAuthorized { _ = await requestAuthorization() }
         guard isAuthorized else { return }
-        schedule(id: "needs-you-\(roleId)", title: "\(roleName) needs you", body: detail, after: 1)
+        schedule(id: "run-\(runId)", title: notice.title, body: notice.body, after: 1)
     }
 
-    func cancel(roleId: UUID) {
-        center.removePendingNotificationRequests(withIdentifiers: ["needs-you-\(roleId)"])
-    }
-
-    func cancelAll() {
-        center.removeAllPendingNotificationRequests()
+    /// The app badge: runs waiting on you (the Dock icon on macOS).
+    func setBadge(_ count: Int) {
+        #if os(macOS)
+        NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+        #else
+        center.setBadgeCount(count) { _ in }
+        #endif
     }
 
     private func schedule(id: String, title: String, body: String, after seconds: TimeInterval) {

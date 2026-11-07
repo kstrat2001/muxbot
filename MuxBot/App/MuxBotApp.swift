@@ -11,7 +11,7 @@ struct MuxBotApp: App {
     @State private var store = StoreLoader()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             if let container = store.container {
                 ContentView()
                     .environment(router)
@@ -23,12 +23,36 @@ struct MuxBotApp: App {
                     .task {
                         brain.pageInspector = preview
                         brain.connection = connection
+                        brain.notifier = notifications
                         brain.resumeFollowing(store: BotStore(context: container.mainContext))
                     }
             } else {
                 StoreRecoveryView(loader: store)
             }
         }
+        .commands { MuxBotCommands(router: router) }
+
+        #if os(macOS)
+        Settings {
+            SettingsView()
+                .environment(router)
+                .environment(brain)
+                .environment(connection)
+                .environment(notifications)
+        }
+
+        MenuBarExtra {
+            if let container = store.container {
+                MenuBarRuns().environment(router).modelContainer(container)
+            }
+        } label: {
+            if let container = store.container {
+                MenuBarLabel().modelContainer(container)
+            } else {
+                Image(systemName: "bubble.left.and.bubble.right")
+            }
+        }
+        #endif
     }
 }
 

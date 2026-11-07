@@ -163,6 +163,24 @@ struct BotStore {
         return resource
     }
 
+    /// Deletes a bot with its runs, resources and thread, and forgets its
+    /// machine-local state. darkmux's work copy is left alone.
+    func delete(_ bot: Bot) {
+        let id = bot.id
+        if let thread = (try? context.fetch(FetchDescriptor<ChatConversation>()))?.first(where: { $0.roleId == id }) {
+            context.delete(thread)
+        }
+        context.delete(bot)
+        LocalBotState.shared[id] = nil
+        try? context.save()
+    }
+
+    /// Empties a thread. Runs stay (they're in Activity).
+    func clearConversation(_ chat: ChatContext) {
+        for message in conversation(for: chat).messages ?? [] { context.delete(message) }
+        try? context.save()
+    }
+
     func remove(_ resource: BotResource) {
         context.delete(resource)
         try? context.save()

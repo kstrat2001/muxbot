@@ -21,6 +21,10 @@ final class AppRouter {
     var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
     var showPairing = false
+    /// Search across bots and threads (⌘F).
+    var showSearch = false
+    /// Bumped to put the cursor in the chat bar (⌘L).
+    var focusBarRequest = 0
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".
     var barDraft = ""
     /// The live preview panel beside (or above) the thread on screen.

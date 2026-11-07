@@ -12,6 +12,7 @@ struct BotBar: View {
     @Query(sort: \Bot.createdAt) private var bots: [Bot]
 
     @Query private var runs: [BotRun]
+    @FocusState private var barFocused: Bool
 
     /// The run a Tweak is aimed at, if it belongs to the thread on screen.
     private var tweakRun: BotRun? {
@@ -41,6 +42,8 @@ struct BotBar: View {
                     Spacer()
                     Button("Stop tweaking", systemImage: "xmark.circle.fill") { brain.tweakRunId = nil }
                         .labelStyle(.iconOnly)
+                        .keyboardShortcut(.cancelAction)
+                        .help("Stop tweaking (Esc)")
                 }
                 .foregroundStyle(.secondary)
             }
@@ -59,16 +62,23 @@ struct BotBar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("About \(element.chip)")
             }
+            #if os(macOS)
             HStack(spacing: Spacing.sm) {
-                TextField(tweakRun != nil ? "What should change?" : preview.picked != nil ? "What about it?" : "Message \(listenerName)…", text: $router.barDraft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
-                    .onSubmit(send)
-                Button("Send", systemImage: "arrow.up.circle.fill", action: send)
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                    .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking)
+                field.textFieldStyle(.roundedBorder)
+                sendButton.font(.title2)
             }
+            #else
+            // Messages-style: a capsule with the send button inside.
+            HStack(alignment: .bottom, spacing: Spacing.xs) {
+                field.textFieldStyle(.plain)
+                    .padding(.vertical, Spacing.sm)
+                    .padding(.leading, Spacing.md)
+                sendButton.font(.title)
+                    .padding(.trailing, 2)
+                    .padding(.bottom, 2)
+            }
+            .background(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+            #endif
         }
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
@@ -77,6 +87,20 @@ struct BotBar: View {
             // "Report a bug here" from the preview starts a bug report.
             if preview.picked?.intent == "bug", router.barDraft.isEmpty { router.barDraft = "bug: " }
         }
+    }
+
+    private var field: some View {
+        TextField(tweakRun != nil ? "What should change?" : preview.picked != nil ? "What about it?" : "Message \(listenerName)…", text: Bindable(router).barDraft, axis: .vertical)
+            .lineLimit(1...4)
+            .focused($barFocused)
+            .onSubmit(send)
+            .onChange(of: router.focusBarRequest) { barFocused = true }
+    }
+
+    private var sendButton: some View {
+        Button("Send", systemImage: "arrow.up.circle.fill", action: send)
+            .labelStyle(.iconOnly)
+            .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking)
     }
 
     private func send() {

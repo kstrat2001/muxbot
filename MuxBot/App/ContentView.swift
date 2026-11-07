@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// macOS and iPad: a sidebar of Mux Bot, each bot and Activity, with the
 /// selected thread beside it. iPhone: two tabs, Bots (Home grid, then
@@ -6,6 +7,11 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
+    @Environment(NotificationService.self) private var notifications
+    @Query private var runs: [BotRun]
+
+    /// Runs waiting on a decision: the app badge.
+    private var waitingCount: Int { RunNotice.badgeCount(runs) }
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -30,6 +36,8 @@ struct ContentView: View {
         .sheet(isPresented: $router.showPairing) {
             NavigationStack { FleetPairingView() }
         }
+        .sheet(isPresented: $router.showSearch) { SearchView() }
+        .onChange(of: waitingCount, initial: true) { notifications.setBadge(waitingCount) }
     }
 
     #if DEBUG

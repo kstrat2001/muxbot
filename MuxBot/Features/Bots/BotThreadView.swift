@@ -95,6 +95,9 @@ struct BotThreadView: View {
             #endif
         }
         .navigationTitle(title)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             if bot != nil {
                 ToolbarItemGroup(placement: .primaryAction) {
