@@ -45,6 +45,7 @@ struct BotThreadView: View {
 
     var body: some View {
         Group {
+            #if os(macOS)
             if let url = previewURL, router.showPreview {
                 // One layout per size class whose structure never changes:
                 // the preview stays at the same place in the tree, so its
@@ -76,6 +77,10 @@ struct BotThreadView: View {
             } else {
                 chat
             }
+            #else
+            // iPhone and iPad: the preview is a full-screen cover, never a panel.
+            chat
+            #endif
         }
         .navigationTitle(title)
         .toolbar {
@@ -85,7 +90,11 @@ struct BotThreadView: View {
                         // A panel symbol; the toggle's highlight shows it's open.
                         @Bindable var router = router
                         Toggle(isOn: $router.showPreview) {
-                            Label("Preview", systemImage: isWide ? "sidebar.right" : "rectangle.tophalf.inset.filled")
+                            #if os(macOS)
+                            Label("Preview", systemImage: "sidebar.right")
+                            #else
+                            Label("Preview", systemImage: "safari")
+                            #endif
                         }
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
@@ -103,9 +112,13 @@ struct BotThreadView: View {
             // twice, for reproducing layout switches without clicking.
             let delay = UserDefaults.standard.double(forKey: "toggleFullWindowAfter")
             guard delay > 0 else { return }
-            for _ in 0..<2 {
+            for _ in 0..<4 {
                 try? await Task.sleep(for: .seconds(delay))
+                #if os(macOS)
                 router.previewFullScreen.toggle()
+                #else
+                router.showPreview.toggle()   // iOS: present and dismiss the full-screen preview
+                #endif
             }
         }
         #endif
@@ -115,6 +128,12 @@ struct BotThreadView: View {
                 await brain.loadRecipe(for: repo, localWorkdir: bot.flatMap(FleetConnection.workdir(for:)))
             }
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: Binding(get: { router.showPreview && previewURL != nil },
+                                              set: { router.showPreview = $0 })) {
+            if let url = previewURL { PhonePreviewScreen(url: url, bot: bot) }
+        }
+        #endif
         .sheet(isPresented: $showInfo) {
             if let bot { NavigationStack { BotInfoView(bot: bot) } }
         }

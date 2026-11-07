@@ -38,6 +38,13 @@ final class AppRouter {
         }
     }
 
+    /// Picking an element (or "Ask about this" / "Report a bug here") in the
+    /// full-screen preview goes back to the chat, where the chip waits.
+    func returnToChatAfterPick() {
+        showPreview = false
+        previewFullScreen = false
+    }
+
     func navigate(to route: Route) {
         guard usesSidebar else { path.append(route); return }
         path = []

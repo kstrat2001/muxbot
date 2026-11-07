@@ -77,3 +77,15 @@ struct SidebarRoutingTests {
         #expect(!thread.hasUnread)
     }
 }
+
+@MainActor
+struct PreviewReturnTests {
+    @Test func pickingInTheFullScreenPreviewReturnsToTheChat() {
+        let router = AppRouter()
+        router.showPreview = true
+        router.previewFullScreen = true
+        router.returnToChatAfterPick()
+        #expect(!router.showPreview)
+        #expect(!router.previewFullScreen)
+    }
+}
