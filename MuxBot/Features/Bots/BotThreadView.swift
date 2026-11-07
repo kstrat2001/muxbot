@@ -8,6 +8,7 @@ struct BotThreadView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(BotBrain.self) private var brain
+    @Environment(FleetConnection.self) private var connection
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
     @State private var showInfo = false
@@ -116,8 +117,9 @@ struct BotThreadView: View {
             }
         }
         .onAppear { markRead() }
-        .task(id: router.showPreview) {
-            // darkmux runs the preview from the repo's recipe when you open it.
+        .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
+            // darkmux runs the preview from the repo's recipe when you open it
+            // (again once the darkmux connection is ready at launch).
             if router.showPreview, let bot { await brain.ensurePreview(for: bot) }
         }
         .onChange(of: conversations.first?.messages?.count) { markRead() }

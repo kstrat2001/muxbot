@@ -49,7 +49,7 @@ struct RunResultTextTests {
 struct RunEndingTests {
     @Test func aFailedRunClosesWithOneLineAndNoDecision() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         #expect(store.apply(.fail(reason: "model endpoint refused the connection", details: "raw log"), to: run))

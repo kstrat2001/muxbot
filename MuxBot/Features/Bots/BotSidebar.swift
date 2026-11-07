@@ -6,6 +6,7 @@ import SwiftData
 struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Bot.createdAt) private var bots: [Bot]
     @Query private var threads: [ChatConversation]
 
@@ -26,6 +27,13 @@ struct BotSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                if bots.isEmpty {
+                    Button { BotStore(context: modelContext).addExample() } label: {
+                        Label("Add an example bot", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Bots")
             }

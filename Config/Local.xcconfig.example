@@ -3,3 +3,10 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 
 // Optional: the darkmux command the pairing screen shows (default: darkmux).
 // MUXBOT_DARKMUX_CLI = /path/to/darkmux
+
+// Optional: iCloud sync of bots, runs and threads (CloudKit, private database).
+// Needs the iCloud container iCloud.com.darklyenergized.darkmuxapp in your
+// developer account (Xcode > Signing & Capabilities > iCloud > CloudKit).
+// MUXBOT_CLOUD_SYNC = YES
+// MUXBOT_ENTITLEMENTS_MAC = MuxBot-iCloud-macOS.entitlements
+// MUXBOT_ENTITLEMENTS_IOS = MuxBot-iCloud-iOS.entitlements

@@ -9,7 +9,7 @@ import Testing
 struct ActionCardTests {
     @Test func aProposedActionIsACardInItsThread() async {
         let store = TestStore.fresh()
-        store.add(name: "humancodereader", instructions: "The website", modelName: "")
+        store.add(name: "humancodereader", instructions: "The website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         await brain.send("Update the pricing copy on humancodereader", in: .lead, store: store)
@@ -23,8 +23,8 @@ struct ActionCardTests {
 
     @Test func severalCardsWaitAtOnceAndEachIsDecidedOnce() {
         let store = TestStore.fresh()
-        let a = store.add(name: "a", instructions: "A", modelName: "")
-        let b = store.add(name: "b", instructions: "B", modelName: "")
+        let a = store.add(name: "a", instructions: "A")
+        let b = store.add(name: "b", instructions: "B")
         let brain = BotBrain()
         let first = store.proposeAction(.handOff(toId: a.id, toName: "a", task: "one"), in: .lead)
         let second = store.proposeAction(.handOff(toId: b.id, toName: "b", task: "two"), in: .lead)
@@ -90,7 +90,7 @@ struct WorkBriefTests {
 struct TweakMessageTests {
     @Test func aTweakCarriesTheBriefTheChangedFilesAndTheChange() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "Fix #8: gutter", crew: .coder, on: bot, brief: "Fix GitHub issue #8 ... Page: /pricing")
         run.changedFiles = ["inertia/pages/pricing.tsx +1 −1"]
         let message = BotBrain.tweakMessage(for: run, change: "use 24px instead")

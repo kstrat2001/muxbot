@@ -68,7 +68,7 @@ struct IssueBriefCompositionTests {
 struct IssueDispatchFlowTests {
     private func setUp(_ issue: GitHubIssue) -> (BotStore, Bot, BotBrain) {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false

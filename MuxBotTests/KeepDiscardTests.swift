@@ -39,7 +39,7 @@ struct KeepDiscardTextTests {
 struct KeepCardTests {
     @Test func aKeptRunsCardSaysItWasCommitted() {
         let store = TestStore.fresh()
-        let bot = store.add(name: "hcr", instructions: "Site", modelName: "")
+        let bot = store.add(name: "hcr", instructions: "Site")
         let run = store.proposeRun(task: "Fix", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         store.apply(.finish(summary: "done"), to: run)

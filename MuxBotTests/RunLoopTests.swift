@@ -36,7 +36,7 @@ struct RunPhaseTests {
 struct RunLoopStoreTests {
     private func setUp() -> (BotStore, Bot) {
         let store = TestStore.fresh()
-        return (store, store.add(name: "humancodereader", instructions: "Website", modelName: ""))
+        return (store, store.add(name: "humancodereader", instructions: "Website"))
     }
 
     private func kinds(_ store: BotStore, _ bot: Bot) -> [MessageKind] {
@@ -126,7 +126,7 @@ struct RunLoopStoreTests {
 struct StopRunTests {
     @Test func stoppingARunningRunCancelsItAndSaysSo() async {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         await BotBrain().stop(run, store: store)

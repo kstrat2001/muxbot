@@ -49,8 +49,6 @@ final class BotRun {
     var crew: CrewRole = CrewRole.coder
     var phase: RunPhase = RunPhase.proposed
     var summary: String = ""
-    /// The live preview URL, once the run has one.
-    var previewURL: String?
     var tweaks: Int = 0
     /// When you approved it, and when it stopped running.
     var startedAt: Date?
@@ -67,10 +65,6 @@ final class BotRun {
     /// After Keep: the branch and commit darkmux committed the changes to.
     var keptBranch: String?
     var keptCommit: String?
-    /// Nothing really ran: the app isn't paired with darkmux (or can't
-    /// send this run). Shown as a simulation, closed without a decision.
-    /// Unused since runs are always real; dropped with the versioned schema.
-    var isSimulated: Bool = false
     var createdAt: Date = Date()
     var bot: Bot?
 

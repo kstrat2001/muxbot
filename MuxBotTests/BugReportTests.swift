@@ -61,7 +61,7 @@ struct BugReportTests {
 struct BugFlowTests {
     @Test func describedProblemMeasuresThePageAndPostsABugCard() async throws {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
@@ -84,7 +84,7 @@ struct BugFlowTests {
 
     @Test func withoutAPreviewItStillDraftsAndSaysItCouldNotMeasure() async throws {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         await brain.send("the footer overlaps the cards", in: .bot(bot.id), store: store)

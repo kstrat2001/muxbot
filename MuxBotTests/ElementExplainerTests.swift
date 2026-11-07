@@ -46,7 +46,7 @@ struct ElementExplainerTests {
 struct ElementQuestionFlowTests {
     @Test func whatsThisWithAChipExplainsTheElementWithoutAModel() async throws {
         let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let bot = store.add(name: "humancodereader", instructions: "Website")
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         await brain.send("what's this?", in: .bot(bot.id), store: store, element: heading)

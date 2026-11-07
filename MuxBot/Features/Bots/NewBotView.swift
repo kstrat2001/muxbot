@@ -55,7 +55,7 @@ struct NewBotView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     let store = BotStore(context: context)
-                    let bot = store.add(name: name, instructions: instructions, modelName: "")
+                    let bot = store.add(name: name, instructions: instructions)
                     bot.look = look
                     try? context.save()
                     let value = resource.trimmingCharacters(in: .whitespacesAndNewlines)
