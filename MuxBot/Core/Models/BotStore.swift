@@ -109,8 +109,9 @@ struct BotStore {
     /// A bot proposes work for its crew: the run starts as a dispatch
     /// card in the bot's thread, waiting on Approve.
     @discardableResult
-    func proposeRun(task: String, crew: CrewRole, on bot: Bot) -> BotRun {
+    func proposeRun(task: String, crew: CrewRole, on bot: Bot, brief: String? = nil) -> BotRun {
         let run = BotRun(task: task, crew: crew)
+        run.brief = brief
         // Until darkmux reports a run's own live URL, runs share the bot's.
         run.previewURL = bot.sortedResources.last { $0.kind == .previewURL }?.value
         context.insert(run)

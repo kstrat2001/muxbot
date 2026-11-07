@@ -454,13 +454,24 @@ final class BotBrain {
         case .fix?, .review?:
             let crew: CrewRole = intent == .fix ? .coder : .reviewer
             var task = text + target
-            // "fix #8" or an issue link: dispatch that issue by its title.
+            var brief: String?
+            // "fix #8" or an issue link: dispatch that issue, with its body as the brief.
             if let number = Intent.issueNumber(in: text), let repo = repos.first?.repo {
-                let title = (try? await github.openIssues(repo: repo))?.first { $0.number == number }?.title
-                task = "\(crew == .coder ? "Fix" : "Review") #\(number)\(title.map { ": \($0)" } ?? "") (\(repo))"
+                let issue = (try? await github.openIssues(repo: repo))?.first { $0.number == number }
+                guard let issue else {
+                    store.append(.assistant, "I can't find an open issue #\(number) on \(repo).", to: conversation)
+                    return
+                }
+                guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew) else {
+                    // Never send a model to search blind on a title.
+                    store.append(.assistant, "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.", to: conversation)
+                    return
+                }
+                task = "\(crew == .coder ? "Fix" : "Review") #\(number): \(issue.title) (\(repo))"
+                brief = issueBrief
             }
             store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
-            if let bot { store.proposeRun(task: task, crew: crew, on: bot) }
+            if let bot { store.proposeRun(task: task, crew: crew, on: bot, brief: brief) }
             return
         case .issues?:
             let turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
@@ -598,7 +609,20 @@ final class BotBrain {
             return
         }
         guard store.apply(event, to: run) else { return }
-        if event == .approve { _ = startRealRun(run, message: run.task, store: store) }
+        if event == .approve { _ = startRealRun(run, message: run.brief ?? run.task, store: store) }
+    }
+
+    /// Every darkmux run gets the same working rules after its task.
+    nonisolated static func workBrief(_ task: String) -> String {
+        task + """
+
+
+            You are working in this repository (the current directory). Find the file responsible \
+            (page components are under inertia/pages/ in Inertia apps), make the smallest change that \
+            does it, and change nothing else. Don't run installs, builds or the dev server. If you \
+            can't find where to change, stop and say what you searched instead of repeating searches. \
+            When done, list the files you changed.
+            """
     }
 
     /// Why a run can't go to darkmux right now, or nil when it can.
@@ -623,7 +647,7 @@ final class BotBrain {
             do {
                 // darkmux picks the profile for this role (its role binding, else
                 // the default) and checks it against what the owner granted.
-                let (workId, profile) = try await connection.client.submitWork(token: token, role: role, message: message,
+                let (workId, profile) = try await connection.client.submitWork(token: token, role: role, message: Self.workBrief(message),
                                                                                profile: nil, workdir: workdir)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)

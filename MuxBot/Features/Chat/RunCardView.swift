@@ -38,6 +38,13 @@ struct RunCardView: View {
         case .dispatchCard:
             Label("Dispatch to \(run.crew.name)", systemImage: run.crew.systemImage).font(AppFont.headline())
             Text(run.task).font(AppFont.body())
+            DisclosureGroup("What \(run.crew.name) gets") {
+                Text(BotBrain.workBrief(run.brief ?? run.task))
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(AppFont.footnote())
             if run.phase == .proposed {
                 if let reason = brain.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)

@@ -42,6 +42,9 @@ extension RunPhase {
 final class BotRun {
     var id: UUID = UUID()
     var task: String = ""
+    /// What darkmux is told (the task plus context such as an issue's
+    /// body). The cards show `task`; nil sends `task` as is.
+    var brief: String?
     var crew: CrewRole = CrewRole.coder
     var phase: RunPhase = RunPhase.proposed
     var summary: String = ""

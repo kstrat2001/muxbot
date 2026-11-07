@@ -58,7 +58,8 @@ struct BugCardView: View {
 
     private func fix(_ draft: BugDraft) {
         guard let bot else { return }
-        store.proposeRun(task: "Fix: \(draft.described)", crew: .coder, on: bot)
+        store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
+                         brief: "Fix this bug:\n\n" + draft.body)
     }
 
     private func copySnapshot() async -> Bool {

@@ -142,7 +142,9 @@ struct FixIssueFlowTests {
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
-        brain.github = MockGitHub(issues: [issue(8, "No padding on left/right of the border")])
+        var eight = issue(8, "No padding on left/right of the border")
+        eight.body = "1. Open /pricing at 681px wide"
+        brain.github = MockGitHub(issues: [eight])
         await brain.send("ok fix https://github.com/kstrat2001/hcr/issues/8", in: .bot(bot.id), store: store)
         #expect(bot.runs?.first?.task == "Fix #8: No padding on left/right of the border (kstrat2001/hcr)")
         #expect(bot.runs?.first?.crew == .coder)
@@ -235,5 +237,30 @@ struct PreviewViewportTests {
         #expect(PreviewViewport.preferred(from: ["desktop", "phone"]) == .desktop)
         #expect(PreviewViewport.preferred(from: ["tablet"]) == .tablet)
         #expect(PreviewViewport.preferred(from: nil) == .fit)
+    }
+}
+
+struct BriefTests {
+    @Test func workBriefAddsRulesThatStopBlindSearchLoops() {
+        let text = BotBrain.workBrief("Fix #8")
+        #expect(text.hasPrefix("Fix #8"))
+        #expect(text.contains("stop and say what you searched instead of repeating searches"))
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct FixBriefFlowTests {
+    @Test func fixIssueRunsCarryTheIssueBodyAsTheBrief() async throws {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [GitHubIssue(number: 8, title: "No padding", body: "Open /pricing; selector `main > div`")])
+        await brain.send("fix #8", in: .bot(bot.id), store: store)
+        let run = try #require(bot.runs?.first)
+        #expect(run.task == "Fix #8: No padding (kstrat2001/hcr)")
+        #expect(run.brief?.contains("Element: main > div") == true)
+        #expect(run.brief?.contains("Likely file: inertia/pages/pricing.tsx") == true)
     }
 }

@@ -23,6 +23,7 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
     var title: String
     var labels: [Label] = []
     var pullRequest: PullRequestMarker?
+    var body: String?
 
     var isPullRequest: Bool { pullRequest != nil }
     var labelNames: [String] { labels.map(\.name) }
@@ -34,7 +35,7 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case number, title, labels
+        case number, title, labels, body
         case pullRequest = "pull_request"
     }
 
