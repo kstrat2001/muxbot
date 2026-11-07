@@ -38,6 +38,7 @@ struct DarkmuxClient: Sendable {
 
     struct ClientError: LocalizedError {
         var message: String
+        var status: Int = 0
         var errorDescription: String? { message }
     }
 
@@ -104,7 +105,7 @@ struct DarkmuxClient: Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-            throw ClientError(message: detail ?? "darkmux answered \(status)")
+            throw ClientError(message: detail ?? "darkmux answered \(status)", status: status)
         }
         return data
     }

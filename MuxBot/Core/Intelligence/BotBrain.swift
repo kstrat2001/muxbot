@@ -631,7 +631,17 @@ final class BotBrain {
     private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
         while run.phase == .running, run.darkmuxWorkId == workId {
             try? await Task.sleep(for: .seconds(3))
-            guard let status = try? await client.workStatus(token: token, workId: workId) else { continue }
+            let status: DarkmuxClient.WorkStatus
+            do {
+                status = try await client.workStatus(token: token, workId: workId)
+            } catch let error as DarkmuxClient.ClientError where error.status == 404 {
+                // darkmux no longer knows this run (restarted, or it ended long ago):
+                // show it as stopped rather than spinning forever.
+                store.apply(.stop, to: run)
+                return
+            } catch {
+                continue   // darkmux briefly unreachable: keep checking
+            }
             switch status.status {
             case "running": continue
             case "cancelled": store.apply(.stop, to: run); return
