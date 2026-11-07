@@ -6,6 +6,11 @@ struct MockGitHub: GitHubClient {
     var issues: [GitHubIssue] = []
     var error: (any Error)?
     var files: [String: String] = [:]
+    var pulls: [PullRequestInfo] = []
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo? {
+        if let error { throw error }
+        return pulls.first { $0.number == number }
+    }
     func file(repo: String, path: String) async throws -> Data? {
         files["\(repo)/\(path)"].map { Data($0.utf8) }
     }

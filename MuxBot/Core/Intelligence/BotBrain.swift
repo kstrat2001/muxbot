@@ -131,8 +131,10 @@ enum FallbackBrain {
     /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
     static func isIssueQuestion(_ lower: String) -> Bool {
         let padded = " \(lower.replacingOccurrences(of: "?", with: " ")) "
-        let asks = ["issue", "ticket", "bug", "pull request", "prs", " pr ", "to fix", "needs fixing", "need fixing", "broken"]
-        return asks.contains { padded.contains($0) }
+        let asks = ["issue", "ticket", "bug", "prs", "to fix", "needs fixing", "need fixing", "broken"]
+        // "PR 9 is still not right" names one PR: it's about that PR, not a list.
+        let asksAboutPRs = Intent.prReference(in: lower) == nil && ["pull request", " pr "].contains { padded.contains($0) }
+        return (asks.contains { padded.contains($0) } || asksAboutPRs)
             && !["fix the", "fix this", "build", "implement"].contains { lower.contains($0) }
     }
 
@@ -275,6 +277,9 @@ final class BotBrain {
     var isThinking = false
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
+    /// A PR the user said is still wrong, by bot, while the bot waits to
+    /// hear what's wrong (one message; anything else drops it).
+    var pendingPRFollowUps: [UUID: (repo: String, pr: PullRequestInfo)] = [:]
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true { didSet { runs.useOnDeviceModel = useOnDeviceModel } }
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
@@ -477,6 +482,38 @@ final class BotBrain {
         }
         let bot = context.botId.flatMap(store.bot(id:))
         let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
+        // The answer to "What's still wrong?" about a PR becomes its follow-up run.
+        if let bot, let pending = pendingPRFollowUps.removeValue(forKey: bot.id), explicit == nil || explicit == .fix,
+           Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()) {
+            message.intentRaw = Intent.fix.rawValue
+            proposePRFollowUp(pending.pr, repo: pending.repo, whatsWrong: text + target, bot: bot, store: store, conversation: conversation)
+            return
+        }
+        // "PR 9 is still not right": about that PR, never the open-issues list
+        // or an older run. Read it first, then ask what's wrong (or propose).
+        if let bot, explicit == nil || explicit == .fix, let complaint = Intent.prComplaint(in: text),
+           let repo = repos.first?.repo {
+            message.intentRaw = Intent.fix.rawValue
+            let pr: PullRequestInfo?
+            do {
+                pr = try await github.pullRequest(repo: repo, number: complaint.number)
+            } catch {
+                store.append(.assistant, "I couldn't read PR #\(complaint.number) on GitHub: \(error.localizedDescription)", to: conversation)
+                return
+            }
+            guard let pr else {
+                store.append(.assistant, "I can't find pull request #\(complaint.number) on \(repo).", to: conversation)
+                return
+            }
+            if let whatsWrong = complaint.whatsWrong.map({ $0 + target }) ?? element.map({ _ in "this element\(target)" }) {
+                proposePRFollowUp(pr, repo: repo, whatsWrong: whatsWrong, bot: bot, store: store, conversation: conversation)
+            } else {
+                pendingPRFollowUps[bot.id] = (repo, pr)
+                store.append(.assistant, "PR #\(pr.number) “\(pr.title)” (\(pr.status)) changed \(Self.fileList(pr.files)). "
+                             + "What's still wrong? Say what you see, or point at it in the preview (Pick).", to: conversation)
+            }
+            return
+        }
         if speaker == nil, let intent, [.bug, .fix, .review].contains(intent) {
             store.append(.assistant, "Open the bot for that project to report bugs or send work to its crew.", to: conversation)
             return
@@ -586,6 +623,38 @@ final class BotBrain {
             result.reply = "Which one? Say “fix #N” and I'll read the issue on GitHub first."
         }
         apply(result, context: context, store: store, conversation: conversation)
+    }
+
+    /// A Coder dispatch card for what's still wrong after a PR, citing it.
+    private func proposePRFollowUp(_ pr: PullRequestInfo, repo: String, whatsWrong: String, bot: Bot,
+                                   store: BotStore, conversation: ChatConversation) {
+        store.append(.assistant, "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", to: conversation)
+        store.proposeRun(task: "Follow up on PR #\(pr.number): \(pr.title) (\(repo))", crew: .coder, on: bot,
+                         brief: Self.prFollowUpBrief(pr, repo: repo, whatsWrong: whatsWrong))
+    }
+
+    nonisolated static func prFollowUpBrief(_ pr: PullRequestInfo, repo: String, whatsWrong: String) -> String {
+        var lines = ["Follow up on PR #\(pr.number) in \(repo) (\(pr.status)): \(pr.title)."]
+        if !pr.files.isEmpty { lines.append("It changed: \(pr.files.prefix(20).joined(separator: ", ")) (look there first).") }
+        lines.append("What's still wrong: \(whatsWrong)")
+        lines.append("Done when: that's fixed, with no other visual change.")
+        return lines.joined(separator: "\n")
+    }
+
+    /// "a.tsx and b.css", or "a, b, c and 4 more files".
+    nonisolated static func fileList(_ files: [String]) -> String {
+        switch files.count {
+        case 0: "no files"
+        case 1: files[0]
+        case 2...4: files.dropLast().joined(separator: ", ") + " and " + files.last!
+        default: files.prefix(3).joined(separator: ", ") + " and \(files.count - 3) more files"
+        }
+    }
+
+    /// "thanks", "never mind": not an answer to "What's still wrong?".
+    nonisolated static func isDismissal(_ text: String) -> Bool {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return ["thanks", "thank you", "ok", "okay", "never mind", "nevermind", "cancel", "no", "nope", "forget it"].contains(lower)
     }
 
     private func apply(_ result: BotTurn, context: ChatContext, store: BotStore, conversation: ChatConversation) {

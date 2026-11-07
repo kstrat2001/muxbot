@@ -82,6 +82,22 @@ protocol GitHubClient: Sendable {
     func issue(repo: String, number: Int) async throws -> GitHubIssue?
     /// A file on the default branch, or nil if it doesn't exist.
     func file(repo: String, path: String) async throws -> Data?
+    /// A pull request's title, state and changed files; nil if there's no
+    /// pull request with that number.
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo?
+}
+
+/// What a pull request was: enough to brief a follow-up run on it.
+struct PullRequestInfo: Sendable, Equatable {
+    var number: Int
+    var title: String
+    var merged: Bool
+    /// "open" or "closed".
+    var state: String
+    /// Changed file paths, as GitHub lists them (the first 100).
+    var files: [String]
+
+    var status: String { merged ? "merged" : state }
 }
 
 /// A repo's darkmux preview recipe, `.darkmux/preview.json`. Draft format.
@@ -176,6 +192,29 @@ extension RESTGitHubClient {
         if status == 404 { return nil }
         guard status == 200 else { throw GitHubError(status: status) }
         return data
+    }
+}
+
+extension RESTGitHubClient {
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo? {
+        guard let url = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)"),
+              let filesURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)/files?per_page=100") else { return nil }
+        struct Pull: Decodable {
+            var title: String
+            var state: String
+            var mergedAt: String?
+            enum CodingKeys: String, CodingKey { case title, state, mergedAt = "merged_at" }
+        }
+        struct File: Decodable { var filename: String }
+        let pull: Pull
+        do {
+            pull = try JSONDecoder().decode(Pull.self, from: try await get(url))
+        } catch let error as GitHubError where error.status == 404 {
+            return nil   // no such PR (or it's an issue)
+        }
+        let files = try JSONDecoder().decode([File].self, from: try await get(filesURL))
+        return PullRequestInfo(number: number, title: pull.title, merged: pull.mergedAt != nil,
+                               state: pull.state, files: files.map(\.filename))
     }
 }
 
