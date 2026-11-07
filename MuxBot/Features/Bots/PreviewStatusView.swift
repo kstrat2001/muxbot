@@ -9,7 +9,7 @@ struct PreviewStatusView: View {
     var body: some View {
         VStack(spacing: Spacing.md) {
             switch preview.status {
-            case .starting, .installing:
+            case .waiting, .starting, .installing:
                 ProgressView()
                 Text(preview.status.text).foregroundStyle(.secondary)
             case .failed:

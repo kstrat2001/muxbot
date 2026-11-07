@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 #if canImport(FoundationModels)
@@ -11,7 +12,9 @@ import FoundationModels
 @MainActor @Observable
 final class RunCoordinator {
     /// The pairing with darkmux on this Mac; when paired, approved runs go to darkmux.
-    var connection: FleetConnection?
+    var connection: FleetConnection? {
+        didSet { if connection != nil { connectionAttached() } }
+    }
     /// Posts "result ready" / "didn't finish" notifications.
     var notifier: NotificationService?
     var recipes = RecipeStore()
@@ -282,8 +285,24 @@ final class RunCoordinator {
     /// fails. Does nothing without a work copy or pairing (a preview link
     /// is shown as is).
     func ensurePreview(for bot: Bot) async {
-        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
-        if let status = livePreviews[bot.id]?.status, status != .stopped, !(status.isFailed) { return }
+        guard let name = bot.workspaceName else {
+            Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
+            return
+        }
+        guard let connection, let token = connection.token else {
+            // At launch the connection attaches a moment later: say so, and
+            // start once it's here (connectionAttached).
+            Self.previewLog.info("preview \(name, privacy: .public): waiting, darkmux \(self.connection == nil ? "not attached" : "not paired", privacy: .public)")
+            waitingPreviews[bot.id] = bot
+            livePreviews[bot.id] = LivePreview(status: .waiting)
+            return
+        }
+        waitingPreviews[bot.id] = nil
+        if let status = livePreviews[bot.id]?.status, status != .stopped, status != .waiting, !(status.isFailed) {
+            Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
+            return
+        }
+        Self.previewLog.info("preview \(name, privacy: .public): asking darkmux to start it")
         livePreviews[bot.id] = LivePreview(status: .starting)
         do {
             var p = try await connection.client.startPreview(token: token, workspace: name).live
@@ -294,10 +313,28 @@ final class RunCoordinator {
                 p = try await connection.client.previewStatus(token: token, workspace: name).live
                 livePreviews[bot.id] = p
             }
+            Self.previewLog.info("preview \(name, privacy: .public): \(String(describing: p.status), privacy: .public)")
         } catch let error as DarkmuxClient.ClientError where error.status == 404 {
+            Self.previewLog.info("preview \(name, privacy: .public): the repo has no preview recipe")
             livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
         } catch {
+            Self.previewLog.error("preview \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
+        }
+    }
+
+    private static let previewLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "preview")
+    /// Previews asked for before the connection was there.
+    private var waitingPreviews: [UUID: Bot] = [:]
+    /// Tests watch retries here; nil starts them for real.
+    var retryPreview: ((Bot) -> Void)?
+
+    /// The darkmux connection is here: start the previews that were waiting.
+    func connectionAttached() {
+        let waiting = waitingPreviews.values
+        waitingPreviews = [:]
+        for bot in waiting {
+            if let retryPreview { retryPreview(bot) } else { Task { await ensurePreview(for: bot) } }
         }
     }
 
