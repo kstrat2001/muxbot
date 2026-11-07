@@ -1,8 +1,10 @@
 import SwiftUI
 import SwiftData
 
-/// Read-only view of the fleet: machines and the runs your bots started.
-/// Nothing here acts; "Ask <bot> about this" opens that bot's thread.
+/// Read-only view of the work your bots started: runs grouped by mission,
+/// in progress first, then what needs you, then finished. Work comes first; machines appear only on a run (and
+/// in conversation with bots), never as a section to manage. Nothing here
+/// acts; "Ask <bot> about this" opens that bot's thread.
 struct FleetView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(AppRouter.self) private var router
@@ -17,29 +19,9 @@ struct FleetView: View {
                     .font(AppFont.footnote())
                     .foregroundStyle(.secondary)
             }
-            Section("Machines") {
-                ForEach(fleet.machines) { machine in
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        HStack {
-                            Text(machine.name).font(AppFont.headline())
-                            Text(machine.chip).font(AppFont.caption()).foregroundStyle(.secondary)
-                            Spacer()
-                            Text(machine.isOnline ? "\(machine.freeMemoryGB) of \(machine.memoryGB) GB free" : "Offline")
-                                .font(AppFont.footnote())
-                                .foregroundStyle(machine.isOnline ? Color.secondary : Color.brandRed)
-                        }
-                        if machine.isOnline {
-                            Text(machine.loadedModels.isEmpty ? "No models loaded" : machine.loadedModels.joined(separator: ", "))
-                                .font(AppFont.caption())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
             ForEach(missions, id: \.self) { mission in
                 Section(mission) {
-                    ForEach(fleet.runs.filter { $0.mission == mission }) { run in
+                    ForEach(runs(in: mission)) { run in
                         RunRow(run: run, askBot: bot(named: run.botName).map { b in
                             { router.ask(.bot(b.id), draft: "About “\(run.title)”: ") }
                         })
@@ -50,8 +32,18 @@ struct FleetView: View {
         .navigationTitle("Fleet")
     }
 
+    /// Missions ordered by their most urgent run, so live work comes first.
     private var missions: [String] {
-        fleet.runs.reduce(into: [String]()) { if !$0.contains($1.mission) { $0.append($1.mission) } }
+        let names = fleet.runs.reduce(into: [String]()) { if !$0.contains($1.mission) { $0.append($1.mission) } }
+        return names.sorted { urgency($0) < urgency($1) }
+    }
+
+    private func runs(in mission: String) -> [FleetRun] {
+        fleet.runs.filter { $0.mission == mission }.sorted { $0.status.urgency < $1.status.urgency }
+    }
+
+    private func urgency(_ mission: String) -> Int {
+        runs(in: mission).first?.status.urgency ?? .max
     }
 
     private func bot(named name: String) -> MuxRole? {

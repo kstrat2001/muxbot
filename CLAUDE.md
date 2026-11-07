@@ -14,6 +14,10 @@ xcodebuild -project MuxBot.xcodeproj -scheme MuxBot -destination 'platform=macOS
 
 Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never committed (forks are encouraged). Copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` (gitignored), or set the team in Xcode.
 
+## Design philosophy
+
+Mux Bot is about getting work done, not managing machines. Lead with the work (runs, results, what needs you); machines, models and config appear only as details of a run or in conversation with a bot. Only bots act, always behind an Approve card; other screens are read-only.
+
 ## Rules
 
 - **No third-party dependencies.** Apple frameworks only (SwiftUI, SwiftData, FoundationModels, ...).
@@ -28,5 +32,5 @@ Both builds must pass before a push. Signing: `DEVELOPMENT_TEAM` is never commit
 
 - `MuxBot/App`: entry point, `ContentView` (Bots and Fleet tabs, sidebar on macOS/iPad), typed navigation (`AppRouter`, `Route`).
 - `MuxBot/Core`: design system, the bot brain (`BotBrain`, `FallbackBrain`, `LeadBot`), models (bots, threads, `FleetSnapshot`), notification/background services, keychain, SwiftData container.
-- `MuxBot/Features`: Home (lead bot card + bot tiles), Bots (`BotBar`, owned by the Bots tab and following `AppRouter.context`; `BotThreadView`), Fleet (read-only tab), Roles (New bot form), Chat (shared transcript UI).
+- `MuxBot/Features`: Home (lead bot card + bot tiles), Bots (`BotBar`, owned by the Bots tab and following `AppRouter.context`; `BotThreadView`), Fleet (read-only tab of runs by mission: in progress, needs you, done), Roles (New bot form), Chat (shared transcript UI).
 - `MuxBotTests`: Swift Testing suites (`xcodebuild ... -destination 'platform=macOS' test`).

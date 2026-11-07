@@ -14,6 +14,18 @@ struct FleetMachine: Identifiable, Sendable, Equatable {
 enum RunStatus: String, Sendable, CaseIterable {
     case running, queued, needsYou, done, failed
 
+    /// Display order: work in progress first, then what needs you, then
+    /// finished work.
+    var urgency: Int {
+        switch self {
+        case .running: 0
+        case .queued: 1
+        case .needsYou: 2
+        case .failed: 3
+        case .done: 4
+        }
+    }
+
     var label: String {
         switch self {
         case .running: "Running"
