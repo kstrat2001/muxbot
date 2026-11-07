@@ -29,7 +29,7 @@ struct FleetView: View {
                 }
             }
         }
-        .navigationTitle("Fleet")
+        .navigationTitle("Work")
     }
 
     /// Missions ordered by their most urgent run, so live work comes first.

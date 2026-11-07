@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppTab: Hashable {
-    case bots, fleet
+    case bots, work
 }
 
 @MainActor @Observable

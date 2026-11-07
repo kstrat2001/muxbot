@@ -22,7 +22,7 @@ Mux Bot is about getting work done, not managing machines. Lead with the work (r
 
 - **No third-party dependencies.** Apple frameworks only (SwiftUI, SwiftData, FoundationModels, ...).
 - **Swift 6, strict concurrency complete.** UI state types are `@MainActor @Observable`.
-- **Only bots act, and only after Approve.** Work starts in conversation: the one chat bar (`BotBar`) follows navigation and talks to the bot on screen (the lead bot, `LeadBot`, on Home). Handoffs, new bots and, later, dispatch and darkmux config changes are proposed as Approve / Cancel cards. The Fleet tab is read-only: no action buttons, only "Ask <bot> about this".
+- **Only bots act, and only after Approve.** Work starts in conversation: the one chat bar (`BotBar`) follows navigation and talks to the bot on screen (the lead bot, `LeadBot`, on Home). Handoffs, new bots and, later, dispatch and darkmux config changes are proposed as Approve / Cancel cards. The Work tab is read-only: no action buttons, only "Ask <bot> about this".
 - **The lead bot's name is a placeholder** (`LeadBot.name`, currently "Mux Bot"); change it there only.
 - **The app owns its role store.** The UI calls roles **bots** (Mux Bot); code and darkmux call them roles (`MuxRole`). Roles live in the app's SwiftData store (`MuxRole`, `RoleTask`, mutated through `RoleStore`), not as a mirror of darkmux config. First launch seeds Coder, Reviewer, Eval runner and Researcher.
 - **American English** in all copy, comments and docs.
@@ -30,7 +30,7 @@ Mux Bot is about getting work done, not managing machines. Lead with the work (r
 
 ## Layout
 
-- `MuxBot/App`: entry point, `ContentView` (Bots and Fleet tabs, sidebar on macOS/iPad), typed navigation (`AppRouter`, `Route`).
+- `MuxBot/App`: entry point, `ContentView` (Bots and Work tabs, sidebar on macOS/iPad), typed navigation (`AppRouter`, `Route`).
 - `MuxBot/Core`: design system, the bot brain (`BotBrain`, `FallbackBrain`, `LeadBot`), models (bots, threads, `FleetSnapshot`), notification/background services, keychain, SwiftData container.
-- `MuxBot/Features`: Home (lead bot card + bot tiles), Bots (`BotBar`, owned by the Bots tab and following `AppRouter.context`; `BotThreadView`), Fleet (read-only tab of runs by mission: in progress, needs you, done), Roles (New bot form), Chat (shared transcript UI).
+- `MuxBot/Features`: Home (lead bot card + bot tiles), Bots (`BotBar`, owned by the Bots tab and following `AppRouter.context`; `BotThreadView`), Fleet (`FleetView`, the read-only Work tab of runs by mission: in progress, needs you, done), Roles (New bot form), Chat (shared transcript UI).
 - `MuxBotTests`: Swift Testing suites (`xcodebuild ... -destination 'platform=macOS' test`).
