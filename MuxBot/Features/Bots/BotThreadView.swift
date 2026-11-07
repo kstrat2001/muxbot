@@ -11,7 +11,6 @@ struct BotThreadView: View {
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
     @State private var showInfo = false
-    @State private var chatWidth: CGFloat = 440
 
     init(context: ChatContext) {
         self.context = context
@@ -58,10 +57,11 @@ struct BotThreadView: View {
                 }
                 .safeAreaInset(edge: .bottom) { if full { BotBar() } }
                 if isWide {
-                    HStack(spacing: 0) {
+                    // Native split view: AppKit drives the divider. The chat is
+                    // the optional pane, so the preview keeps its place.
+                    HSplitView {
                         if !full {
-                            chat.frame(width: chatWidth)
-                            SplitHandle(width: $chatWidth)
+                            chat.frame(minWidth: 300, idealWidth: 440, maxWidth: 900)
                         }
                         panel.frame(minWidth: 360, maxWidth: .infinity)
                     }
@@ -169,30 +169,5 @@ struct BotThreadView: View {
         let hello = bot.map { "Hi, I'm \($0.name). \($0.instructions)" }
             ?? "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it."
         store.append(.assistant, hello, to: conversation)
-    }
-}
-
-/// The draggable divider between the chat and the preview.
-struct SplitHandle: View {
-    @Binding var width: CGFloat
-    @State private var start: CGFloat?
-
-    var body: some View {
-        Rectangle()
-            .fill(Color.secondary.opacity(0.25))
-            .frame(width: 1)
-            .padding(.horizontal, 3)
-            .contentShape(Rectangle())
-            #if os(macOS)
-            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
-            #endif
-            .gesture(DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    let base = start ?? width
-                    start = base
-                    width = min(max(base + value.translation.width, 280), 900)
-                }
-                .onEnded { _ in start = nil })
-            .accessibilityLabel("Resize chat and preview")
     }
 }

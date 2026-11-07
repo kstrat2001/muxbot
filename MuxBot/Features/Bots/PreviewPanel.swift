@@ -10,6 +10,8 @@ struct PreviewPanel: View {
     let close: () -> Void
 
     @State private var viewport: PreviewViewport?
+    @State private var settled: PreviewViewport.Layout?
+    @State private var settleTask: Task<Void, Never>?
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
@@ -71,12 +73,18 @@ struct PreviewPanel: View {
             .padding(.vertical, Spacing.sm)
             .background(.bar)
             GeometryReader { geometry in
-                let layout = currentViewport.layout(in: geometry.size)
+                // Device widths: hold the last scale while the panel is being
+                // resized and apply the new one once it settles, so the page
+                // isn't re-laid out on every frame (that flickered).
+                let layout = settled ?? currentViewport.layout(in: geometry.size)
                 WebView(preview.page)
                     .frame(width: layout.width, height: layout.height)
                     .scaleEffect(layout.scale, anchor: .topLeading)
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                     .clipped()
+                    .onChange(of: geometry.size) { settle(for: geometry.size) }
+                    .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }
+                    .onAppear { settled = currentViewport.layout(in: geometry.size) }
             }
                 .overlay(alignment: .top) {
                     if let copiedNote {
@@ -91,6 +99,19 @@ struct PreviewPanel: View {
                 }
         }
         .task(id: url) { preview.show(url) }
+    }
+
+    private func settle(for size: CGSize) {
+        guard currentViewport.width != nil else {
+            settled = nil   // Fit follows the panel live, like any web view
+            return
+        }
+        settleTask?.cancel()
+        settleTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            settled = currentViewport.layout(in: size)
+        }
     }
 
     private var currentViewport: PreviewViewport {
