@@ -68,7 +68,7 @@ struct BotSidebar: View {
         }
     }
 
-    /// "1 result waiting for you", "2 things waiting for you", "Working".
+    /// "1 result waiting for you", "2 things waiting for you", "Running".
     static func waitingText(_ bot: Bot) -> String? {
         let runs = bot.runs ?? []
         let waiting = runs.filter { $0.phase.awaitsYou }
@@ -80,7 +80,7 @@ struct BotSidebar: View {
             }
         }
         if waiting.count > 1 { return "\(waiting.count) things waiting for you" }
-        if runs.contains(where: { $0.phase == .running }) { return "Working" }
+        if runs.contains(where: { $0.phase == .running }) { return "Running" }
         return nil
     }
 }
