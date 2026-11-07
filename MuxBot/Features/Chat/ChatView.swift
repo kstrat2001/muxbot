@@ -23,7 +23,7 @@ struct ChatView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: Spacing.sm) {
+                VStack(spacing: Spacing.sm) {
                     ForEach(messages) { message in
                         Group {
                             if message.kind == .text {

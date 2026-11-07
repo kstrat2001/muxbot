@@ -1,10 +1,13 @@
 import SwiftUI
 
 extension View {
-    /// Messages-style width: at most 70% of the thread and 520pt, hugging
-    /// its content, pinned to the bot's side (leading) or yours (trailing).
+    /// Messages-style width: at most 520pt, hugging its content, with a gap
+    /// on the far side, pinned to the bot's side (leading) or yours
+    /// (trailing). Fixed limits, not a fraction of the window, so resizing
+    /// doesn't re-measure every bubble each frame (that flickered).
     func chatColumn(alignment: Alignment) -> some View {
-        containerRelativeFrame(.horizontal, alignment: alignment) { width, _ in min(width * 0.7, 520) }
+        frame(maxWidth: 520, alignment: alignment)
+            .padding(alignment == .trailing ? .leading : .trailing, 48)
             .frame(maxWidth: .infinity, alignment: alignment)
     }
 }
