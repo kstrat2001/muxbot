@@ -104,7 +104,9 @@ struct BotIssueLookupTests {
     }
 
     @Test func askingForBugTicketsReadsGitHubAndProposesAFix() async {
-        let (store, bot, brain) = setUp(issues: [issue(7, "Footer link 404s", labels: ["bug"])])
+        var seven = issue(7, "Footer link 404s", labels: ["bug"])
+        seven.body = "Open /pricing; the `footer a.about` link 404s"   // says where: never a bare title (IssuesListBriefTests)
+        let (store, bot, brain) = setUp(issues: [seven])
         await brain.send("Do you see any bug tickets we can fix?", in: .bot(bot.id), store: store)
         #expect(lastReply(store, bot)?.contains("Open on kstrat2001/hcr") == true)
         #expect(bot.runs?.first?.task == "Fix #7: Footer link 404s (kstrat2001/hcr)")

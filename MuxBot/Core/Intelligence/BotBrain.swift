@@ -54,6 +54,13 @@ enum BotAction: Sendable, Equatable, Codable {
 }
 
 /// One bot turn: what it says, and what it proposes to do.
+/// A run waiting on one answer: the answer completes its brief.
+struct PendingDispatch {
+    var task: String
+    var crew: CrewRole
+    var brief: @MainActor (String) -> String
+}
+
 struct BotTurn: Sendable, Equatable {
     var reply: String
     var action: BotAction?
@@ -280,9 +287,12 @@ final class BotBrain {
     var isThinking = false
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
-    /// A PR the user said is still wrong, by bot, while the bot waits to
-    /// hear what's wrong (one message; anything else drops it).
-    var pendingPRFollowUps: [UUID: (repo: String, pr: PullRequestInfo)] = [:]
+    /// A dispatch waiting on one answer from you, by bot: "What's still
+    /// wrong?" about a PR, or "What should change?" about a measured issue.
+    /// Your next message answers it; anything else drops it.
+    var pendingAnswers: [UUID: PendingDispatch] = [:]
+    /// Measures pages for visual issues (an offscreen web view in the app).
+    var layoutProbe: (any LayoutProbing)?
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true { didSet { runs.useOnDeviceModel = useOnDeviceModel } }
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
@@ -485,11 +495,12 @@ final class BotBrain {
         }
         let bot = context.botId.flatMap(store.bot(id:))
         let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
-        // The answer to "What's still wrong?" about a PR becomes its follow-up run.
-        if let bot, let pending = pendingPRFollowUps.removeValue(forKey: bot.id), explicit == nil || explicit == .fix,
+        // The answer to the bot's one question becomes the run it was about.
+        if let bot, let pending = pendingAnswers.removeValue(forKey: bot.id), explicit == nil || explicit == .fix,
            Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()) {
             message.intentRaw = Intent.fix.rawValue
-            proposePRFollowUp(pending.pr, repo: pending.repo, whatsWrong: text + target, bot: bot, store: store, conversation: conversation)
+            store.append(.assistant, "I'll send this to the \(pending.crew.name) crew. Approve to dispatch.", to: conversation)
+            store.proposeRun(task: pending.task, crew: pending.crew, on: bot, brief: pending.brief(text + target))
             return
         }
         // "PR 9 is still not right": about that PR, never the open-issues list
@@ -511,7 +522,9 @@ final class BotBrain {
             if let whatsWrong = complaint.whatsWrong.map({ $0 + target }) ?? element.map({ _ in "this element\(target)" }) {
                 proposePRFollowUp(pr, repo: repo, whatsWrong: whatsWrong, bot: bot, store: store, conversation: conversation)
             } else {
-                pendingPRFollowUps[bot.id] = (repo, pr)
+                pendingAnswers[bot.id] = PendingDispatch(task: Self.prFollowUpTask(pr, repo: repo), crew: .coder) {
+                    Self.prFollowUpBrief(pr, repo: repo, whatsWrong: $0)
+                }
                 store.append(.assistant, "PR #\(pr.number) “\(pr.title)” (\(pr.status)) changed \(Self.fileList(pr.files)). "
                              + "What's still wrong? Say what you see, or point at it in the preview (Pick).", to: conversation)
             }
@@ -569,14 +582,18 @@ final class BotBrain {
                     store.append(.assistant, "#\(number) is already closed on \(repo).", to: conversation)
                     return
                 }
-                guard let issueBrief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
-                                                          pageFile: bot.flatMap(runs.recipes.recipe(for:))?.pageFile) else {
-                    // Never send a model to search blind on a title.
-                    store.append(.assistant, "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.", to: conversation)
+                switch await plan(issue: issue, repo: repo, crew: crew, bot: bot) {
+                case let .dispatch(planned, plannedBrief):
+                    task = planned
+                    brief = plannedBrief
+                case let .ask(question, pending):
+                    if let bot { pendingAnswers[bot.id] = pending }
+                    store.append(.assistant, question, to: conversation)
+                    return
+                case let .cannot(why):
+                    store.append(.assistant, why, to: conversation)
                     return
                 }
-                task = "\(crew == .coder ? "Fix" : "Review") #\(number): \(issue.title) (\(repo))"
-                brief = issueBrief
             }
             store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
             if let bot { store.proposeRun(task: task, crew: crew, on: bot, brief: brief) }
@@ -585,16 +602,18 @@ final class BotBrain {
             var turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
             // An offered fix carries the issue's brief; one that doesn't say
             // where is asked about instead of sent to search blind.
-            if case let .dispatch(crew, task)? = turn.action, let number = Intent.issueNumber(in: task), let repo = repos.first?.repo {
-                let issue = try? await github.issue(repo: repo, number: number)
-                if let issue, let brief = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
-                                                             pageFile: bot.flatMap(runs.recipes.recipe(for:))?.pageFile) {
+            if case let .dispatch(crew, task)? = turn.action, let number = Intent.issueNumber(in: task), let repo = repos.first?.repo,
+               let issue = try? await github.issue(repo: repo, number: number) {
+                switch await plan(issue: issue, repo: repo, crew: crew, bot: bot) {
+                case let .dispatch(_, brief):
                     turn.brief = brief
-                } else {
+                case let .ask(question, pending):
                     turn.action = nil
-                    turn.reply = turn.reply.replacingOccurrences(
-                        of: "Fix #\(number) with Coder?",
-                        with: "#\(number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.")
+                    if let bot { pendingAnswers[bot.id] = pending }
+                    turn.reply = turn.reply.replacingOccurrences(of: "Fix #\(number) with Coder?", with: question)
+                case let .cannot(why):
+                    turn.action = nil
+                    turn.reply = turn.reply.replacingOccurrences(of: "Fix #\(number) with Coder?", with: why)
                 }
             }
             apply(turn, context: context, store: store, conversation: conversation)
@@ -642,12 +661,68 @@ final class BotBrain {
         apply(result, context: context, store: store, conversation: conversation)
     }
 
+    enum IssuePlan {
+        case dispatch(task: String, brief: String)
+        /// One short question first; the answer completes the brief.
+        case ask(String, PendingDispatch)
+        case cannot(String)
+    }
+
+    /// How an issue becomes a run: its brief (never a bare title), measured
+    /// in the preview first when it's visual. If the issue and the numbers
+    /// still don't say what to change, one question instead.
+    private func plan(issue: GitHubIssue, repo: String, crew: CrewRole, bot: Bot?) async -> IssuePlan {
+        let task = "\(crew == .coder ? "Fix" : "Review") #\(issue.number): \(issue.title) (\(repo))"
+        guard let base = IssueBrief.compose(issue: issue, repo: repo, crew: crew,
+                                            pageFile: bot.flatMap(runs.recipes.recipe(for:))?.pageFile) else {
+            // Never send a model to search blind on a title.
+            return .cannot("#\(issue.number) doesn't say where. Which page and element? Point at it in the preview (Pick), then say what's wrong.")
+        }
+        guard crew == .coder, LayoutMeasure.isVisual(issue), let bot else { return .dispatch(task: task, brief: base) }
+        guard let probe = layoutProbe, let root = runs.previewURL(for: bot) else {
+            return .dispatch(task: task, brief: base + "\nNot measured: the preview isn't running.")
+        }
+        let parts = IssueBrief.parse(issue.body ?? "")
+        let url = URL(string: String((parts.page ?? "/").drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
+        let widths = LayoutMeasure.widths(forViewport: parts.viewport)
+        let facts = await probe.measure(url: url, widths: widths)
+        guard !facts.isEmpty else { return .dispatch(task: task, brief: base + "\nNot measured: the preview page didn't load.") }
+        let focus = parts.viewport ?? widths[0]
+        let measured = LayoutMeasure.summarize(facts, focus: focus)
+        let brief = Self.withMeasurements(base, measured)
+        if !measured.foundProblem, parts.expected == nil {
+            let question = "At \(focus)px I measured nothing wider than the screen and no section without side padding. What should change?"
+            return .ask(question, PendingDispatch(task: task, crew: crew) { brief + "\nWhat should change: \($0)" })
+        }
+        return .dispatch(task: task, brief: brief)
+    }
+
+    /// The measured block (and the likely file from the matched @media
+    /// rules) before "Expected", and a concrete "Done when".
+    nonisolated static func withMeasurements(_ brief: String, _ m: LayoutMeasure.Measured) -> String {
+        var lines = brief.components(separatedBy: "\n")
+        var insert = [LayoutMeasure.block(m)]
+        if let file = m.likelyFile {
+            insert.append(lines.contains { $0.hasPrefix("Likely file:") } ? "Also likely: \(file) (its @media rules)" : "Likely file: \(file) (its @media rules)")
+        }
+        let at = lines.firstIndex { $0.hasPrefix("Expected:") } ?? lines.endIndex
+        lines.insert(contentsOf: insert, at: at)
+        if let done = m.doneWhen, let i = lines.firstIndex(where: { $0.hasPrefix("Done when:") }) {
+            lines[i] = "Done when: \(done)"
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// A Coder dispatch card for what's still wrong after a PR, citing it.
     private func proposePRFollowUp(_ pr: PullRequestInfo, repo: String, whatsWrong: String, bot: Bot,
                                    store: BotStore, conversation: ChatConversation) {
         store.append(.assistant, "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", to: conversation)
-        store.proposeRun(task: "Follow up on PR #\(pr.number): \(pr.title) (\(repo))", crew: .coder, on: bot,
+        store.proposeRun(task: Self.prFollowUpTask(pr, repo: repo), crew: .coder, on: bot,
                          brief: Self.prFollowUpBrief(pr, repo: repo, whatsWrong: whatsWrong))
+    }
+
+    nonisolated static func prFollowUpTask(_ pr: PullRequestInfo, repo: String) -> String {
+        "Follow up on PR #\(pr.number): \(pr.title) (\(repo))"
     }
 
     nonisolated static func prFollowUpBrief(_ pr: PullRequestInfo, repo: String, whatsWrong: String) -> String {

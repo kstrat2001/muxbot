@@ -37,6 +37,9 @@
         }
       }
     },
+    "%@ info" : {
+
+    },
     "%@ reads this to send the right work here. You can change it later in the bot's info." : {
 
     },
@@ -49,9 +52,6 @@
           }
         }
       }
-    },
-    "%@'s notes" : {
-
     },
     "%@: %@" : {
       "localizations" : {
@@ -142,7 +142,13 @@
     "Bot" : {
 
     },
+    "Bot Info…" : {
+
+    },
     "Bot info" : {
+
+    },
+    "Bot info (⌘I)" : {
 
     },
     "Bot info and resources" : {
@@ -197,9 +203,6 @@
 
     },
     "Coming soon: a bot drafts the recipe for you to approve." : {
-
-    },
-    "Commit these changes to the work copy's branch" : {
 
     },
     "Committed to %@%@" : {
@@ -265,9 +268,6 @@
     "Details" : {
 
     },
-    "Discard" : {
-
-    },
     "Dispatch to %@" : {
 
     },
@@ -314,6 +314,9 @@
     "GitHub URL or link (optional)" : {
 
     },
+    "GitHub sign-in" : {
+
+    },
     "Go" : {
 
     },
@@ -338,9 +341,6 @@
     "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
-    "Keep" : {
-
-    },
     "Keep running" : {
 
     },
@@ -354,6 +354,9 @@
 
     },
     "Machine" : {
+
+    },
+    "Measured in the preview" : {
 
     },
     "Message %@…" : {
@@ -512,9 +515,6 @@
     "Pull request opened" : {
 
     },
-    "Put the changed files back as they were" : {
-
-    },
     "Ready on %@" : {
 
     },
@@ -652,9 +652,6 @@
     "Try again" : {
 
     },
-    "Tweak" : {
-
-    },
     "Tweak the last run" : {
 
     },
@@ -735,6 +732,9 @@
 
     },
     "·" : {
+
+    },
+    "• %@" : {
 
     }
   },

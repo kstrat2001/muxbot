@@ -40,6 +40,17 @@ struct RunCardView: View {
             Label("Dispatch to \(run.crew.name)", systemImage: run.crew.systemImage).font(AppFont.headline())
             Text(Linkify.attributed(run.task, repo: repo(run))).font(AppFont.body())
             RefChips(refs: refs(run))
+            // What the app measured in the preview, in plain sight before Approve.
+            let measured = LayoutMeasure.measuredLines(in: run.brief ?? "")
+            if !measured.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Label("Measured in the preview", systemImage: "ruler").font(AppFont.footnote(.semibold))
+                    ForEach(measured, id: \.self) { line in
+                        Text("• \(line)").font(AppFont.footnote()).textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             DisclosureGroup("What \(run.crew.name) gets") {
                 Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))

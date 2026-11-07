@@ -24,6 +24,7 @@ struct MuxBotApp: App {
                     .modelContainer(container)
                     .task {
                         brain.pageInspector = preview
+                        if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
                         brain.connection = connection
                         brain.notifier = notifications
                         brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
