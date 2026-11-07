@@ -39,6 +39,11 @@ struct PickedElement: Sendable, Equatable, Codable {
     /// Position in the document, for cropping a snapshot.
     var x: Int
     var y: Int
+    /// How it looks: computed font size, weight, color and first font family.
+    var fontSize: String? = nil
+    var fontWeight: String? = nil
+    var color: String? = nil
+    var fontFamily: String? = nil
     /// From the selection menu: "ask" or "bug".
     var intent: String? = nil
     /// From the selection menu: the text you selected.
@@ -158,7 +163,8 @@ enum BugReport {
             return JSON.stringify(Object.assign({ label: text, selector: selector(el), tag: el.tagName.toLowerCase(),
               url: location.pathname, viewport: vw, left: Math.round(r.left), right: Math.round(vw - r.right),
               width: Math.round(r.width), height: Math.round(r.height), paddingLeft: s.paddingLeft, paddingRight: s.paddingRight,
-              marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY) }, extra || {}));
+              marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
+              fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
           };
           const menu = document.createElement('div');
           menu.style.cssText = 'position:fixed;z-index:2147483647;display:none;padding:5px;border-radius:10px;background:#1c2622;box-shadow:0 4px 16px rgba(0,0,0,.45);font:13px -apple-system,system-ui,sans-serif';

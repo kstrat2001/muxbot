@@ -156,7 +156,7 @@ struct RunCardView: View {
                 }
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
-                Text("No pull request was opened. Earlier versions showed a placeholder here.")
+                Text("Not opened.")
                     .font(AppFont.footnote()).foregroundStyle(.secondary)
             default:
                 Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)

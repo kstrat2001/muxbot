@@ -427,6 +427,12 @@ final class BotBrain {
         let bots = store.allBots().map(\.summary)
         let speaker = context.botId.flatMap { id in bots.first { $0.id == id } }
         let conversation = store.conversation(for: context)
+        // "what's this?" about a picked element: explain it from its facts.
+        if let element, explicit == nil || explicit == .ask, ElementExplainer.isWhatsThis(text) {
+            message.intentRaw = Intent.ask.rawValue
+            store.append(.assistant, ElementExplainer.explain(element), to: conversation)
+            return
+        }
         let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
         message.intentRaw = intent?.rawValue
         try? store.context.save()
