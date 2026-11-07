@@ -35,6 +35,9 @@ targets:
       path: MuxBot/Info.plist
       properties:
         CFBundleDisplayName: Mux Bot
+        # The menu bar, About panel and Dock read CFBundleName on macOS;
+        # PRODUCT_NAME (and the module) stay MuxBot.
+        CFBundleName: Mux Bot
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
