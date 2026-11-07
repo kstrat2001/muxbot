@@ -7,7 +7,7 @@ import Darwin
 final class FleetConnection {
     enum State: Equatable {
         case unpaired
-        case waiting(code: String)
+        case waiting(code: String, expires: Date)
         case paired(name: String, profiles: [String])
         case failed(String)
     }
@@ -27,6 +27,17 @@ final class FleetConnection {
     }
 
     var token: String? { keychain.get(key: Self.tokenKey) }
+
+    /// How to run darkmux on this Mac, for the commands we show: `darkmux`
+    /// on PATH, or a dev build named by MUXBOT_DARKMUX_CLI in the gitignored
+    /// Config/Local.xcconfig.
+    var cliCommand: String {
+        let configured = (Bundle.main.object(forInfoDictionaryKey: "MuxBotDarkmuxCLI") as? String)?
+            .trimmingCharacters(in: .whitespaces)
+        return configured.flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 } ?? "darkmux"
+    }
+    var approveCommand: String { "\(cliCommand) client approve" }
+    var serveCommand: String { "\(cliCommand) client serve" }
     var profile: String? { if case let .paired(_, profiles) = state { profiles.first } else { nil } }
     var isPaired: Bool { if case .paired = state { true } else { false } }
 
@@ -36,7 +47,7 @@ final class FleetConnection {
         let code = Self.makeCode()
         let secret = Self.randomHex(32)
         let device = "\(ProcessInfo.processInfo.hostName) · Mux Bot"
-        state = .waiting(code: code)
+        state = .waiting(code: code, expires: Date().addingTimeInterval(10 * 60))
         pairing = Task {
             do {
                 let scopes = DarkmuxClient.Scopes(profiles: [profile], workspace: true)

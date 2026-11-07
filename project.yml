@@ -42,6 +42,7 @@ targets:
         # set MUXBOT_TEST_PREVIEW_URL in the gitignored Config/Local.xcconfig.
         MuxBotTestPreviewURL: $(MUXBOT_TEST_PREVIEW_URL)
         MuxBotTestWorkdir: $(MUXBOT_TEST_WORKDIR)
+        MuxBotDarkmuxCLI: $(MUXBOT_DARKMUX_CLI)
         # Tailnet previews are plain http until tailnet HTTPS certificates
         # are enabled; allow it for *.ts.net only.
         NSAppTransportSecurity:

@@ -7,3 +7,5 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 // MUXBOT_TEST_PREVIEW_URL = http:/$()/your-mac.your-tailnet.ts.net:8445/
 // Optional: the darkmux work folder for that bot (must be under ~/.darkmux/worktrees).
 // MUXBOT_TEST_WORKDIR = ~/.darkmux/worktrees/hcr-preview
+// Optional: the darkmux command the pairing screen shows (default: darkmux).
+// MUXBOT_DARKMUX_CLI = /path/to/darkmux
