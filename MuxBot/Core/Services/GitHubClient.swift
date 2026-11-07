@@ -1,0 +1,116 @@
+import Foundation
+
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// An open issue or pull request on GitHub.
+struct GitHubIssue: Sendable, Equatable, Decodable {
+    struct Label: Sendable, Equatable, Decodable { var name: String }
+    struct PullRequestMarker: Sendable, Equatable, Decodable {}
+
+    var number: Int
+    var title: String
+    var labels: [Label] = []
+    var pullRequest: PullRequestMarker?
+
+    var isPullRequest: Bool { pullRequest != nil }
+    var labelNames: [String] { labels.map(\.name) }
+
+    /// "#12 Fix the footer [bug]" or "#13 PR: Bump deps".
+    var line: String {
+        let tags = labelNames.isEmpty ? "" : " [\(labelNames.joined(separator: ", "))]"
+        return "#\(number) \(isPullRequest ? "PR: " : "")\(title)\(tags)"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case number, title, labels
+        case pullRequest = "pull_request"
+    }
+
+    /// "owner/repo" from a GitHub URL, or nil if it isn't one.
+    static func repoSlug(from url: String) -> String? {
+        guard let range = url.range(of: "github.com/") else { return nil }
+        let parts = url[range.upperBound...].split(separator: "/").prefix(2)
+        guard parts.count == 2 else { return nil }
+        let repo = parts[1].hasSuffix(".git") ? String(parts[1].dropLast(4)) : String(parts[1])
+        return "\(parts[0])/\(repo)"
+    }
+}
+
+/// Read-only GitHub access for bots. Behind a protocol so tests can mock it.
+protocol GitHubClient: Sendable {
+    /// Open issues and pull requests for "owner/repo", newest first.
+    func openIssues(repo: String) async throws -> [GitHubIssue]
+}
+
+/// Unauthenticated GitHub REST API: public repos only, 60 requests an hour
+/// per IP. A GitHub sign-in comes later.
+struct RESTGitHubClient: GitHubClient {
+    func openIssues(repo: String) async throws -> [GitHubIssue] {
+        guard let url = URL(string: "https://api.github.com/repos/\(repo)/issues?state=open&per_page=30") else { return [] }
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw GitHubError(status: http.statusCode)
+        }
+        return try JSONDecoder().decode([GitHubIssue].self, from: data)
+    }
+}
+
+struct GitHubError: LocalizedError {
+    var status: Int
+    var errorDescription: String? {
+        switch status {
+        case 403, 429: "GitHub's rate limit for unsigned-in requests is used up (60 an hour)."
+        case 404: "GitHub can't find that repo, or it's private (sign-in isn't supported yet)."
+        default: "GitHub answered with status \(status)."
+        }
+    }
+}
+
+enum IssueQuery {
+    /// Issues matching a label (case-insensitive); all issues if no label
+    /// is asked for or none carry it.
+    static func filter(_ issues: [GitHubIssue], label: String?, includePullRequests: Bool) -> [GitHubIssue] {
+        let pool = includePullRequests ? issues : issues.filter { !$0.isPullRequest }
+        guard let label, !label.isEmpty else { return pool }
+        let labeled = pool.filter { $0.labelNames.contains { $0.caseInsensitiveCompare(label) == .orderedSame } }
+        return labeled.isEmpty ? pool : labeled
+    }
+}
+
+#if canImport(FoundationModels)
+/// Lets the on-device model read a bot's repos: open issues and PRs.
+struct OpenIssuesTool: Tool {
+    let repos: [String]
+    let client: any GitHubClient
+
+    let name = "listOpenIssues"
+    let description = "Lists open GitHub issues (and optionally pull requests) for this bot's repos."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "A label to filter by, such as bug. Empty for all issues.")
+        var label: String
+        @Guide(description: "true to include open pull requests")
+        var includePullRequests: Bool
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        var lines: [String] = []
+        for repo in repos {
+            do {
+                let issues = IssueQuery.filter(try await client.openIssues(repo: repo),
+                                               label: arguments.label, includePullRequests: arguments.includePullRequests)
+                lines.append(issues.isEmpty ? "\(repo): no open issues." : "\(repo):\n" + issues.prefix(10).map { "- \($0.line)" }.joined(separator: "\n"))
+            } catch {
+                lines.append("\(repo): couldn't read issues (\(error.localizedDescription))")
+            }
+        }
+        return lines.isEmpty ? "This bot has no GitHub repo resource." : lines.joined(separator: "\n")
+    }
+}
+#endif

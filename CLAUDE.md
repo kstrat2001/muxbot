@@ -27,7 +27,7 @@ Mux Bot is about getting work done, not managing machines. Lead with the work (r
 - **The lead bot's name is a placeholder** (`LeadBot.name`, currently "Mux Bot"); change it there only.
 - **The app owns its bot store.** A bot (`Bot`) is a project or theme: a persona, a thread, and resources (`BotResource`: repo, folder, preview recipe, link, note) and runs (`BotRun`). darkmux roles are the crew (`CrewRole`: Coder, Reviewer, Eval runner, Researcher): never bots or tiles, only named on dispatch cards and run details. Everything is in SwiftData, mutated through `BotStore`, not mirrored from darkmux config. First launch seeds humancodereader, darkmux, Personal brand and Daily update.
 - **American English** in all copy, comments and docs.
-- No networking or darkmux calls exist yet. Bots answer on device (`BotBrain`: Foundation Models guided generation over the bots and the fleet briefing; `FallbackBrain` keyword matching, labeled in the UI, when the model is unavailable). The fleet is `FleetSnapshot.sample`, labeled as sample data.
+- **The only network call is read-only GitHub** (`GitHubClient`: open issues and PRs for a bot's repo resources, unauthenticated REST, public repos, 60 requests an hour). No darkmux calls yet. Bots answer on device (`BotBrain`: Foundation Models guided generation with the `OpenIssuesTool` tool, over the bots and the fleet briefing). When the model is unavailable or fails (the simulator can report it available and still fail if the Mac has Apple Intelligence off), the thread says so once and `FallbackBrain` keyword matching answers: questions get honest answers, never a fake "Noted".
 
 ## Layout
 

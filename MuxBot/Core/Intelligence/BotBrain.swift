@@ -102,7 +102,30 @@ enum FallbackBrain {
             return BotTurn(reply: "I'll send this to the \(crew.name) crew. Approve to dispatch.",
                            action: .dispatch(crew: crew, task: text))
         }
+        if text.hasSuffix("?") {
+            return BotTurn(reply: "I can't answer that without the on-device model. I can list open issues, check the fleet, or send work to the crew.", action: nil)
+        }
         return BotTurn(reply: "Noted. Tell me what to build, review, evaluate or research and I'll line up the crew.", action: nil)
+    }
+
+    /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
+    static func isIssueQuestion(_ lower: String) -> Bool {
+        ["issue", "ticket", "bug", "pull request", "prs"].contains { lower.contains($0) }
+            && !["fix the", "fix this", "build", "implement"].contains { lower.contains($0) }
+    }
+
+    /// Lists matching issues and offers the first as a Coder dispatch.
+    static func issuesTurn(_ issues: [GitHubIssue], repo: String, asked lower: String) -> BotTurn {
+        let label = lower.contains("bug") ? "bug" : nil
+        let includePRs = lower.contains("pull request") || lower.contains("prs")
+        let matches = IssueQuery.filter(issues, label: label, includePullRequests: includePRs)
+        guard let first = matches.first(where: { !$0.isPullRequest }) ?? matches.first else {
+            return BotTurn(reply: "No open \(label.map { "\($0) " } ?? "")issues on \(repo).", action: nil)
+        }
+        let list = matches.prefix(5).map { "• \($0.line)" }.joined(separator: "\n")
+        let more = matches.count > 5 ? "\n…and \(matches.count - 5) more." : ""
+        return BotTurn(reply: "Open on \(repo):\n\(list)\(more)\nFix #\(first.number) with Coder?",
+                       action: .dispatch(crew: .coder, task: "Fix #\(first.number): \(first.title) (\(repo))"))
     }
 
     /// The crew role whose keywords the request mentions most.
@@ -236,13 +259,36 @@ final class BotBrain {
     var fleet = FleetSnapshot.sample
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true
+    var github: any GitHubClient = RESTGitHubClient()
+    /// Threads already told that the on-device model isn't working here.
+    private var toldFallback: Set<ChatContext> = []
 
-    var onDeviceAvailable: Bool {
+    /// Why the on-device model can't be used, or nil when it reports ready.
+    /// (The simulator can report ready and still fail at inference when the
+    /// Mac has Apple Intelligence off; that failure is caught per turn.)
+    var onDeviceUnavailableReason: String? {
         #if canImport(FoundationModels)
-        SystemLanguageModel.default.isAvailable
+        switch SystemLanguageModel.default.availability {
+        case .available: nil
+        case .unavailable(.appleIntelligenceNotEnabled): "Apple Intelligence is turned off"
+        case .unavailable(.deviceNotEligible): "this device doesn't support Apple Intelligence"
+        case .unavailable(.modelNotReady): "the model is still downloading"
+        case .unavailable: "the model is unavailable"
+        }
         #else
-        false
+        "Foundation Models isn't available"
         #endif
+    }
+
+    private func issuesTurn(for text: String, repos: [String]) async -> BotTurn {
+        guard let repo = repos.first else {
+            return BotTurn(reply: "I don't have a GitHub repo yet. Paste its URL and I'll keep it.", action: nil)
+        }
+        do {
+            return FallbackBrain.issuesTurn(try await github.openIssues(repo: repo), repo: repo, asked: text.lowercased())
+        } catch {
+            return BotTurn(reply: "I couldn't read issues on \(repo): \(error.localizedDescription)", action: nil)
+        }
     }
 
     func send(_ request: String, in context: ChatContext, store: BotStore) async {
@@ -258,12 +304,25 @@ final class BotBrain {
         pending = nil
         fallbackNote = nil
 
+        let repos = speaker.map { $0.resources.compactMap(GitHubIssue.repoSlug(from:)) } ?? []
         var turn: BotTurn?
-        if useOnDeviceModel && onDeviceAvailable {
-            turn = await onDeviceTurn(for: text, speaker: speaker, bots: bots)
-            if turn == nil { fallbackNote = "The on-device model couldn't answer, so I used simple keyword matching." }
-        } else {
-            fallbackNote = "Apple Intelligence isn't available here, so bots use simple keyword matching."
+        var unavailableReason = onDeviceUnavailableReason
+        if useOnDeviceModel && unavailableReason == nil {
+            do {
+                turn = try await onDeviceTurn(for: text, speaker: speaker, bots: bots, repos: repos)
+            } catch {
+                unavailableReason = error.localizedDescription
+            }
+        }
+        if turn == nil, let reason = unavailableReason, useOnDeviceModel, !toldFallback.contains(context) {
+            toldFallback.insert(context)
+            store.append(.system, "The on-device model isn't working here (\(reason)). I'm using simple keyword matching: I can list issues, check the fleet and send work to the crew, but I can't hold a real conversation.", to: conversation)
+        }
+        fallbackNote = !useOnDeviceModel || turn != nil ? nil
+            : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
+            : "The on-device model's answer wasn't usable, so I used keyword matching."
+        if turn == nil, speaker != nil, FallbackBrain.isIssueQuestion(text.lowercased()) {
+            turn = await issuesTurn(for: text, repos: repos)
         }
         let result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
         store.append(.assistant, result.reply, to: conversation)
@@ -347,7 +406,7 @@ final class BotBrain {
         self.pending = nil
     }
 
-    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary]) async -> BotTurn? {
+    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [String]) async throws -> BotTurn? {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
         let roster = others.map { "- \($0.name): \($0.instructions)" }.joined(separator: "\n")
@@ -355,8 +414,11 @@ final class BotBrain {
         let identity = speaker.map {
             "You are \($0.name), a bot in Mux Bot. \($0.instructions)\nYour resources: \($0.resources.isEmpty ? "none yet" : $0.resources.joined(separator: ", "))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
         } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
-        let session = LanguageModelSession(instructions: """
+        let tools: [any Tool] = repos.isEmpty ? [] : [OpenIssuesTool(repos: repos, client: github)]
+        let session = LanguageModelSession(tools: tools, instructions: """
             \(identity)
+            Answer questions in plain words; propose an action only when the user wants something done. \
+            Use the listOpenIssues tool for questions about issues, bugs, tickets or pull requests, and offer to dispatch a fix. \
             Hand work to another bot only when the user asks or it clearly belongs to that bot. \
             When asked where work should run, suggest the online machine with the most free memory.
             Other bots:
@@ -387,7 +449,7 @@ final class BotBrain {
                 return BotTurn(reply: g.reply, action: .addResource(kind: ResourceKind.guess(for: value), value: value))
             }
         } catch {
-            return nil
+            throw error
         }
         #else
         return nil
