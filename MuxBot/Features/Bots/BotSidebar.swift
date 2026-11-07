@@ -27,13 +27,13 @@ struct BotSidebar: View {
                     .botContextMenu(nil)
                 ForEach(bots) { bot in
                     row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: bot.state)
+                        #if os(macOS)
+                        .modifier(SidebarInfoButton(bot: bot))   // inside the row, so the tag stays outermost
+                        #endif
                         .tag(SidebarItem.bot(bot.id))
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
                         .botContextMenu(bot)
-                        #if os(macOS)
-                        .modifier(SidebarInfoButton(bot: bot))
-                        #endif
                 }
                 Button { router.showNewBot = true } label: {
                     plainRow("New bot", systemImage: "plus")
@@ -159,7 +159,6 @@ struct BotSidebar: View {
     }
 }
 
-#if os(macOS)
 /// The (i) on a bot's sidebar row, shown while the row is hovered or
 /// selected: Bot info in a popover anchored to the row (also ⌘I and the
 /// row's context menu).
@@ -170,19 +169,19 @@ struct SidebarInfoButton: ViewModifier {
 
     func body(content: Content) -> some View {
         let open = router.infoBotId == bot.id
-        content
-            .overlay(alignment: .trailing) {
-                if hovering || open || router.sidebar == .bot(bot.id) {
-                    Button { router.infoBotId = bot.id } label: {
-                        Image(systemName: open ? "info.circle.fill" : "info.circle")
-                            .padding(4)
-                            .background(Circle().fill(.background))
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Bot info (⌘I)")
-                    .accessibilityLabel("\(bot.name) info")
+        // In the row's own layout, after its unread dot and status badge:
+        // never drawn on top of them.
+        HStack(spacing: Spacing.xs) {
+            content
+            if hovering || open || router.sidebar == .bot(bot.id) {
+                Button { router.infoBotId = bot.id } label: {
+                    Image(systemName: open ? "info.circle.fill" : "info.circle")
                 }
+                .buttonStyle(.borderless)
+                .help("Bot info (⌘I)")
+                .accessibilityLabel("\(bot.name) info")
             }
+        }
             .onHover { hovering = $0 }
             .popover(isPresented: Binding(get: { router.infoBotId == bot.id },
                                           set: { if !$0, router.infoBotId == bot.id { router.infoBotId = nil } }),
@@ -192,4 +191,3 @@ struct SidebarInfoButton: ViewModifier {
             }
     }
 }
-#endif
