@@ -1,5 +1,14 @@
 import SwiftUI
 
+extension View {
+    /// Messages-style width: at most 70% of the thread and 520pt, hugging
+    /// its content, pinned to the bot's side (leading) or yours (trailing).
+    func chatColumn(alignment: Alignment) -> some View {
+        containerRelativeFrame(.horizontal, alignment: alignment) { width, _ in min(width * 0.7, 520) }
+            .frame(maxWidth: .infinity, alignment: alignment)
+    }
+}
+
 struct ChatBubbleView: View {
     let role: ChatRole
     let content: String
@@ -20,9 +29,7 @@ struct ChatBubbleView: View {
     }
 
     private var bubble: some View {
-        HStack {
-            if isUser { Spacer(minLength: Spacing.xxl) }
-            Text(content)
+        Text(content)
                 .font(AppFont.body())
                 .foregroundStyle(isUser ? Color.white : Color.primary)
                 .padding(.horizontal, Spacing.md)
@@ -32,8 +39,7 @@ struct ChatBubbleView: View {
                         .fill(isUser ? Color.brandGreenAccessible : Color.cardBackground)
                 )
                 .textSelection(.enabled)
-            if !isUser { Spacer(minLength: Spacing.xxl) }
-        }
+                .chatColumn(alignment: isUser ? .trailing : .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isUser ? "You" : "Reply"): \(content)")
     }

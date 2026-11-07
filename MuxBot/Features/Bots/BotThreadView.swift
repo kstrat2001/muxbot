@@ -35,6 +35,9 @@ struct BotThreadView: View {
             }
         }
         .navigationTitle(title)
+        // Each screen pins the bar itself: on macOS a bar attached to the
+        // navigation stack does not carry into pushed views.
+        .safeAreaInset(edge: .bottom) { BotBar() }
         .toolbar {
             if let bot {
                 ToolbarItem(placement: .primaryAction) {

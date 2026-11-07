@@ -280,14 +280,32 @@ final class BotBrain {
         #endif
     }
 
-    private func issuesTurn(for text: String, repos: [String]) async -> BotTurn {
-        guard let repo = repos.first else {
+    /// A bot answers for its own repo. The lead bot answers for the bot the
+    /// request names (or best matches) and offers a handoff, not a dispatch.
+    private func issuesTurn(for text: String, repos: [BotRepo], lead: Bool, bots: [BotSummary]) async -> BotTurn {
+        let lower = text.lowercased()
+        var target = repos.first
+        if lead {
+            let withRepo = bots.filter { b in repos.contains { $0.bot == b.name } }
+            let pick = withRepo.first { lower.contains($0.name.lowercased()) } ?? FallbackBrain.bestMatch(for: lower, in: withRepo)
+            target = pick.flatMap { b in repos.first { $0.bot == b.name } }
+            guard target != nil else {
+                let names = withRepo.map(\.name).joined(separator: ", ")
+                return BotTurn(reply: names.isEmpty ? "None of your bots has a GitHub repo yet." : "Which bot's repo should I check? \(names).", action: nil)
+            }
+        }
+        guard let ref = target else {
             return BotTurn(reply: "I don't have a GitHub repo yet. Paste its URL and I'll keep it.", action: nil)
         }
         do {
-            return FallbackBrain.issuesTurn(try await github.openIssues(repo: repo), repo: repo, asked: text.lowercased())
+            var turn = FallbackBrain.issuesTurn(try await github.openIssues(repo: ref.repo), repo: ref.repo, asked: lower)
+            if lead, case let .dispatch(_, task)? = turn.action, let bot = bots.first(where: { $0.name == ref.bot }) {
+                turn.reply = turn.reply.replacingOccurrences(of: "with Coder?", with: "with \(bot.name)? I'll hand it over.")
+                turn.action = .handOff(toId: bot.id, toName: bot.name, task: task)
+            }
+            return turn
         } catch {
-            return BotTurn(reply: "I couldn't read issues on \(repo): \(error.localizedDescription)", action: nil)
+            return BotTurn(reply: "I couldn't read issues on \(ref.repo): \(error.localizedDescription)", action: nil)
         }
     }
 
@@ -304,7 +322,10 @@ final class BotBrain {
         pending = nil
         fallbackNote = nil
 
-        let repos = speaker.map { $0.resources.compactMap(GitHubIssue.repoSlug(from:)) } ?? []
+        // A bot reads its own repos; the lead bot reads every bot's.
+        let repos = (speaker.map { [$0] } ?? bots).flatMap { bot in
+            bot.resources.compactMap(GitHubIssue.repoSlug(from:)).map { BotRepo(bot: bot.name, repo: $0) }
+        }
         var turn: BotTurn?
         var unavailableReason = onDeviceUnavailableReason
         if useOnDeviceModel && unavailableReason == nil {
@@ -321,8 +342,10 @@ final class BotBrain {
         fallbackNote = !useOnDeviceModel || turn != nil ? nil
             : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
             : "The on-device model's answer wasn't usable, so I used keyword matching."
-        if turn == nil, speaker != nil, FallbackBrain.isIssueQuestion(text.lowercased()) {
-            turn = await issuesTurn(for: text, repos: repos)
+        if turn == nil, FallbackBrain.isIssueQuestion(text.lowercased()) {
+            // Answered from GitHub itself, so no keyword-matching caveat.
+            turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
+            if unavailableReason == nil { fallbackNote = nil }
         }
         let result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots, fleet: fleet)
         store.append(.assistant, result.reply, to: conversation)
@@ -370,6 +393,16 @@ final class BotBrain {
         }
     }
 
+    /// Drops any sentence that names a tool or tells the user to use one.
+    nonisolated static func withoutToolTalk(_ reply: String) -> String {
+        let banned = ["listopenissues", " tool", "tool "]
+        let sentences = reply.split(omittingEmptySubsequences: true) { ".!?\n".contains($0) }
+        let kept = sentences.filter { s in !banned.contains { s.lowercased().contains($0) } }
+        guard kept.count < sentences.count else { return reply }
+        let text = kept.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: ". ")
+        return text.isEmpty ? "Let me check that properly." : text + "."
+    }
+
     static func sampleSummary(for run: BotRun) -> String {
         let pass = run.tweaks == 0 ? "" : " (after \(run.tweaks) tweak\(run.tweaks == 1 ? "" : "s"))"
         return "\(run.crew.name) finished “\(run.task)”\(pass). Sample result: the fleet isn't connected yet, so there is no real diff. Changed files, tests and a screenshot will show here."
@@ -406,7 +439,7 @@ final class BotBrain {
         self.pending = nil
     }
 
-    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [String]) async throws -> BotTurn? {
+    private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo]) async throws -> BotTurn? {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
         let roster = others.map { "- \($0.name): \($0.instructions)" }.joined(separator: "\n")
@@ -414,11 +447,17 @@ final class BotBrain {
         let identity = speaker.map {
             "You are \($0.name), a bot in Mux Bot. \($0.instructions)\nYour resources: \($0.resources.isEmpty ? "none yet" : $0.resources.joined(separator: ", "))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
         } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
-        let tools: [any Tool] = repos.isEmpty ? [] : [OpenIssuesTool(repos: repos, client: github)]
+        let issueTool = OpenIssuesTool(repos: repos, client: github)
+        let tools: [any Tool] = repos.isEmpty ? [] : [issueTool]
+        let rules = """
+            Never mention tools or their names to the user. Never say whether issues, bugs or pull requests \
+            exist without calling listOpenIssues first; if you can't check, say so. \
+            \(speaker == nil ? "When the user wants an issue fixed, hand it off (handOff) to the bot that owns that repo." : "When the user wants an issue fixed, dispatch it to the Coder crew.")
+            """
         let session = LanguageModelSession(tools: tools, instructions: """
             \(identity)
             Answer questions in plain words; propose an action only when the user wants something done. \
-            Use the listOpenIssues tool for questions about issues, bugs, tickets or pull requests, and offer to dispatch a fix. \
+            \(rules)
             Hand work to another bot only when the user asks or it clearly belongs to that bot. \
             When asked where work should run, suggest the online machine with the most free memory.
             Other bots:
@@ -426,7 +465,21 @@ final class BotBrain {
             \(fleet.briefing)
             """)
         do {
-            let g = try await session.respond(to: request, generating: GeneratedTurn.self).content
+            var g: GeneratedTurn
+            do {
+                g = try await session.respond(to: request, generating: GeneratedTurn.self).content
+            } catch LanguageModelSession.GenerationError.decodingFailure {
+                // The model sometimes answers in prose instead of the
+                // structure; one retry, then let the caller fall back.
+                do {
+                    g = try await session.respond(to: request, generating: GeneratedTurn.self).content
+                } catch LanguageModelSession.GenerationError.decodingFailure {
+                    return nil
+                }
+            }
+            // Never trust an answer about issues that didn't check GitHub.
+            if FallbackBrain.isIssueQuestion(request.lowercased()) && issueTool.counter.count == 0 { return nil }
+            g.reply = Self.withoutToolTalk(g.reply)
             switch g.action {
             case .none:
                 return BotTurn(reply: g.reply, action: nil)

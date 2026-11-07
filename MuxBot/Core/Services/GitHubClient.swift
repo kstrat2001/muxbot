@@ -1,4 +1,14 @@
 import Foundation
+import OSLog
+import Synchronization
+
+/// Counts tool calls in one turn, so the brain can tell a checked answer
+/// from a guess.
+final class ToolCallCounter: Sendable {
+    private let calls = Mutex(0)
+    var count: Int { calls.withLock { $0 } }
+    func record() { calls.withLock { $0 += 1 } }
+}
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -83,13 +93,20 @@ enum IssueQuery {
 }
 
 #if canImport(FoundationModels)
-/// Lets the on-device model read a bot's repos: open issues and PRs.
+/// A repo and the bot it belongs to.
+struct BotRepo: Sendable, Equatable {
+    var bot: String
+    var repo: String
+}
+
+/// Lets the on-device model read bots' repos: open issues and PRs.
 struct OpenIssuesTool: Tool {
-    let repos: [String]
+    let repos: [BotRepo]
     let client: any GitHubClient
+    var counter = ToolCallCounter()
 
     let name = "listOpenIssues"
-    let description = "Lists open GitHub issues (and optionally pull requests) for this bot's repos."
+    let description = "Lists open GitHub issues (and optionally pull requests) in the bots' repos. Always call it before saying anything about issues, bugs, tickets or pull requests."
 
     @Generable
     struct Arguments {
@@ -100,17 +117,21 @@ struct OpenIssuesTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
+        counter.record()
+        Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "tools")
+            .debug("listOpenIssues label=\(arguments.label, privacy: .public) prs=\(arguments.includePullRequests) repos=\(repos.map(\.repo).joined(separator: ","), privacy: .public)")
         var lines: [String] = []
-        for repo in repos {
+        for ref in repos {
+            let header = "\(ref.bot) (\(ref.repo))"
             do {
-                let issues = IssueQuery.filter(try await client.openIssues(repo: repo),
+                let issues = IssueQuery.filter(try await client.openIssues(repo: ref.repo),
                                                label: arguments.label, includePullRequests: arguments.includePullRequests)
-                lines.append(issues.isEmpty ? "\(repo): no open issues." : "\(repo):\n" + issues.prefix(10).map { "- \($0.line)" }.joined(separator: "\n"))
+                lines.append(issues.isEmpty ? "\(header): no open issues." : "\(header):\n" + issues.prefix(10).map { "- \($0.line)" }.joined(separator: "\n"))
             } catch {
-                lines.append("\(repo): couldn't read issues (\(error.localizedDescription))")
+                lines.append("\(header): couldn't read issues (\(error.localizedDescription))")
             }
         }
-        return lines.isEmpty ? "This bot has no GitHub repo resource." : lines.joined(separator: "\n")
+        return lines.isEmpty ? "No bot has a GitHub repo resource yet." : lines.joined(separator: "\n")
     }
 }
 #endif

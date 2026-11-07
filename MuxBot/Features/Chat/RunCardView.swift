@@ -28,6 +28,7 @@ struct RunCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .chatColumn(alignment: .leading)
         }
     }
 

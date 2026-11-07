@@ -18,7 +18,7 @@ struct HomeView: View {
                     let group = roles.filter { $0.state == state }
                     if !group.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.md) {
-                            HStack(spacing: Spacing.sm) {
+                            if state != .ready { HStack(spacing: Spacing.sm) {
                                 StatusBadge(kind: state.kind)
                                 Text("\(group.count)")
                                     .font(AppFont.caption(.semibold))
@@ -27,6 +27,7 @@ struct HomeView: View {
                             }
                             .accessibilityElement(children: .combine)
                             .accessibilityAddTraits(.isHeader)
+                            }
                             LazyVGrid(columns: columns, spacing: Spacing.md) {
                                 ForEach(group) { role in
                                     Button { router.navigate(to: .bot(role.id)) } label: {
@@ -46,6 +47,7 @@ struct HomeView: View {
             .padding(Spacing.lg)
         }
         .navigationTitle("Your bots")
+        .safeAreaInset(edge: .bottom) { BotBar() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("New bot", systemImage: "plus") { router.showNewBot = true }

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A thread's transcript. Input lives in the shared `BotBar`, which follows
-/// navigation, so this view only shows messages.
+/// A thread's transcript, Messages-style: newest at the bottom, bot on the
+/// left, you on the right, run cards inline. The thread view pins `BotBar`
+/// under it.
 struct ChatView: View {
     let conversation: ChatConversation
     var isThinking = false
@@ -39,8 +40,12 @@ struct ChatView: View {
                 }
                 .padding(Spacing.lg)
             }
+            .defaultScrollAnchor(.bottom)
             .onChange(of: messages.count) {
                 if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+            }
+            .onAppear {
+                if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
     }

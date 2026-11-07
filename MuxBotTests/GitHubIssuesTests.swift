@@ -11,7 +11,7 @@ struct MockGitHub: GitHubClient {
     }
 }
 
-private func issue(_ n: Int, _ title: String, labels: [String] = [], pr: Bool = false) -> GitHubIssue {
+func issue(_ n: Int, _ title: String, labels: [String] = [], pr: Bool = false) -> GitHubIssue {
     GitHubIssue(number: n, title: title, labels: labels.map { .init(name: $0) }, pullRequest: pr ? .init() : nil)
 }
 
@@ -109,5 +109,47 @@ struct BotIssueLookupTests {
         let (store, bot, brain) = setUp(repo: false)
         await brain.send("any bug tickets?", in: .bot(bot.id), store: store)
         #expect(lastReply(store, bot)?.hasPrefix("I don't have a GitHub repo yet") == true)
+    }
+}
+
+struct ToolTalkFilterTests {
+    @Test func dropsSentencesThatNameATool() {
+        let reply = "There are no bugs reported. However, you can use the listOpenIssues tool to check for issues."
+        #expect(BotBrain.withoutToolTalk(reply) == "There are no bugs reported.")
+    }
+
+    @Test func leavesNormalRepliesAlone() {
+        #expect(BotBrain.withoutToolTalk("Two bugs are open. Want me to fix #7?") == "Two bugs are open. Want me to fix #7?")
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct LeadBotIssueTests {
+    @Test func leadBotChecksTheNamedBotsRepoAndOffersAHandoff() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "darkmux", instructions: "CLI", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/darkmux", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issue(3445, "Crash on empty brief", labels: ["bug"])])
+        await brain.send("any bug tickets on darkmux?", in: .lead, store: store)
+        #expect(brain.pending?.action == .handOff(toId: bot.id, toName: "darkmux", task: "Fix #3445: Crash on empty brief (kstrat2001/darkmux)"))
+        let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant }.last?.content ?? ""
+        #expect(reply.contains("#3445 Crash on empty brief"))
+        #expect(reply.hasSuffix("I'll hand it over."))
+    }
+
+    @Test func leadBotAsksWhichRepoWhenItCannotTell() async {
+        let store = TestStore.fresh()
+        let a = store.add(name: "darkmux", instructions: "CLI", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/darkmux", to: a)
+        let b = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: b)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub()
+        await brain.send("zzz bug tickets?", in: .lead, store: store)
+        let reply = (store.conversation(for: .lead).messages ?? []).filter { $0.role == .assistant }.last?.content ?? ""
+        #expect(reply.hasPrefix("Which bot's repo should I check?"))
     }
 }
