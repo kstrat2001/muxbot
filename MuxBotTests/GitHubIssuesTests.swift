@@ -169,6 +169,7 @@ struct PreviewRecipeTests {
 
     @Test func recipeIsReadyWhenTheRepoHasOne() async {
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.github = MockGitHub(files: ["kstrat2001/hcr/.darkmux/preview.json": hcrDraft])
         await brain.loadRecipe(for: "kstrat2001/hcr")
         guard case .ready(let m)? = brain.recipes["kstrat2001/hcr"] else { Issue.record("expected ready"); return }
@@ -177,6 +178,7 @@ struct PreviewRecipeTests {
 
     @Test func recipeIsMissingWhenTheFileIsAbsent() async {
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.github = MockGitHub()
         await brain.loadRecipe(for: "kstrat2001/hcr")
         #expect(brain.recipes["kstrat2001/hcr"] == .missing)

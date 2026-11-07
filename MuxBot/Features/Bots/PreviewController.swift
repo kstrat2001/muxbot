@@ -57,6 +57,14 @@ final class PreviewController: PageInspecting {
         return json.flatMap { try? JSONDecoder().decode(PageFacts.self, from: Data($0.utf8)) }
     }
 
+    /// What's on screen in the preview right now (not the whole page).
+    func visiblePNG() async -> Data? {
+        guard loadedURL != nil,
+              let json = try? await page.callJavaScript("return JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])") as? String,
+              let v = try? JSONDecoder().decode([Double].self, from: Data(json.utf8)), v.count == 4 else { return nil }
+        return try? await page.exported(as: .image(region: .rect(CGRect(x: v[0], y: v[1], width: v[2], height: v[3]))))
+    }
+
     func snapshotPNG() async -> Data? {
         guard loadedURL != nil else { return nil }
         return try? await page.exported(as: .image())

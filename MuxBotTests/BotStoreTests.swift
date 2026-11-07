@@ -42,6 +42,7 @@ struct BotStoreTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.pending = .init(context: .bot(bot.id), action: .addResource(kind: .repo, value: "https://github.com/kstrat2001/hcr"))
         brain.approve(in: store)
         #expect(store.bot(id: bot.id)?.sortedResources.map(\.value) == ["https://github.com/kstrat2001/hcr"])
@@ -52,6 +53,7 @@ struct BotStoreTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.pending = .init(context: .lead, action: .dispatch(crew: .coder, task: "x"))
         brain.approve(in: store)
         #expect(brain.pending == nil)
@@ -94,6 +96,7 @@ struct BotStoreTests {
         let store = TestStore.fresh()
         let role = store.add(name: "darkmux", instructions: "CLI", modelName: "")
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "darkmux", task: "Check PR 12"))
         brain.approve(in: store)
         #expect(brain.pending == nil)
@@ -104,6 +107,7 @@ struct BotStoreTests {
     @Test func approvingANewBotSavesIt() {
         let store = TestStore.fresh()
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.pending = .init(context: .lead, action: .createBot(BotDraft(name: "Life coach", instructions: "Keeps me on track")))
         brain.approve(in: store)
         #expect(store.allBots().map(\.name) == ["Life coach"])
@@ -113,6 +117,7 @@ struct BotStoreTests {
         let store = TestStore.fresh()
         let role = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.pending = .init(context: .lead, action: .handOff(toId: role.id, toName: "humancodereader", task: "x"))
         brain.cancel()
         #expect(brain.pending == nil)

@@ -1,10 +1,5 @@
 import SwiftUI
 import SwiftData
-#if os(iOS)
-import UIKit
-#else
-import AppKit
-#endif
 
 /// A drafted bug: what you described, measured page facts, and two ways
 /// forward: file it on GitHub (prefilled, screenshot on the clipboard) or
@@ -74,14 +69,5 @@ struct BugCardView: View {
         return copy(png)
     }
 
-    private func copy(_ png: Data) -> Bool {
-        #if os(iOS)
-        guard let image = UIImage(data: png) else { return false }
-        UIPasteboard.general.image = image
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setData(png, forType: .png)
-        #endif
-        return true
-    }
+    private func copy(_ png: Data) -> Bool { Clipboard.copyPNG(png) }
 }

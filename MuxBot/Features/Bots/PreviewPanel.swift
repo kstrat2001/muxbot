@@ -10,6 +10,7 @@ struct PreviewPanel: View {
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
+    @State private var copiedNote: String?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -23,6 +24,18 @@ struct PreviewPanel: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer()
+                Menu {
+                    Button("Copy visible preview", systemImage: "rectangle.dashed") { copy(visible: true) }
+                    Button("Copy picked element", systemImage: "scope") { copy(visible: false) }
+                        .disabled(preview.pickedCrop == nil)
+                } label: {
+                    Label("Copy screenshot", systemImage: "camera")
+                } primaryAction: {
+                    copy(visible: true)
+                }
+                .labelStyle(.iconOnly)
+                .fixedSize()
+                .help("Copy a screenshot of the preview to the clipboard")
                 Button(preview.isPicking ? "Cancel" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
                     preview.togglePicking()
                 }
@@ -47,7 +60,28 @@ struct PreviewPanel: View {
             .padding(.vertical, Spacing.sm)
             .background(.bar)
             WebView(preview.page)
+                .overlay(alignment: .top) {
+                    if let copiedNote {
+                        Text(copiedNote)
+                            .font(AppFont.caption(.semibold))
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.xs)
+                            .background(Capsule().fill(.regularMaterial))
+                            .padding(.top, Spacing.sm)
+                            .transition(.opacity)
+                    }
+                }
         }
         .task(id: url) { preview.show(url) }
+    }
+
+    private func copy(visible: Bool) {
+        Task {
+            let png = visible ? await preview.visiblePNG() : preview.pickedCrop
+            let ok = png.map(Clipboard.copyPNG) ?? false
+            withAnimation { copiedNote = ok ? "Copied" : "Couldn't copy" }
+            try? await Task.sleep(for: .seconds(1.5))
+            withAnimation { copiedNote = nil }
+        }
     }
 }

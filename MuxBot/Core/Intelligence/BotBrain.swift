@@ -384,8 +384,14 @@ final class BotBrain {
             return
         case .fix?, .review?:
             let crew: CrewRole = intent == .fix ? .coder : .reviewer
+            var task = text + target
+            // "fix #8" or an issue link: dispatch that issue by its title.
+            if let number = Intent.issueNumber(in: text), let repo = repos.first?.repo {
+                let title = (try? await github.openIssues(repo: repo))?.first { $0.number == number }?.title
+                task = "\(crew == .coder ? "Fix" : "Review") #\(number)\(title.map { ": \($0)" } ?? "") (\(repo))"
+            }
             store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
-            if let bot { store.proposeRun(task: text + target, crew: crew, on: bot) }
+            if let bot { store.proposeRun(task: task, crew: crew, on: bot) }
             return
         case .issues?:
             let turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
@@ -449,9 +455,23 @@ final class BotBrain {
         var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
                                     facts: facts, page: nil, repo: repo)
         draft.selector = element?.selector
+        draft.expected = await expectedLine(for: text)
         if let json = try? JSONEncoder().encode(draft), let body = String(data: json, encoding: .utf8) {
             store.append(.assistant, body, kind: .bugCard, to: conversation)
         }
+    }
+
+    /// One sentence on the expected behavior, written by the on-device model
+    /// from the user's words; nil when the model isn't available.
+    private func expectedLine(for report: String) async -> String? {
+        #if canImport(FoundationModels)
+        guard useOnDeviceModel, onDeviceUnavailableReason == nil, !report.isEmpty else { return nil }
+        let session = LanguageModelSession(instructions: "You turn a bug description into one short sentence saying what should happen instead. Reply with only that sentence.")
+        let line = try? await session.respond(to: report).content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return line.flatMap { $0.isEmpty || $0.count > 200 ? nil : $0 }
+        #else
+        return nil
+        #endif
     }
 
     // MARK: Preview recipes

@@ -64,6 +64,7 @@ struct BugFlowTests {
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         let inspector = MockInspector(PageFacts(viewport: 1091, url: "/models", matches: [
             ElementFact(term: "Start_a_Project", tag: "section", left: 0, right: 0, width: 1091,
                         paddingLeft: "53px", paddingRight: "53px", marginLeft: "0px", marginRight: "0px")]))
@@ -85,6 +86,7 @@ struct BugFlowTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         await brain.send("the footer overlaps the cards", in: .bot(bot.id), store: store)
         let messages = store.conversation(for: .bot(bot.id)).messages ?? []
         #expect(messages.contains { $0.content.hasPrefix("I can't see the site and the preview isn't open") })

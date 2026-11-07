@@ -109,6 +109,7 @@ struct RunLoopStoreTests {
     @Test func tweakFromTheBarRestartsTheRun() {
         let (store, bot) = setUp()
         let brain = BotBrain()
+        brain.useOnDeviceModel = false
         brain.simulatedRunSeconds = 3600
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)

@@ -73,17 +73,19 @@ struct BugDraft: Sendable, Equatable, Codable {
     var repo: String?
     /// CSS selector of the picked element, when you pointed at it.
     var selector: String? = nil
+    /// One line on what should happen instead (the on-device model writes
+    /// it from your words when it can).
+    var expected: String? = nil
 
     var body: String {
         var lines = [
             "**What's wrong**", described, "",
             "**Steps**", "1. Open \(page)\(viewport.map { " at \($0)px wide" } ?? "")",
             selector.map { "2. Look at `\($0)`" } ?? "2. Look at the element described above", "",
-            "**Expected**", "It looks right (see description).", "",
-            "**Actual**", described,
+            "**Expected**", expected ?? "_Describe what you expected._",
         ]
         if !facts.isEmpty { lines += ["", "**Page facts (measured in the Mux Bot preview)**"] + facts.map { "- \($0)" } }
-        lines += ["", "_Drafted by Mux Bot. Paste the preview screenshot here._"]
+        lines += ["", "**Screenshot:** paste below.", "", "_Drafted by Mux Bot._"]
         return lines.joined(separator: "\n")
     }
 
@@ -171,7 +173,7 @@ enum BugReport {
               if (parseFloat(st.borderLeftWidth) > 0 || parseFloat(st.borderTopWidth) > 0) { el = n; break; }
             }
             const quote = sel.toString().trim().slice(0, 200);
-            window.__muxPicked = window.__muxDescribe(el, { intent: intent, selectedText: quote, label: quote.slice(0, 40) || undefined });
+            window.__muxPicked = window.__muxDescribe(el, { intent: intent, selectedText: quote });
             menu.style.display = 'none';
             sel.removeAllRanges();
           };

@@ -106,3 +106,43 @@ struct PickedElementFlowTests {
         #expect(reply == "Open the bot for that project to report bugs or send work to its crew.")
     }
 }
+
+struct IssueReferenceTests {
+    @Test(arguments: [
+        ("ok fix https://github.com/kstrat2001/hcr/issues/8", 8),
+        ("fix #12 please", 12),
+        ("can you fix issue #3?", 3),
+    ])
+    func issueNumbers(text: String, number: Int) {
+        #expect(Intent.issueNumber(in: text) == number)
+        #expect(Intent.infer(text, hasElement: false) == .fix)
+    }
+
+    @Test func noIssueReference() {
+        #expect(Intent.issueNumber(in: "fix the footer") == nil)
+    }
+
+    @Test func draftHasExpectedAndAScreenshotSlotButNoDuplicateActual() {
+        var draft = BugReport.draft(from: "no gutter on the sides", facts: nil, page: nil, repo: "o/r")
+        #expect(draft.body.contains("_Describe what you expected._"))
+        draft.expected = "The box keeps a side gutter at narrow widths."
+        #expect(draft.body.contains("**Expected**\nThe box keeps a side gutter at narrow widths."))
+        #expect(!draft.body.contains("**Actual**"))
+        #expect(draft.body.contains("**Screenshot:** paste below."))
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct FixIssueFlowTests {
+    @Test func fixWithAnIssueLinkDispatchesThatIssueByTitle() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issue(8, "No padding on left/right of the border")])
+        await brain.send("ok fix https://github.com/kstrat2001/hcr/issues/8", in: .bot(bot.id), store: store)
+        #expect(bot.runs?.first?.task == "Fix #8: No padding on left/right of the border (kstrat2001/hcr)")
+        #expect(bot.runs?.first?.crew == .coder)
+    }
+}
