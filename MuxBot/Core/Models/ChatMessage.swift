@@ -11,6 +11,8 @@ enum ChatRole: String, Codable, Sendable {
 /// its stage: the dispatch proposal, the live run, the result, the PR.
 enum MessageKind: String, Codable, Sendable {
     case text, dispatchCard, runCard, resultCard, prCard
+    /// A drafted bug report; `content` holds the `BugDraft` as JSON.
+    case bugCard
 }
 
 @Model

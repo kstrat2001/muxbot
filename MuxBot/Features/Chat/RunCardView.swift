@@ -93,7 +93,7 @@ struct RunCardView: View {
             default:
                 outcome(.done)
             }
-        case .text:
+        case .text, .bugCard:
             EmptyView()
         }
     }

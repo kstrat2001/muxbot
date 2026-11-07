@@ -28,6 +28,8 @@ struct ChatView: View {
                         Group {
                             if message.kind == .text {
                                 ChatBubbleView(role: message.role, content: message.content)
+                            } else if message.kind == .bugCard {
+                                BugCardView(message: message)
                             } else {
                                 RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
                             }

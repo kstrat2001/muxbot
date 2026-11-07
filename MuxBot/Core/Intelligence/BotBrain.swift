@@ -86,6 +86,9 @@ enum FallbackBrain {
         if let named = others.first(where: { lower.contains($0.name.lowercased()) }) {
             return handOff(text, to: named)
         }
+        if speaker != nil, isVisualReport(lower) {
+            return visualReportTurn(text)
+        }
         if let speaker, let value = resourceValue(in: text) {
             let kind = ResourceKind.guess(for: value)
             return BotTurn(reply: "Want me to keep that as a \(kind.label.lowercased()) for \(speaker.name)?",
@@ -106,6 +109,21 @@ enum FallbackBrain {
             return BotTurn(reply: "I can't answer that without the on-device model. I can list open issues, check the fleet, or send work to the crew.", action: nil)
         }
         return BotTurn(reply: "Noted. Tell me what to build, review, evaluate or research and I'll line up the crew.", action: nil)
+    }
+
+    /// "The border has no padding", "the cards overlap the footer": the
+    /// user describing something they see in the preview.
+    static func isVisualReport(_ lower: String) -> Bool {
+        let words = ["looks", "border", "padding", "margin", "overlap", "misaligned", "aligned", "cut off",
+                     "too big", "too small", "spacing", "font", "color", "colour", "wraps", "cramped", "broken", "off-center", "contrast"]
+        return words.contains { lower.contains($0) } && !lower.hasSuffix("?")
+    }
+
+    /// The bot can't see the preview: it takes the user's word and offers
+    /// a Coder fix instead of judging the page.
+    static func visualReportTurn(_ text: String) -> BotTurn {
+        BotTurn(reply: "I can't see the preview, so I'll go by your description. Want the Coder crew to fix it?",
+                action: .dispatch(crew: .coder, task: "Fix: \(text)"))
     }
 
     /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
@@ -260,6 +278,8 @@ final class BotBrain {
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true
     var github: any GitHubClient = RESTGitHubClient()
+    /// Reads facts and snapshots from the live preview, when one is open.
+    weak var pageInspector: (any PageInspecting)?
     /// Threads already told that the on-device model isn't working here.
     private var toldFallback: Set<ChatContext> = []
 
@@ -326,6 +346,12 @@ final class BotBrain {
         let repos = (speaker.map { [$0] } ?? bots).flatMap { bot in
             bot.resources.compactMap(GitHubIssue.repoSlug(from:)).map { BotRepo(bot: bot.name, repo: $0) }
         }
+        // A described problem is a bug report: measure the preview and draft
+        // an issue. Never let a model that can't see the page judge it.
+        if let speaker, FallbackBrain.isVisualReport(text.lowercased()) {
+            await draftBug(text, bot: speaker, repo: repos.first?.repo, store: store, conversation: conversation)
+            return
+        }
         var turn: BotTurn?
         var unavailableReason = onDeviceUnavailableReason
         if useOnDeviceModel && unavailableReason == nil {
@@ -357,6 +383,26 @@ final class BotBrain {
             pending = Pending(context: context, action: action)
         case nil:
             break
+        }
+    }
+
+    // MARK: Bug reports
+
+    private func draftBug(_ text: String, bot: BotSummary, repo: String?, store: BotStore, conversation: ChatConversation) async {
+        let facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text))
+        let measured = facts.map(BugReport.describe) ?? []
+        let reply: String
+        if facts == nil {
+            reply = "I can't see the site and the preview isn't open, so I couldn't measure anything. I drafted a bug from your description."
+        } else if measured.isEmpty {
+            reply = "I couldn't find that element on the page to measure it. I drafted a bug from your description."
+        } else {
+            reply = measured.joined(separator: " ") + " I drafted a bug."
+        }
+        store.append(.assistant, reply, to: conversation)
+        let draft = BugReport.draft(from: text, facts: facts, page: nil, repo: repo)
+        if let json = try? JSONEncoder().encode(draft), let body = String(data: json, encoding: .utf8) {
+            store.append(.assistant, body, kind: .bugCard, to: conversation)
         }
     }
 
@@ -480,6 +526,8 @@ final class BotBrain {
         let session = LanguageModelSession(tools: tools, instructions: """
             \(identity)
             Answer questions in plain words; propose an action only when the user wants something done. \
+            You cannot see the website or the preview. Never say how something looks. When the user describes a \
+            visual problem, believe them and offer to dispatch a fix to the Coder crew. \
             \(rules)
             Hand work to another bot only when the user asks or it clearly belongs to that bot. \
             When asked where work should run, suggest the online machine with the most free memory.

@@ -5,6 +5,7 @@ import SwiftData
 struct MuxBotApp: App {
     @State private var router = AppRouter()
     @State private var brain = BotBrain()
+    @State private var preview = PreviewController()
     @State private var notifications = NotificationService()
 
     private let container: ModelContainer
@@ -24,8 +25,12 @@ struct MuxBotApp: App {
             ContentView()
                 .environment(router)
                 .environment(brain)
+                .environment(preview)
                 .environment(notifications)
-                .task { BackgroundTaskService.scheduleRefresh() }
+                .task {
+                    brain.pageInspector = preview
+                    BackgroundTaskService.scheduleRefresh()
+                }
         }
         .modelContainer(container)
     }

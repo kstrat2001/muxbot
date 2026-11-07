@@ -8,6 +8,8 @@ struct PreviewPanel: View {
     let url: URL
     let close: () -> Void
 
+    @Environment(PreviewController.self) private var preview
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Spacing.sm) {
@@ -24,7 +26,8 @@ struct PreviewPanel: View {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
             .background(.bar)
-            WebView(url: url)
+            WebView(preview.page)
         }
+        .task(id: url) { preview.show(url) }
     }
 }

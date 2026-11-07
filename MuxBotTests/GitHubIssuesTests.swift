@@ -197,3 +197,18 @@ struct PreviewRecipeTests {
         #expect(bot.previewURL?.port == 8445)
     }
 }
+
+struct VisualReportTests {
+    let bot = BotSummary(id: UUID(), name: "humancodereader", instructions: "Website", state: .ready)
+
+    @Test func describedVisualProblemBecomesACoderFixNotAVerdict() {
+        let text = "the Start_a_Project border looks like it has no padding on left and right."
+        let turn = FallbackBrain.turn(for: text, speaker: bot, bots: [bot], fleet: .sample)
+        #expect(turn.action == .dispatch(crew: .coder, task: "Fix: \(text)"))
+        #expect(turn.reply.hasPrefix("I can't see the preview"))
+    }
+
+    @Test func questionsAboutLooksAreNotReports() {
+        #expect(!FallbackBrain.isVisualReport("does the border look ok?"))
+    }
+}
