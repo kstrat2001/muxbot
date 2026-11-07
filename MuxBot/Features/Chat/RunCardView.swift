@@ -46,6 +46,7 @@ struct RunCardView: View {
             HStack(spacing: Spacing.sm) {
                 StatusBadge(kind: isLatest && run.phase == .running ? .running : .done)
                 Label(run.crew.name, systemImage: run.crew.systemImage).font(AppFont.headline())
+                if run.isSimulated { SimulationBadge() }
                 Spacer()
                 if run.previewURL.flatMap(URL.init(string:)) != nil {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
@@ -57,31 +58,29 @@ struct RunCardView: View {
             }
             Text(message.content).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
-            Text(message.content).font(AppFont.body())
-            RoundedRectangle(cornerRadius: CornerRadius.md)
-                .fill(Color.elevatedBackground)
-                .frame(height: 120)
-                .overlay {
-                    Image(systemName: "photo")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Screenshot placeholder")
-                }
-            if isLatest && run.phase == .result {
-                HStack {
-                    Button("Discard", systemImage: "trash", role: .destructive) { brain.decide(.discard, on: run, store: store) }
-                        .buttonStyle(.bordered)
-                    Button("Tweak", systemImage: "pencil") {
-                        brain.tweakRunId = run.id
-                        router.barDraft = ""
-                    }
-                    .buttonStyle(.bordered)
-                    Spacer()
-                    Button("Keep", systemImage: "checkmark") { brain.decide(.keep, on: run, store: store) }
-                        .buttonStyle(.borderedProminent)
-                }
+            if run.isSimulated {
+                SimulationBadge()
+                Text(message.content).font(AppFont.body()).foregroundStyle(.secondary)
+                Button("Pair with darkmux to run it for real", systemImage: "link") { router.showPairing = true }
+                    .buttonStyle(.borderedProminent)
             } else {
-                outcome(isLatest && run.phase == .discarded ? .failed : .done)
+                Text(message.content).font(AppFont.body())
+                if isLatest && run.phase == .result {
+                    HStack {
+                        Button("Discard", systemImage: "trash", role: .destructive) { brain.decide(.discard, on: run, store: store) }
+                            .buttonStyle(.bordered)
+                        Button("Tweak", systemImage: "pencil") {
+                            brain.tweakRunId = run.id
+                            router.barDraft = ""
+                        }
+                        .buttonStyle(.bordered)
+                        Spacer()
+                        Button("Keep", systemImage: "checkmark") { brain.decide(.keep, on: run, store: store) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    outcome(isLatest && run.phase == .discarded ? .failed : .done)
+                }
             }
         case .prCard:
             Label("Open a pull request?", systemImage: "arrow.triangle.pull").font(AppFont.headline())
@@ -115,5 +114,17 @@ struct RunCardView: View {
 
     private func outcome(_ kind: StatusKind) -> some View {
         StatusBadge(kind: kind)
+    }
+}
+
+/// Marks a run that didn't really happen.
+struct SimulationBadge: View {
+    var body: some View {
+        Label("Simulation", systemImage: "theatermasks")
+            .font(AppFont.caption(.semibold))
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.secondary.opacity(0.2)))
+            .foregroundStyle(.secondary)
     }
 }

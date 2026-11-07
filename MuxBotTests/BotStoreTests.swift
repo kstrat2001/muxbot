@@ -32,7 +32,8 @@ struct BotStoreTests {
         #expect(bots.map(\.name) == ["humancodereader", "darkmux", "Personal brand", "Daily update"])
         #expect(bots.allSatisfy { $0.state == .ready })
         // A test preview URL may follow, from this machine's Local.xcconfig.
-        let hcr = bots[0].sortedResources.filter { $0.kind != .previewURL }
+        // A test preview URL and work folder may follow, from this machine's Local.xcconfig.
+        let hcr = bots[0].sortedResources.filter { $0.kind != .previewURL && $0.value != BotStore.testWorkdir }
         #expect(hcr.map(\.kind) == [.repo, .folder])
         #expect(bots[0].sortedResources.prefix(2).map(\.kind) == [.repo, .folder])
         #expect(hcr.first?.value == "https://github.com/kstrat2001/hcr")

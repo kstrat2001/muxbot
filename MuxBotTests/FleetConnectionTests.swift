@@ -32,4 +32,19 @@ struct FleetConnectionTests {
         #expect(run.phase == .running)
         #expect(run.darkmuxWorkId == nil)
     }
+
+    @Test func aSimulatedRunIsMarkedAndClosesWithoutLeavingTheBotWaiting() async throws {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
+        let brain = BotBrain()
+        brain.simulatedRunSeconds = 0.05
+        let run = store.proposeRun(task: "Fix #8", crew: .coder, on: bot)
+        brain.decide(.approve, on: run, store: store)
+        #expect(run.isSimulated)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(run.phase == .done)
+        #expect(run.summary.hasPrefix("Simulation: nothing ran."))
+        #expect(bot.state == .ready)
+        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content.hasPrefix("Simulated run: this app isn't paired") })
+    }
 }

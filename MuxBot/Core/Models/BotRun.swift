@@ -14,7 +14,7 @@ enum RunPhase: String, Codable, Sendable {
 }
 
 enum RunEvent: Equatable, Sendable {
-    case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR
+    case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR, closeSimulation
 }
 
 extension RunPhase {
@@ -29,6 +29,7 @@ extension RunPhase {
         case (.result, .discard): .discarded
         case (.kept, .openPR): .prOpened
         case (.kept, .skipPR): .done
+        case (.result, .closeSimulation): .done
         default: nil
         }
     }
@@ -49,6 +50,9 @@ final class BotRun {
     var tweaks: Int = 0
     /// Set when the run was sent to darkmux for real (not simulated).
     var darkmuxWorkId: String?
+    /// Nothing really ran: the app isn't paired with darkmux (or can't
+    /// send this run). Shown as a simulation, closed without a decision.
+    var isSimulated: Bool = false
     var createdAt: Date = Date()
     var bot: Bot?
 

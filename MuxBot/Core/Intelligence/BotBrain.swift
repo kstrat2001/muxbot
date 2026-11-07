@@ -566,10 +566,12 @@ final class BotBrain {
     }
 
     private func simulateFinish(_ run: BotRun, store: BotStore) {
+        run.isSimulated = true
         let delay = simulatedRunSeconds
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             store.apply(.finish(summary: Self.sampleSummary(for: run)), to: run)
+            store.apply(.closeSimulation, to: run)   // nothing to keep or discard
         }
     }
 
@@ -584,9 +586,9 @@ final class BotBrain {
     }
 
     static func sampleSummary(for run: BotRun) -> String {
-        let pass = run.tweaks == 0 ? "" : " (after \(run.tweaks) tweak\(run.tweaks == 1 ? "" : "s"))"
-        return "\(run.crew.name) finished “\(run.task)”\(pass). Sample result: the fleet isn't connected yet, so there is no real diff. Changed files, tests and a screenshot will show here."
+        "Simulation: nothing ran. Pair with darkmux and \(run.crew.name) will do “\(run.task)” for real, with the changed files and result here."
     }
+
 
     func cancel() {
         pending = nil
