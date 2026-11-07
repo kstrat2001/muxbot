@@ -99,11 +99,13 @@ final class FleetConnection {
         return NSHomeDirectory()
     }
 
-    /// A bot's folder resource that darkmux may work in (under ~/.darkmux/worktrees).
-    static func workdir(for bot: Bot) -> String? {
-        let folders = bot.sortedResources.filter { $0.kind == .folder }.map(\.value)
-        guard let path = folders.first(where: { $0.contains("/.darkmux/worktrees/") }) else { return nil }
-        return path.hasPrefix("~/") ? realHome + path.dropFirst(1) : path
+    /// This Mac's name, for "ready on MacBook Pro".
+    static var machineName: String {
+        #if os(macOS)
+        Host.current().localizedName ?? "this Mac"
+        #else
+        "this device"
+        #endif
     }
 
     private static func makeCode() -> String {

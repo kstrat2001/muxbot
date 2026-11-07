@@ -57,23 +57,60 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(PairStatus.self, from: data)
     }
 
-    /// Starts a run. `profile` nil lets darkmux pick it the way
-    /// `darkmux dispatch <role>` would; the reply names the profile used.
-    func submitWork(token: String, role: String, message: String, profile: String?, workdir: String?) async throws -> (workId: String, profile: String?) {
-        struct Body: Encodable { var role: String; var message: String; var profile: String?; var workdir: String? }
+    struct WorkBody: Encodable, Sendable {
+        var role: String
+        var message: String
+        var profile: String?
+        /// A darkmux workspace name; darkmux resolves the folder.
+        var workspace: String
+    }
+
+    /// Starts a run in a workspace. `profile` nil lets darkmux pick it the
+    /// way `darkmux dispatch <role>` would; the reply names the profile used.
+    func submitWork(token: String, role: String, message: String, profile: String?, workspace: String) async throws -> (workId: String, profile: String?) {
         struct Reply: Decodable { var work_id: String; var profile: String? }
-        let data = try await send("POST", "/client/work", body: Body(role: role, message: message, profile: profile, workdir: workdir),
+        let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace),
                                   headers: ["Authorization": "Bearer \(token)"])
         let reply = try JSONDecoder().decode(Reply.self, from: data)
         return (reply.work_id, reply.profile)
     }
 
-    /// The preview recipe in a work folder darkmux lets this app use; nil
-    /// when the folder has none.
-    func recipe(token: String, workdir: String) async throws -> PreviewManifest? {
+    /// Asks darkmux for a workspace: a worktree of a local checkout
+    /// (`sourcePath`, on a new branch from the fetched default branch) or a
+    /// clone of a repo (`repoURL`). Exactly one of the two.
+    struct WorkspaceBody: Encodable, Sendable {
+        var repoURL: String?
+        var sourcePath: String?
+        var bot: String
+        enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot }
+    }
+
+    struct Workspace: Decodable, Sendable, Equatable {
+        var workspace: String
+        var branch: String?
+        var head: String?
+        var repo: String?
+        var created: Bool?
+        var fetchError: String?
+        enum CodingKeys: String, CodingKey { case workspace, branch, head, repo, created; case fetchError = "fetch_error" }
+    }
+
+    /// A clone or worktree can take a while; the reply comes when it's done.
+    func setUpWorkspace(token: String, _ body: WorkspaceBody) async throws -> Workspace {
+        let data = try await send("POST", "/client/workspaces", body: body, headers: ["Authorization": "Bearer \(token)"], timeout: 600)
+        return try JSONDecoder().decode(Workspace.self, from: data)
+    }
+
+    func workspace(token: String, name: String) async throws -> Workspace {
+        let data = try await send("GET", "/client/workspaces/\(name)", headers: ["Authorization": "Bearer \(token)"])
+        return try JSONDecoder().decode(Workspace.self, from: data)
+    }
+
+    /// The preview recipe in a workspace; nil when it has none.
+    func recipe(token: String, workspace: String) async throws -> PreviewManifest? {
         struct Reply: Decodable { var recipe: PreviewManifest }
         var parts = URLComponents(url: baseURL.appending(path: "/client/recipe"), resolvingAgainstBaseURL: false)
-        parts?.queryItems = [URLQueryItem(name: "workdir", value: workdir)]
+        parts?.queryItems = [URLQueryItem(name: "workspace", value: workspace)]
         guard let url = parts?.url else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
@@ -95,10 +132,10 @@ struct DarkmuxClient: Sendable {
     }
 
     private func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
-                      headers: [String: String] = [:]) async throws -> Data {
+                      headers: [String: String] = [:], timeout: TimeInterval = 5) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = method
-        request.timeoutInterval = 5
+        request.timeoutInterval = timeout
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

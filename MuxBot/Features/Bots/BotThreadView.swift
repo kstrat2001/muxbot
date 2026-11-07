@@ -108,6 +108,13 @@ struct BotThreadView: View {
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         #if DEBUG
         .task {
+            // `-useFolder <path>`: set up this bot's work copy from a local
+            // checkout, as Add folder does, without the Open panel.
+            guard let path = UserDefaults.standard.string(forKey: "useFolder"), let bot, bot.workspaceName == nil || bot.folderName == nil else { return }
+            bot.folderName = (path as NSString).lastPathComponent
+            await brain.setUpWorkCopy(for: bot, store: BotStore(context: modelContext), sourcePath: (path as NSString).expandingTildeInPath)
+        }
+        .task {
             // `-toggleFullWindowAfter 2`: flip the preview's full-window mode
             // twice, for reproducing layout switches without clicking.
             let delay = UserDefaults.standard.double(forKey: "toggleFullWindowAfter")
@@ -130,7 +137,7 @@ struct BotThreadView: View {
             }
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
-                await brain.loadRecipe(for: repo, localWorkdir: bot.flatMap(FleetConnection.workdir(for:)))
+                await brain.loadRecipe(for: repo, workspace: bot?.workspaceName)
             }
         }
         #if os(iOS)

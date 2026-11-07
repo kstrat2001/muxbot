@@ -40,10 +40,6 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
-        # Temporary live-preview server for the humancodereader seed bot;
-        # set MUXBOT_TEST_PREVIEW_URL in the gitignored Config/Local.xcconfig.
-        MuxBotTestPreviewURL: $(MUXBOT_TEST_PREVIEW_URL)
-        MuxBotTestWorkdir: $(MUXBOT_TEST_WORKDIR)
         MuxBotDarkmuxCLI: $(MUXBOT_DARKMUX_CLI)
         # Tailnet previews are plain http until tailnet HTTPS certificates
         # are enabled; allow it for *.ts.net only.
@@ -70,6 +66,9 @@ targets:
         ENABLE_APP_SANDBOX: YES
         # Read-only GitHub API calls (bots' issue lookups).
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        # Add folder: read a project folder you pick (its git remote), and
+        # keep access to it with a security-scoped bookmark.
+        ENABLE_USER_SELECTED_FILES: readonly
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_EMIT_LOC_STRINGS: YES
 

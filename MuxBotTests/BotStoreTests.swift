@@ -31,13 +31,11 @@ struct BotStoreTests {
         let bots = store.allBots()
         #expect(bots.map(\.name) == ["humancodereader", "darkmux", "Personal brand", "Daily update"])
         #expect(bots.allSatisfy { $0.state == .ready })
-        // A test preview URL may follow, from this machine's Local.xcconfig.
-        // A test preview URL and work folder may follow, from this machine's Local.xcconfig.
-        let hcr = bots[0].sortedResources.filter { $0.kind != .previewURL && $0.value != BotStore.testWorkdir }
+        // Only the repo: no work folder or preview link is seeded.
+        let hcr = bots[0].sortedResources
         #expect(hcr.map(\.kind) == [.repo])
-        #expect(bots[0].sortedResources.first?.kind == .repo)
-        #expect(!bots[0].sortedResources.contains { $0.value == "~/de-projects/hcr" })
         #expect(hcr.first?.value == "https://github.com/kstrat2001/hcr")
+        #expect(bots[0].workspaceName == nil)
     }
 
     @Test func approvingAddResourceSavesItOnTheThreadsBot() {

@@ -573,15 +573,15 @@ final class BotBrain {
         case loading, ready(PreviewManifest, fromLocalCopy: Bool), missing, failed(String)
     }
 
-    /// `.darkmux/preview.json` per repo: from the bot's local work copy when
+    /// `.darkmux/preview.json` per repo: from the bot's workspace when
     /// darkmux lets this app read it, else read-only from GitHub.
     var recipes: [String: RecipeState] = [:]
 
-    func loadRecipe(for repo: String, localWorkdir: String? = nil) async {
+    func loadRecipe(for repo: String, workspace: String? = nil) async {
         if case .ready? = recipes[repo] { return }
         recipes[repo] = .loading
-        if let localWorkdir, let connection, let token = connection.token,
-           let local = try? await connection.client.recipe(token: token, workdir: localWorkdir) {
+        if let workspace, let connection, let token = connection.token,
+           let local = try? await connection.client.recipe(token: token, workspace: workspace) {
             recipes[repo] = .ready(local, fromLocalCopy: true)
             return
         }
@@ -716,7 +716,7 @@ final class BotBrain {
     /// request to the lead bot's thread, honestly, and close the card.
     func passPRToLead(_ run: BotRun, store: BotStore) {
         guard let bot = run.bot else { return }
-        let workCopy = FleetConnection.workdir(for: bot).map { " Work copy: \($0)." } ?? ""
+        let workCopy = bot.workspaceName.map { " Work copy: darkmux workspace \($0) on \(bot.workspaceMachine ?? "this Mac")." } ?? ""
         store.append(.system, "From \(bot.name): open a pull request for “\(run.task)”.\(workCopy)", to: store.conversation(for: .lead))
         store.append(.system, "Passed to \(LeadBot.name).", to: store.conversation(for: .bot(bot.id)))
         store.apply(.skipPR, to: run)
@@ -761,27 +761,114 @@ final class BotBrain {
         store.apply(.stop, to: run)
     }
 
+    /// What stops a run going to darkmux right now, or nil when it can.
+    func blocker(for run: BotRun) -> RunBlocker? {
+        guard let bot = run.bot else { return .noCode }
+        return RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot)
+    }
+
     /// Why a run can't go to darkmux right now, or nil when it can.
     func whyRunCannotStart(_ run: BotRun) -> String? {
-        #if os(iOS)
-        // Phone pairing over the tailnet isn't built yet.
-        return "runs start from the Mac app for now"
-        #endif
-        guard connection?.isPaired == true, connection?.token != nil else { return "this app isn't paired with darkmux" }
-        guard run.crew.darkmuxRole != nil else { return "\(run.crew.name) has no darkmux role yet" }
-        guard let bot = run.bot, FleetConnection.workdir(for: bot) != nil else {
-            return "this bot has no work copy under ~/.darkmux/worktrees"
+        blocker(for: run)?.message
+    }
+
+    // MARK: Work copies
+
+    enum WorkCopySetup: Equatable { case settingUp, failed(String) }
+    /// Work copies being set up (or that failed), by bot.
+    var workCopySetup: [UUID: WorkCopySetup] = [:]
+
+    /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
+    /// folder you picked (on its own branch, from the fetched default
+    /// branch), else a clone of its GitHub repo. Stores only the name.
+    func setUpWorkCopy(for bot: Bot, store: BotStore, sourcePath: String? = nil) async {
+        guard let connection, let token = connection.token else {
+            workCopySetup[bot.id] = .failed(RunBlocker.unpaired.message)
+            return
         }
+        let bodyAndAccess = sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
+            ?? workspaceRequest(for: bot)
+        guard let body = bodyAndAccess.body else {
+            workCopySetup[bot.id] = .failed(RunBlocker.noCode.message)
+            return
+        }
+        defer { bodyAndAccess.release() }
+        workCopySetup[bot.id] = .settingUp
+        do {
+            let made = try await connection.client.setUpWorkspace(token: token, body)
+            bot.workspaceName = made.workspace
+            bot.workspaceMachine = FleetConnection.machineName
+            if bot.repoSlugs.isEmpty, let repo = made.repo, let slug = GitHubIssue.repoSlug(from: repo) {
+                store.addResource(.repo, "https://github.com/\(slug)", to: bot)
+            }
+            try? store.context.save()
+            workCopySetup[bot.id] = nil
+            let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
+            store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
+            if let repo = bot.repoSlugs.first { recipes[repo] = nil; await loadRecipe(for: repo, workspace: made.workspace) }
+        } catch {
+            workCopySetup[bot.id] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// The request for a bot's workspace, with folder access held until
+    /// `release` (the picked folder is security-scoped).
+    private func workspaceRequest(for bot: Bot) -> (body: DarkmuxClient.WorkspaceBody?, release: () -> Void) {
+        if let data = bot.folderBookmark, let url = Self.resolve(bookmark: data) {
+            let accessing = url.startAccessingSecurityScopedResource()
+            return (DarkmuxClient.WorkspaceBody(repoURL: nil, sourcePath: url.path, bot: bot.name),
+                    { if accessing { url.stopAccessingSecurityScopedResource() } })
+        }
+        if let repo = bot.repoSlugs.first {
+            return (DarkmuxClient.WorkspaceBody(repoURL: "https://github.com/\(repo)", sourcePath: nil, bot: bot.name), {})
+        }
+        return (nil, {})
+    }
+
+    nonisolated static func resolve(bookmark: Data) -> URL? {
+        var stale = false
+        #if os(macOS)
+        return try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale)
+        #else
+        return try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+        #endif
+    }
+
+    /// A folder you picked with the Open panel: it must be a git checkout.
+    /// Its GitHub repo (from `origin`) becomes the bot's repo, and darkmux
+    /// makes a worktree of it so runs never touch your own working tree.
+    /// Returns a plain sentence when the folder can't be used.
+    @discardableResult
+    func addFolder(_ url: URL, to bot: Bot, store: BotStore) async -> String? {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard GitRemote.isRepository(url) else {
+            return "\(url.lastPathComponent) isn't a git repository. Pick the top folder of a project you cloned with git."
+        }
+        #if os(macOS)
+        let bookmark = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #else
+        let bookmark = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #endif
+        bot.folderBookmark = bookmark ?? Data()
+        bot.folderName = url.lastPathComponent
+        bot.workspaceName = nil
+        if let slug = GitRemote.originSlug(of: url), !bot.repoSlugs.contains(slug) {
+            store.addResource(.repo, "https://github.com/\(slug)", to: bot)
+        }
+        try? store.context.save()
+        guard bookmark != nil else { return "I couldn't keep access to \(url.lastPathComponent). Pick it again." }
+        if connection?.isPaired == true { await setUpWorkCopy(for: bot, store: store) }
         return nil
     }
 
     /// Sends the run to darkmux when this app is paired, the crew role maps
-    /// to a darkmux role, and the bot has a folder under ~/.darkmux/worktrees.
+    /// to a darkmux role, and the bot has a workspace on this Mac.
     /// Returns false otherwise.
     private func startRealRun(_ run: BotRun, message: String, store: BotStore) -> Bool {
         guard let connection, let token = connection.token,
               let role = run.crew.darkmuxRole, let bot = run.bot,
-              let workdir = FleetConnection.workdir(for: bot) else { return false }
+              let workspace = bot.workspaceName else { return false }
         let thread = store.conversation(for: .bot(bot.id))
         Task { @MainActor in
             do {
@@ -789,7 +876,7 @@ final class BotBrain {
                 // the default) and checks it against what the owner granted.
                 let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
                                                                                message: Self.workBrief(message, recipe: recipe(for: bot)),
-                                                                               profile: nil, workdir: workdir)
+                                                                               profile: nil, workspace: workspace)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, token: token, client: connection.client, store: store)

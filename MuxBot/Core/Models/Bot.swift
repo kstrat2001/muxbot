@@ -54,6 +54,14 @@ final class Bot {
     @Attribute(.externalStorage) var avatarImageData: Data?
     var state: BotState = BotState.ready
     var createdAt: Date = Date()
+    /// This Mac's darkmux workspace for the bot (a name darkmux resolves
+    /// under its worktrees; never a path) and the machine it's on.
+    var workspaceName: String?
+    var workspaceMachine: String?
+    /// A local checkout you picked (security-scoped bookmark) and its
+    /// folder name for display. darkmux makes a worktree of it.
+    var folderBookmark: Data?
+    var folderName: String?
 
     @Relationship(deleteRule: .cascade, inverse: \BotTask.bot)
     var tasks: [BotTask]? = []
@@ -95,6 +103,10 @@ final class Bot {
 }
 
 enum ResourceKind: String, Codable, CaseIterable, Sendable {
+    /// What you can add by typing: folders come from the Open panel
+    /// (Add folder), so the app never holds a typed path.
+    static var addable: [ResourceKind] { allCases.filter { $0 != .folder } }
+
     case repo, folder, preview, previewURL, link, note
 
     var label: String {

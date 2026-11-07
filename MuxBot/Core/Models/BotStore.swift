@@ -32,18 +32,8 @@ struct BotStore {
         allBots().first { $0.id == id }
     }
 
-    /// A temporary live-preview URL for the humancodereader starter bot,
-    /// from `MUXBOT_TEST_PREVIEW_URL` in the gitignored Config/Local.xcconfig
-    /// (a tailnet test server; real runs will get theirs from darkmux).
-    nonisolated static var testPreviewURL: String? {
-        let value = Bundle.main.object(forInfoDictionaryKey: "MuxBotTestPreviewURL") as? String
-        return value?.hasPrefix("http") == true ? value : nil
-    }
-
-    /// Inserts the starter bots on first launch only, then adds a test
-    /// preview URL to humancodereader if one is configured and missing.
+    /// Inserts the starter bots on first launch only.
     func seedIfEmpty() {
-        defer { addTestPreviewURL() }
         guard allBots().isEmpty else { return }
         let start = Date()
         for (offset, item) in Self.defaults.enumerated() {
@@ -60,24 +50,21 @@ struct BotStore {
         try? context.save()
     }
 
-    /// A darkmux work folder for the humancodereader seed, from
-    /// `MUXBOT_TEST_WORKDIR` in Config/Local.xcconfig (under ~/.darkmux/worktrees).
-    nonisolated static var testWorkdir: String? {
-        let value = Bundle.main.object(forInfoDictionaryKey: "MuxBotTestWorkdir") as? String
-        return value?.contains("/.darkmux/worktrees/") == true ? value : nil
-    }
-
-    private func addTestPreviewURL() {
-        if let dir = Self.testWorkdir, let bot = allBots().first(where: { $0.name == "humancodereader" }) {
-            if !bot.sortedResources.contains(where: { $0.value == dir }) { addResource(.folder, dir, to: bot) }
-            // One folder: the darkmux work copy replaces the older seeded checkout path.
-            bot.sortedResources.filter { $0.kind == .folder && $0.value == "~/de-projects/hcr" }.forEach(remove)
+    /// Earlier builds kept a darkmux work folder as a folder resource
+    /// (`~/.darkmux/worktrees/<name>`): it becomes the bot's workspace name
+    /// on this machine, and the folder resource goes.
+    func migrateWorkCopies(machine: String) {
+        for bot in allBots() {
+            for resource in bot.sortedResources where resource.kind == .folder {
+                guard let range = resource.value.range(of: "/.darkmux/worktrees/") else { continue }
+                let name = resource.value[range.upperBound...].split(separator: "/").first.map(String.init) ?? ""
+                if bot.workspaceName == nil, !name.isEmpty {
+                    bot.workspaceName = name
+                    bot.workspaceMachine = machine
+                }
+                remove(resource)
+            }
         }
-        guard let url = Self.testPreviewURL,
-              let bot = allBots().first(where: { $0.name == "humancodereader" }),
-              !bot.sortedResources.contains(where: { $0.kind == .previewURL }) else { return }
-        let last = bot.sortedResources.last?.createdAt ?? bot.createdAt
-        addResource(.previewURL, url, to: bot).createdAt = last.addingTimeInterval(1)
         try? context.save()
     }
 

@@ -17,7 +17,9 @@ struct MuxBotApp: App {
         } catch {
             fatalError("Could not create the model container: \(error)")
         }
-        BotStore(context: container.mainContext).seedIfEmpty()
+        let store = BotStore(context: container.mainContext)
+        store.seedIfEmpty()
+        store.migrateWorkCopies(machine: FleetConnection.machineName)
     }
 
     var body: some Scene {

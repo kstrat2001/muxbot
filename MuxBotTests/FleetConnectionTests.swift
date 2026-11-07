@@ -4,17 +4,6 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct FleetConnectionTests {
-    @Test func workdirIsTheBotsFolderUnderDarkmuxWorktreesWithHomeExpanded() {
-        let store = TestStore.fresh()
-        let bot = store.add(name: "humancodereader", instructions: "Website", modelName: "")
-        store.addResource(.folder, "~/de-projects/hcr", to: bot)
-        #expect(FleetConnection.workdir(for: bot) == nil)
-        store.addResource(.folder, "~/.darkmux/worktrees/hcr-preview", to: bot)
-        let dir = FleetConnection.workdir(for: bot)
-        #expect(dir == FleetConnection.realHome + "/.darkmux/worktrees/hcr-preview")
-        #expect(!(dir ?? "").contains("Library/Containers"))
-    }
-
     @Test func crewRolesMapToDarkmuxBuiltinRoles() {
         #expect(CrewRole.coder.darkmuxRole == "coder")
         #expect(CrewRole.reviewer.darkmuxRole == "code-reviewer")

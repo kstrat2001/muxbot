@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// A bot's details and the resources it works with: repos, folders,
 /// preview recipes, links and notes. Bots can also propose resources in
@@ -12,6 +13,9 @@ struct BotInfoView: View {
     @Environment(BotBrain.self) private var brain
     @State private var newValue = ""
     @State private var newKind = ResourceKind.repo
+    @State private var pickingFolder = false
+    @State private var folderProblem: String?
+    @State private var branch: String?
 
     var body: some View {
         Form {
@@ -19,18 +23,14 @@ struct BotInfoView: View {
                 Label(bot.name, systemImage: bot.systemImage).font(AppFont.headline())
                 Text(bot.instructions).foregroundStyle(.secondary)
             }
+            workCopySection
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
                     Label {
                         VStack(alignment: .leading, spacing: Spacing.xs) {
                             Text(resource.value).textSelection(.enabled)
-                            if resource.kind == .folder, resource.value.contains("/.darkmux/worktrees/") {
-                                Text("Work copy · darkmux runs here")
-                                    .font(AppFont.caption())
-                                    .foregroundStyle(.secondary)
-                            }
                             if resource.kind == .previewURL {
-                                Text("Temporary test server, until darkmux reports each run's live URL.")
+                                Text("Your preview link, until darkmux runs previews itself.")
                                     .font(AppFont.caption())
                                     .foregroundStyle(.secondary)
                             }
@@ -58,13 +58,16 @@ struct BotInfoView: View {
             }
             Section("Add a resource") {
                 Picker("Kind", selection: $newKind) {
-                    ForEach(ResourceKind.allCases, id: \.self) { kind in
+                    ForEach(ResourceKind.addable, id: \.self) { kind in
                         Label(kind.label, systemImage: kind.systemImage).tag(kind)
                     }
                 }
-                TextField("URL, path or note", text: $newValue)
+                TextField("URL or note", text: $newValue)
                     .autocorrectionDisabled()
-                    .onChange(of: newValue) { newKind = ResourceKind.guess(for: newValue) }
+                    .onChange(of: newValue) {
+                        let guess = ResourceKind.guess(for: newValue)
+                        newKind = ResourceKind.addable.contains(guess) ? guess : .note
+                    }
                 Button("Add", systemImage: "plus") {
                     BotStore(context: context).addResource(newKind, newValue, to: bot)
                     newValue = ""
@@ -74,12 +77,79 @@ struct BotInfoView: View {
         }
         .formStyle(.grouped)
         .task {
-            for repo in bot.repoSlugs { await brain.loadRecipe(for: repo, localWorkdir: FleetConnection.workdir(for: bot)) }
+            for repo in bot.repoSlugs { await brain.loadRecipe(for: repo, workspace: bot.workspaceName) }
+            await refreshBranch()
+        }
+        .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
+            guard case let .success(url) = result else { return }
+            Task {
+                folderProblem = await brain.addFolder(url, to: bot, store: BotStore(context: context))
+                await refreshBranch()
+            }
         }
         .navigationTitle(bot.name)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
         }
+    }
+
+    /// Where darkmux works on this bot's code, on this Mac. Status only:
+    /// darkmux owns the copy; the app knows its name, never a path.
+    private var workCopySection: some View {
+        Section {
+            HStack(spacing: Spacing.sm) {
+                switch (brain.workCopySetup[bot.id], bot.workspaceName) {
+                case (.settingUp?, _):
+                    ProgressView().controlSize(.small)
+                    Text("Setting up on \(FleetConnection.machineName)…")
+                case let (.failed(why)?, _):
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.brandOrange)
+                    Text(why).font(AppFont.footnote())
+                case (nil, _?):
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.brandGreen)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ready on \(bot.workspaceMachine ?? FleetConnection.machineName)")
+                        if let branch, !branch.isEmpty {
+                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(.secondary)
+                        }
+                    }
+                case (nil, nil):
+                    Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                    Text(bot.folderBookmark == nil && bot.repoSlugs.isEmpty ? "No code yet" : "Not set up on this Mac yet")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .accessibilityElement(children: .combine)
+            if let folder = bot.folderName {
+                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(.secondary)
+            }
+            if let folderProblem {
+                Label(folderProblem, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            }
+            #if os(macOS)
+            HStack {
+                Button(bot.folderBookmark == nil ? "Add folder…" : "Change folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
+                if bot.workspaceName == nil, brain.workCopySetup[bot.id] != .settingUp,
+                   bot.folderBookmark != nil || !bot.repoSlugs.isEmpty {
+                    Button("Set up now") { Task { await brain.setUpWorkCopy(for: bot, store: BotStore(context: context)); await refreshBranch() } }
+                }
+            }
+            #endif
+        } header: {
+            Text("Work copy")
+        } footer: {
+            #if os(macOS)
+            Text("Pick the project folder you already have. darkmux works on its own copy on a new branch, so your files and changes are never touched.")
+            #else
+            Text("Work copies are set up from the Mac app for now.")
+            #endif
+        }
+    }
+
+    private func refreshBranch() async {
+        guard let name = bot.workspaceName, let connection = brain.connection, let token = connection.token else { return }
+        branch = try? await connection.client.workspace(token: token, name: name).branch
     }
 
     @ViewBuilder private func recipeRow(_ repo: String) -> some View {

@@ -48,7 +48,9 @@ struct RunCardView: View {
             }
             .font(AppFont.footnote())
             if run.phase == .proposed {
-                if let reason = brain.whyRunCannotStart(run) {
+                if case let .needsWorkCopy(what)? = brain.blocker(for: run), let bot = run.bot {
+                    workCopyAsk(what, bot: bot, run: run)
+                } else if let reason = brain.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
                     HStack {
                         Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
@@ -165,6 +167,35 @@ struct RunCardView: View {
     }
 
     private var store: BotStore { BotStore(context: context) }
+
+    /// The bot has code but no work copy on this Mac: offer to set one up
+    /// (Approve), then the card becomes the usual dispatch card.
+    @ViewBuilder private func workCopyAsk(_ what: String, bot: Bot, run: BotRun) -> some View {
+        let machine = FleetConnection.machineName
+        switch brain.workCopySetup[bot.id] {
+        case .settingUp?:
+            HStack(spacing: Spacing.sm) {
+                ProgressView().controlSize(.small)
+                Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(.secondary)
+            }
+        case let .failed(why)?:
+            Label("Couldn't set up \(what): \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            buttonsForSetup(bot: bot, run: run, retry: true)
+        case nil:
+            Text("Set up \(what) on \(machine)? darkmux makes its own copy on a new branch, so your files aren't touched.")
+                .font(AppFont.footnote()).foregroundStyle(.secondary)
+            buttonsForSetup(bot: bot, run: run, retry: false)
+        }
+    }
+
+    private func buttonsForSetup(bot: Bot, run: BotRun, retry: Bool) -> some View {
+        HStack {
+            Button("Cancel") { brain.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+            Spacer()
+            Button(retry ? "Try again" : "Approve") { Task { await brain.setUpWorkCopy(for: bot, store: store) } }
+                .buttonStyle(.borderedProminent)
+        }
+    }
 
     private func repo(_ run: BotRun) -> String? { run.bot?.repoSlugs.first }
 
