@@ -18,6 +18,8 @@ struct BotSidebar: View {
                 ForEach(bots) { bot in
                     row(name: bot.name, systemImage: bot.systemImage, unread: unread(bot.id), state: bot.state)
                         .tag(SidebarItem.bot(bot.id))
+                        .help(Self.waitingText(bot) ?? bot.name)
+                        .accessibilityValue(Self.waitingText(bot) ?? "")
                 }
                 Button { router.showNewBot = true } label: {
                     Label("New bot", systemImage: "plus")
@@ -64,5 +66,21 @@ struct BotSidebar: View {
                 StatusBadge(kind: state.kind)
             }
         }
+    }
+
+    /// "1 result waiting for you", "2 things waiting for you", "Working".
+    static func waitingText(_ bot: Bot) -> String? {
+        let runs = bot.runs ?? []
+        let waiting = runs.filter { $0.phase.awaitsYou }
+        if waiting.count == 1 {
+            switch waiting[0].phase {
+            case .result: return "1 result waiting for you"
+            case .proposed: return "1 dispatch waiting for your approval"
+            default: return "1 thing waiting for you"
+            }
+        }
+        if waiting.count > 1 { return "\(waiting.count) things waiting for you" }
+        if runs.contains(where: { $0.phase == .running }) { return "Working" }
+        return nil
     }
 }

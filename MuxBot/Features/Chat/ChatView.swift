@@ -7,6 +7,9 @@ struct ChatView: View {
     let conversation: ChatConversation
     var isThinking = false
 
+    @Environment(AppRouter.self) private var router
+    @State private var flashRunId: UUID?
+
     private var messages: [ChatMessage] {
         (conversation.messages ?? []).sorted { $0.timestamp < $1.timestamp }
     }
@@ -32,6 +35,14 @@ struct ChatView: View {
                                 BugCardView(message: message)
                             } else {
                                 RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
+                                    .overlay {
+                                        if flashRunId != nil, message.runId == flashRunId, latestCardIds.contains(message.id) {
+                                            RoundedRectangle(cornerRadius: CornerRadius.lg)
+                                                .stroke(Color.brandOrange, lineWidth: 2)
+                                                .chatColumn(alignment: .leading)
+                                                .allowsHitTesting(false)
+                                        }
+                                    }
                             }
                         }
                         .id(message.id)
@@ -48,7 +59,22 @@ struct ChatView: View {
             }
             .onAppear {
                 if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                focus(proxy)
             }
+            .onChange(of: router.focusRunId) { focus(proxy) }
+        }
+    }
+
+    /// Scrolls to the focused run's newest card and outlines it briefly.
+    private func focus(_ proxy: ScrollViewProxy) {
+        guard let runId = router.focusRunId,
+              let card = messages.last(where: { $0.runId == runId }) else { return }
+        router.focusRunId = nil
+        withAnimation { proxy.scrollTo(card.id, anchor: .center) }
+        flashRunId = runId
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation(.easeOut) { flashRunId = nil }
         }
     }
 }

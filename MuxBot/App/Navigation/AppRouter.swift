@@ -25,6 +25,8 @@ final class AppRouter {
     var showPreview = false
     /// iPhone: the preview fills the thread (handy for picking).
     var previewFullScreen = false
+    /// A run to scroll to (and briefly highlight) in its bot's conversation.
+    var focusRunId: UUID?
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.
@@ -43,6 +45,14 @@ final class AppRouter {
     func returnToChatAfterPick() {
         showPreview = false
         previewFullScreen = false
+    }
+
+    /// Opens a run's bot conversation at the run's card.
+    func open(_ run: BotRun) {
+        guard let bot = run.bot else { return }
+        tab = .bots
+        focusRunId = run.id
+        if usesSidebar { path = []; sidebar = .bot(bot.id) } else { path = [.bot(bot.id)] }
     }
 
     func navigate(to route: Route) {

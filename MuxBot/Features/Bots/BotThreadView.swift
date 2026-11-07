@@ -123,6 +123,11 @@ struct BotThreadView: View {
         }
         #endif
         .task {
+            // Opening a bot that needs you goes to the card that's waiting.
+            if router.focusRunId == nil,
+               let waiting = (bot?.runs ?? []).filter({ $0.phase.awaitsYou }).max(by: { $0.createdAt < $1.createdAt }) {
+                router.focusRunId = waiting.id
+            }
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
                 await brain.loadRecipe(for: repo, localWorkdir: bot.flatMap(FleetConnection.workdir(for:)))

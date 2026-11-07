@@ -43,6 +43,7 @@ struct ContentView: View {
         guard let name = UserDefaults.standard.string(forKey: "openBot") else { return }
         router.usesSidebar = wantsSidebar
         if name == LeadBot.name { router.navigate(to: .lead); return }
+        if name == "Work" { router.tab = .work; router.sidebar = .work; return }
         if let bot = BotStore(context: context).allBots().first(where: { $0.name == name }) {
             router.navigate(to: .bot(bot.id))
         }
