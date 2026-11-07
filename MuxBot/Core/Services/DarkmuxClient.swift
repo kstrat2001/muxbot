@@ -24,7 +24,12 @@ struct DarkmuxClient: Sendable {
         var reason: String?
         var finalAssistant: String?
         var changes: Changes?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes }
+        /// The run's commit on the work copy's branch (darkmux commits every
+        /// finished run with changes), or why there's none.
+        var commit: String?
+        var branch: String?
+        var commitError: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch; case commitError = "commit_error" }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -32,6 +37,9 @@ struct DarkmuxClient: Sendable {
             error = try c.decodeIfPresent(String.self, forKey: .error)
             reason = try c.decodeIfPresent(String.self, forKey: .reason)
             changes = try? c.decodeIfPresent(Changes.self, forKey: .changes)
+            commit = try? c.decodeIfPresent(String.self, forKey: .commit)
+            branch = try? c.decodeIfPresent(String.self, forKey: .branch)
+            commitError = try? c.decodeIfPresent(String.self, forKey: .commitError)
             let result = try? c.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
             finalAssistant = try result?.decodeIfPresent(String.self, forKey: .finalAssistant)
         }
@@ -176,6 +184,18 @@ struct DarkmuxClient: Sendable {
         let data = try await send("POST", "/client/work/\(workId)/keep", body: Body(message: message),
                                   headers: ["Authorization": "Bearer \(token)"], timeout: 60)
         return try JSONDecoder().decode(KeepResult.self, from: data)
+    }
+
+    struct UndoResult: Decodable, Sendable, Equatable {
+        var revert: String
+        var files: [String]
+    }
+
+    /// Reverts the run's commit (a new commit; history is never rewritten).
+    func undoWork(token: String, workId: String) async throws -> UndoResult {
+        let data = try await send("POST", "/client/work/\(workId)/undo", body: [String: String](),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(UndoResult.self, from: data)
     }
 
     /// Puts back every file the run changed and removes files it added.

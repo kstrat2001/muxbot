@@ -17,6 +17,16 @@
     "%@ changed nothing and has a question" : {
 
     },
+    "%@ has a question: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ has a question: %2$@"
+          }
+        }
+      }
+    },
     "%@ has no %@" : {
       "localizations" : {
         "en" : {
@@ -57,6 +67,9 @@
 
     },
     "%lld bots" : {
+
+    },
+    "%lld things need you" : {
 
     },
     "%lld. %@" : {
@@ -100,9 +113,6 @@
 
     },
     "Allow notifications" : {
-
-    },
-    "Answer…" : {
 
     },
     "Apple Intelligence is ready. Bots answer on this device." : {
@@ -174,9 +184,6 @@
     "Clear Conversation…" : {
 
     },
-    "Close" : {
-
-    },
     "Close preview" : {
 
     },
@@ -191,6 +198,16 @@
     },
     "Commit these changes to the work copy's branch" : {
 
+    },
+    "Committed to %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Committed to %1$@%2$@"
+          }
+        }
+      }
     },
     "Copied" : {
 
@@ -248,9 +265,6 @@
     "Discard" : {
 
     },
-    "Discard them" : {
-
-    },
     "Dispatch to %@" : {
 
     },
@@ -290,10 +304,16 @@
     "Hand to %@" : {
 
     },
+    "Hide" : {
+
+    },
     "Hide Preview" : {
 
     },
     "Hide preview" : {
+
+    },
+    "Hide this; it stays in Activity" : {
 
     },
     "How this app reaches darkmux" : {
@@ -306,9 +326,6 @@
 
     },
     "Keep running" : {
-
-    },
-    "Keep them" : {
 
     },
     "Kind" : {
@@ -378,9 +395,6 @@
 
     },
     "Not set up on this Mac yet" : {
-
-    },
-    "Nothing changed, so closing undoes nothing" : {
 
     },
     "Nothing found." : {
@@ -479,7 +493,16 @@
     "Replaced by the next run" : {
 
     },
+    "Reply to answer." : {
+
+    },
+    "Reply to change it." : {
+
+    },
     "Resources" : {
+
+    },
+    "Revert this run's commit" : {
 
     },
     "Role" : {
@@ -495,6 +518,9 @@
 
     },
     "Search bots and messages" : {
+
+    },
+    "See it in the preview" : {
 
     },
     "Send" : {
@@ -562,6 +588,9 @@
     "Stop tweaking (Esc)" : {
 
     },
+    "Tap an answer, or reply in your own words." : {
+
+    },
     "Task" : {
 
     },
@@ -572,9 +601,6 @@
 
     },
     "The code expired. Cancel and pair again." : {
-
-    },
-    "The last run's changes (“%@”) are still waiting. Keep or Discard them first?" : {
 
     },
     "The messages go; runs stay in Activity." : {
@@ -595,6 +621,9 @@
     "URL or note" : {
 
     },
+    "Undo" : {
+
+    },
     "Unpair this app" : {
 
     },
@@ -610,6 +639,9 @@
           }
         }
       }
+    },
+    "Waiting for your Approve: %@" : {
+
     },
     "What %@ gets" : {
 

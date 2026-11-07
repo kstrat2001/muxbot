@@ -17,6 +17,18 @@ enum RunResultText {
         return "I can't open pull requests from the app yet (no GitHub sign-in). The change is committed on \(branch) on this Mac: push that branch and open a PR on GitHub, or pass it to Mux Bot."
     }
 
+    /// darkmux refusing an Undo, in plain words: a later run that changed
+    /// the same files is named by its task.
+    @MainActor
+    static func undoRefusal(_ error: String, runs: [BotRun]) -> String {
+        if let range = error.range(of: #"run (w-[0-9A-Za-z]+) changed the same files later"#, options: .regularExpression) {
+            let id = error[range].split(separator: " ")[1]
+            let task = runs.first { $0.darkmuxWorkId == String(id) }?.task ?? "A later run"
+            return "“\(task)” changed the same files later. Undo that first."
+        }
+        return "Couldn't undo it: \(error)\(error.hasSuffix(".") ? "" : ".")"
+    }
+
     /// What Keep did: "Committed pricing.tsx to mux/x (abc1234)."
     static func kept(files: [String], branch: String, commit: String) -> String {
         let what = files.count == 1 ? ((files[0] as NSString).lastPathComponent) : "\(files.count) files"

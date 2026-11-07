@@ -156,7 +156,7 @@ struct BotStore {
     /// otherwise Ready.
     func refreshState(of bot: Bot) {
         let phases = (bot.runs ?? []).map(\.phase)
-        bot.state = phases.contains(where: \.awaitsYou) ? .needsYou
+        bot.state = (bot.runs ?? []).contains(where: \.needsYou) ? .needsYou
             : phases.contains(where: \.isActive) ? .working
             : (bot.tasks ?? []).isEmpty ? .ready : bot.state
         save()

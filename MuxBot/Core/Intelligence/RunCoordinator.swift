@@ -44,9 +44,11 @@ final class RunCoordinator {
             }
             return
         }
-        // Keep and Discard act on the files first; the card moves only when
-        // darkmux has done it, and says what it did.
-        if event == .keep || event == .discard, run.darkmuxWorkId != nil {
+        // A finished run with changes is already committed: nothing to keep.
+        if event == .keep, run.phase == .result { return }
+        // Undo acts on the files first; the card moves only when darkmux has
+        // done it, and says what it did.
+        if event == .discard, run.darkmuxWorkId != nil {
             Task { await applyOnDisk(event, to: run, store: store) }
             return
         }
@@ -56,10 +58,16 @@ final class RunCoordinator {
 
     /// Runs with Keep or Discard in flight (their buttons wait).
     var deciding: Set<UUID> = []
-    /// Why the last Keep or Discard didn't happen, shown on the card.
+    /// Why the last Undo didn't happen, shown on the card.
     var decisionErrors: [UUID: String] = [:]
+    /// Runs whose "needs you" banner you dismissed (this session only; they
+    /// stay listed in Activity).
+    var dismissedBanner: Set<UUID> = []
 
+    /// Undo (the card's one button): darkmux reverts the run's commit.
+    /// Keep is never needed (darkmux committed the run when it finished).
     private func applyOnDisk(_ event: RunEvent, to run: BotRun, store: BotStore) async {
+        guard event == .discard else { return }
         guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
               let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
             if connection?.token == nil { decisionErrors[run.id] = "Can't do that yet: \(RunBlocker.unpaired.message)." }
@@ -69,26 +77,19 @@ final class RunCoordinator {
         deciding.insert(run.id)
         defer { deciding.remove(run.id) }
         do {
-            if event == .keep {
-                let kept = try await connection.client.keepWork(token: token, workId: workId, message: run.task)
-                run.keptBranch = kept.branch
-                run.keptCommit = kept.commit
-                store.append(.system, RunResultText.kept(files: kept.files, branch: kept.branch, commit: kept.commit), to: thread)
-            } else {
-                let put = try await connection.client.discardWork(token: token, workId: workId)
-                store.append(.system, RunResultText.discarded(restored: put.restored, removed: put.removed), to: thread)
-            }
+            let undone = try await connection.client.undoWork(token: token, workId: workId)
+            store.append(.system, RunResultText.discarded(restored: undone.files, removed: []).replacingOccurrences(of: "Put back", with: "Undone: put back"), to: thread)
             decisionErrors[run.id] = nil
-            store.apply(event, to: run)
-        } catch let error as DarkmuxClient.ClientError
-                    where event == .discard && (error.status == 404 || error.message.hasPrefix("already decided")) {
-            // darkmux no longer has this run's changes to put back (it restarted,
-            // or a later run took them over): nothing to undo here, so close it.
-            decisionErrors[run.id] = nil
-            store.append(.system, "Closed. darkmux no longer has this run's changes, so there was nothing to put back.", to: thread)
             store.apply(.discard, to: run)
+        } catch let error as DarkmuxClient.ClientError where error.status == 404 {
+            // darkmux restarted and no longer tracks the run; its commit is
+            // still in the work copy's history.
+            let commit = run.keptCommit.map { " Its commit is \($0)\(run.keptBranch.map { " on \($0)" } ?? "")." } ?? ""
+            decisionErrors[run.id] = "darkmux no longer tracks this run, so it can't undo it from here.\(commit)"
+        } catch let error as DarkmuxClient.ClientError {
+            decisionErrors[run.id] = RunResultText.undoRefusal(error.message, runs: bot.runs ?? [])
         } catch {
-            decisionErrors[run.id] = "Couldn't \(event == .keep ? "keep" : "discard") it: \(error.localizedDescription)"
+            decisionErrors[run.id] = "Couldn't undo it: \(error.localizedDescription)"
         }
     }
 
@@ -160,6 +161,10 @@ final class RunCoordinator {
                     "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
                 }
                 run.diff = status.changes?.diff
+                // darkmux committed the changes to the work copy's branch.
+                run.keptCommit = status.commit
+                run.keptBranch = status.branch
+                if let why = status.commitError { run.details = why }
                 let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
                 store.apply(.finish(summary: summary), to: run)
                 if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }

@@ -38,7 +38,7 @@ struct MenuBarRuns: View {
     @Environment(\.openWindow) private var openWindow
     @Query(sort: \BotRun.createdAt, order: .reverse) private var runs: [BotRun]
 
-    private var waiting: [BotRun] { runs.filter { $0.phase.awaitsYou } }
+    private var waiting: [BotRun] { runs.filter(\.needsYou) }
     private var running: [BotRun] { runs.filter { $0.phase == .running } }
 
     var body: some View {
@@ -72,7 +72,7 @@ struct MenuBarLabel: View {
     @Query private var runs: [BotRun]
 
     var body: some View {
-        let waiting = runs.filter { $0.phase.awaitsYou }.count
+        let waiting = runs.filter(\.needsYou).count
         let running = runs.contains { $0.phase == .running }
         if waiting > 0 {
             Label("\(waiting)", systemImage: "exclamationmark.bubble.fill").labelStyle(.titleAndIcon)

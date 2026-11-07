@@ -50,9 +50,6 @@ struct RunCardView: View {
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
-                } else if case let .pendingChanges(waitingId)? = brain.runs.blocker(for: run),
-                          let waiting = BotStore(context: context).run(id: waitingId) {
-                    pendingChangesAsk(waiting, before: run)
                 } else if let reason = brain.runs.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
                     HStack {
@@ -96,7 +93,10 @@ struct RunCardView: View {
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
         case .resultCard:
-            if RunCardState.isReplaced(run) {
+            if let line = RunCardState.collapsedLine(run) {
+                Label(line, systemImage: run.phase == .discarded ? "arrow.uturn.backward" : "checkmark.circle")
+                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+            } else if RunCardState.isReplaced(run) {
                 Label("Replaced by the next run", systemImage: "arrow.turn.down.right")
                     .font(AppFont.footnote()).foregroundStyle(.secondary)
             } else if run.phase == .result && run.changedFiles.isEmpty {
@@ -144,44 +144,42 @@ struct RunCardView: View {
                 .font(AppFont.footnote())
             }
         } else {
+            // The bot's reply: what changed, in plain words. darkmux already
+            // committed it to the bot's branch.
             Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
-            if !run.changedFiles.isEmpty {
-                DisclosureGroup {
+            if let bot = run.bot, brain.runs.canPreview(bot) {
+                Button("See it in the preview", systemImage: "play.rectangle") { router.showPreview = true }
+                    .buttonStyle(.borderless)
+            }
+            DisclosureGroup("Details") {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let branch = run.keptBranch {
+                        Text("Committed to \(branch)\(run.keptCommit.map { " (\($0))" } ?? "")").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    } else if let why = run.details {
+                        Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+                    }
+                    Label(run.changedFiles.joined(separator: "\n"), systemImage: "doc.text").font(AppFont.footnote())
                     DiffView(diff: run.diff ?? "No diff available.")
-                } label: {
-                    Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
-                        .font(AppFont.footnote(.semibold))
+                    if let notes = run.notes {
+                        Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
+                                           repo: repo(run), linkPaths: true))
+                            .font(AppFont.footnote())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
-            if let notes = run.notes {
-                DisclosureGroup("\(run.crew.name)'s notes") {
-                    Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
-                                       repo: repo(run), linkPaths: true))
-                        .font(AppFont.footnote())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .font(AppFont.footnote())
-            }
+            .font(AppFont.footnote())
             if isLatest && run.phase == .result {
                 HStack {
-                    Button("Discard", systemImage: "trash", role: .destructive) { brain.runs.decide(.discard, on: run, store: store) }
-                        .buttonStyle(.bordered)
-                        .help("Put the changed files back as they were")
-                    Button("Tweak", systemImage: "pencil") {
-                        brain.runs.tweakRunId = run.id
-                        router.barDraft = ""
-                    }
-                    .buttonStyle(.bordered)
+                    Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(.secondary)
                     Spacer()
                     if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
-                    Button("Keep", systemImage: "checkmark") { brain.runs.decide(.keep, on: run, store: store) }
-                        .buttonStyle(.borderedProminent)
-                        .help("Commit these changes to the work copy's branch")
+                    Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
+                        .buttonStyle(.bordered)
+                        .disabled(brain.runs.deciding.contains(run.id))
+                        .help("Revert this run's commit")
                 }
-                .disabled(brain.runs.deciding.contains(run.id))
-            } else {
-                outcome(isLatest && run.phase == .discarded ? .failed : .done)
             }
         }
         decisionError(run)
@@ -211,36 +209,10 @@ struct RunCardView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            HStack {
-                Button("Answer…", systemImage: "pencil") {
-                    brain.runs.tweakRunId = run.id
-                    router.barDraft = ""
-                    router.focusBarRequest += 1
-                }
-                .buttonStyle(.bordered)
-                Spacer()
-                Button("Close") { brain.runs.decide(.discard, on: run, store: store) }
-                    .buttonStyle(.bordered)
-                    .help("Nothing changed, so closing undoes nothing")
-            }
+            Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
+                .font(AppFont.caption()).foregroundStyle(.secondary)
             decisionError(run)
         }
-    }
-
-    /// Another run's changes still wait in this work copy: decide them first,
-    /// so two runs never share uncommitted files.
-    @ViewBuilder private func pendingChangesAsk(_ waiting: BotRun, before run: BotRun) -> some View {
-        Text("The last run's changes (“\(waiting.task)”) are still waiting. Keep or Discard them first?")
-            .font(AppFont.footnote()).foregroundStyle(.secondary)
-        HStack {
-            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
-            Spacer()
-            if brain.runs.deciding.contains(waiting.id) { ProgressView().controlSize(.small) }
-            Button("Discard them", role: .destructive) { brain.runs.decide(.discard, on: waiting, store: store) }.buttonStyle(.bordered)
-            Button("Keep them") { brain.runs.decide(.keep, on: waiting, store: store) }.buttonStyle(.borderedProminent)
-        }
-        .disabled(brain.runs.deciding.contains(waiting.id))
-        decisionError(waiting)
     }
 
     @ViewBuilder private func decisionError(_ run: BotRun) -> some View {

@@ -13,9 +13,8 @@ enum RunBlocker: Equatable, Sendable {
     case needsWorkCopy(String)
     /// Runs start from the Mac app until phone pairing exists.
     case notOnThisDevice
-    /// Another run's changes in the work copy wait for Keep or Discard; a
-    /// new run never mixes with them.
-    case pendingChanges(UUID)
+    /// Another run is still working in the bot's work copy.
+    case runWorking(UUID)
 
     /// Runs start only from the Mac app until phone pairing exists.
     #if os(iOS)
@@ -30,9 +29,9 @@ enum RunBlocker: Equatable, Sendable {
         guard paired else { return .unpaired }
         guard crew.darkmuxRole != nil else { return .noRole(crew.name) }
         if bot.workspaceName != nil {
-            let waiting = (bot.runs ?? []).filter { $0.id != run && $0.phase == .result && !$0.changedFiles.isEmpty }
-                .max { $0.createdAt < $1.createdAt }
-            return waiting.map { .pendingChanges($0.id) }
+            // Finished runs are committed, so only a run still working blocks.
+            let working = (bot.runs ?? []).first { $0.id != run && $0.phase == .running }
+            return working.map { .runWorking($0.id) }
         }
         if bot.folderBookmark != nil { return .needsWorkCopy(bot.folderName ?? bot.name) }
         if let repo = bot.repoSlugs.first { return .needsWorkCopy(repo) }
@@ -46,7 +45,7 @@ enum RunBlocker: Equatable, Sendable {
         case .noCode: "this bot has no code to work on yet: add a folder or a GitHub repo in its info"
         case let .needsWorkCopy(what): "\(what) needs a work copy on this Mac"
         case .notOnThisDevice: "runs start from the Mac app for now"
-        case .pendingChanges: "the last run's changes are still waiting: keep or discard them first"
+        case .runWorking: "a run is still working in this bot's work copy: wait for it, or stop it"
         }
     }
 }

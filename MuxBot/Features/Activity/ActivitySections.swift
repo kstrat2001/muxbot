@@ -11,7 +11,7 @@ struct ActivitySections {
 
     init(runs: [BotRun], recentLimit: Int = 20) {
         let newest = runs.sorted { $0.createdAt > $1.createdAt }
-        needsYou = newest.filter { $0.phase.awaitsYou }
+        needsYou = newest.filter(\.needsYou)
         running = newest.filter { $0.phase.isActive }
         finished = Array(newest.filter { $0.phase.isClosed }.prefix(recentLimit))
     }

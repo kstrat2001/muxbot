@@ -69,7 +69,12 @@ final class BotRun {
     var bot: Bot?
 
     /// Needs you (0), running (1), finished (2): the Activity table's default order.
-    var statusRank: Int { phase.awaitsYou ? 0 : phase.isActive ? 1 : 2 }
+    /// Waits on you: an Approve, or a question from a run that changed
+    /// nothing. A finished run with changes is already committed, so it
+    /// waits on nothing.
+    var needsYou: Bool { phase == .proposed || (phase == .result && changedFiles.isEmpty) }
+
+    var statusRank: Int { needsYou ? 0 : phase.isActive ? 1 : 2 }
 
     var durationSeconds: Double? {
         guard let startedAt else { return nil }

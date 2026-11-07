@@ -488,8 +488,14 @@ final class BotBrain {
            let last = (bot.runs ?? []).max(by: { $0.createdAt < $1.createdAt }),
            [.result, .failed, .canceled].contains(last.phase),
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
-            store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Send it to \(last.crew.name) as a Tweak?", to: conversation)
-            store.proposeAction(.tweak(runId: last.id, change: text), in: context)
+            if last.phase == .result {
+                // Your reply after a result changes that same run (a Tweak).
+                runs.tweak(text, run: last, store: store, echo: false)
+            } else {
+                // A stopped or failed run runs again only after Approve.
+                store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Run it again with that change?", to: conversation)
+                store.proposeAction(.tweak(runId: last.id, change: text), in: context)
+            }
             return
         }
         // "What's running?", "what needs me?": answered from the runs, never guessed.

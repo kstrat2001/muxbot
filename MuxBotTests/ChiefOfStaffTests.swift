@@ -97,7 +97,7 @@ struct TrackAndChaseTests {
         #expect(!text.contains("Fix #1"), "failures older than a day drop off")
         #expect(text.contains("Running:\n• hcr: Fix #8: gutter, 7 min"), "\(text)")
         #expect(text.contains("Waiting for your Approve:\n• darkmux: Review #12"), "\(text)")
-        #expect(text.contains("Results to Keep or Discard:\n• hcr: Fix #5: footer, waiting 3 h"), "\(text)")
+        #expect(text.contains("Questions for you:\n• hcr: Fix #5: footer, waiting 3 h"), "\(text)")
         #expect(text.contains("Didn't finish:\n• darkmux: Fix #3"), "\(text)")
         for run in [running, waiting, result, failed] { #expect(text.contains(RunLink.url(for: run).absoluteString)) }
         #expect(WorkStatus.summary(runs: [], now: now) == "Nothing is running and nothing waits on you.")

@@ -52,12 +52,12 @@ struct NoChangeResultTests {
         #expect(brain.runs.decisionErrors[run.id] == "Nothing changed, so there's nothing to keep.")
     }
 
-    @Test func aFailedKeepSaysWhyOnTheCard() async throws {
+    @Test func aFailedUndoSaysWhyOnTheCard() async throws {
         let (store, _, run, brain) = finished(changed: ["a.txt +1 −0"])
-        brain.runs.decide(.keep, on: run, store: store)   // unpaired: can't reach darkmux
+        brain.runs.decide(.discard, on: run, store: store)   // unpaired: can't reach darkmux
         try await Task.sleep(for: .milliseconds(50))
         #expect(run.phase == .result)
-        #expect(brain.runs.decisionErrors[run.id]?.isEmpty == false)
+        #expect(brain.runs.decisionErrors[run.id] == "Can't do that yet: this app isn't paired with darkmux.")
     }
 
     @Test func aResultALaterRunReplacedCollapses() {
@@ -68,18 +68,6 @@ struct NoChangeResultTests {
         #expect(RunCardState.isReplaced(run))
     }
 
-    @Test func aNewDispatchAsksAboutChangesStillWaiting() {
-        let (store, bot, waiting, brain) = finished(changed: ["a.txt +1 −0"])
-        bot.workspaceName = "site"
-        let next = store.proposeRun(task: "Something else", crew: .coder, on: bot)
-        _ = brain
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot, deviceRuns: true, excluding: next.id) == .pendingChanges(waiting.id))
-        let (store2, bot2, quiet, brain2) = finished(changed: [])
-        bot2.workspaceName = "site"
-        let after = store2.proposeRun(task: "x", crew: .coder, on: bot2)
-        _ = brain2
-        #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot2, deviceRuns: true, excluding: after.id) == nil, "a no-change result blocks nothing \(quiet.id)")
-    }
 }
 
 @Suite(.serialized) @MainActor
@@ -89,21 +77,33 @@ struct FollowUpRoutingTests {
         let bot = store.add(name: "hcr", instructions: "The humancodereader.com website.")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
         let thread = store.conversation(for: .bot(bot.id))
-        store.append(.assistant, "Committed to mux/x. Open a pull request for it? PR #9 is open for #8.", to: thread)
+        store.append(.assistant, "Committed to mux/x. PR #9 is open for #8.", to: thread)
         let run = store.proposeRun(task: "Fix #10: Tablet sizing looks off (kstrat2001/hcr)", crew: .coder, on: bot)
         store.apply(.approve, to: run)
         run.darkmuxWorkId = "w-1"
         store.apply(.finish(summary: "Which breakpoint?"), to: run)
         let brain = BotBrain()
         brain.useOnDeviceModel = false
+        brain.runs.deviceRuns = true
         await brain.send("i'm not seeing it fixed in the live viewer", in: .bot(bot.id), store: store)
-        let card = (thread.messages ?? []).first { $0.kind == .actionCard }
-        guard case let .tweak(runId, change)? = card?.action else {
-            Issue.record("expected a Tweak card for the run that just finished"); return
-        }
+        // Your reply continues the run (a Tweak); unpaired here, so it says why it can't send yet.
+        #expect((thread.messages ?? []).contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." })
+        #expect(!(thread.messages ?? []).contains { $0.kind == .actionCard })
+        #expect(bot.runs?.count == 1, "never a new dispatch, never a stale PR")
+    }
+
+    @Test func aFollowUpAfterAStoppedRunAsksBeforeRunningAgain() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        let run = store.proposeRun(task: "Fix #10", crew: .coder, on: bot)
+        store.apply(.approve, to: run)
+        store.apply(.stop, to: run)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        await brain.send("try the footer too", in: .bot(bot.id), store: store)
+        let card = (store.conversation(for: .bot(bot.id)).messages ?? []).first { $0.kind == .actionCard }
+        guard case let .tweak(runId, _)? = card?.action else { Issue.record("expected an Approve card"); return }
         #expect(runId == run.id)
-        #expect(change == "i'm not seeing it fixed in the live viewer")
-        #expect(!(bot.runs ?? []).contains { $0.task.contains("PR #9") }, "never a stale PR")
     }
 
     @Test func aBareFixPRNumberNeverBecomesADispatchCard() {

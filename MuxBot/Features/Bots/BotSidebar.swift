@@ -142,7 +142,7 @@ struct BotSidebar: View {
     /// "1 result waiting for you", "2 things waiting for you", "Running".
     static func waitingText(_ bot: Bot) -> String? {
         let runs = bot.runs ?? []
-        let waiting = runs.filter { $0.phase.awaitsYou }
+        let waiting = runs.filter(\.needsYou)
         if waiting.count == 1 {
             switch waiting[0].phase {
             case .result: return "1 result waiting for you"

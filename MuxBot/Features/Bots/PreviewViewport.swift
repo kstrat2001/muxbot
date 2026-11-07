@@ -4,12 +4,13 @@ import CoreGraphics
 /// their real CSS width (so the site's own breakpoints apply) and scale
 /// down to fit the panel; Fit uses the panel as it is.
 enum PreviewViewport: String, CaseIterable, Sendable {
-    case fit, phone, tablet, desktop
+    case fit, phone, smallTablet, tablet, desktop
 
     var width: CGFloat? {
         switch self {
         case .fit: nil
         case .phone: 390
+        case .smallTablet: 768
         case .tablet: 820
         case .desktop: 1440
         }
@@ -19,6 +20,7 @@ enum PreviewViewport: String, CaseIterable, Sendable {
         switch self {
         case .fit: "arrow.left.and.right.square"
         case .phone: "iphone"
+        case .smallTablet: "ipad"
         case .tablet: "ipad"
         case .desktop: "desktopcomputer"
         }
@@ -28,6 +30,7 @@ enum PreviewViewport: String, CaseIterable, Sendable {
         switch self {
         case .fit: "Fit to panel"
         case .phone: "Phone, 390 wide"
+        case .smallTablet: "Small tablet, 768 wide"
         case .tablet: "Tablet, 820 wide"
         case .desktop: "Desktop, 1440 wide"
         }

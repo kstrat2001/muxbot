@@ -152,7 +152,7 @@ struct BotThreadView: View {
         .task {
             // Opening a bot that needs you goes to the card that's waiting.
             if router.focusRunId == nil,
-               let waiting = (bot?.runs ?? []).filter({ $0.phase.awaitsYou }).max(by: { $0.createdAt < $1.createdAt }) {
+               let waiting = (bot?.runs ?? []).filter(\.needsYou).max(by: { $0.createdAt < $1.createdAt }) {
                 router.focusRunId = waiting.id
             }
             greetIfNew()
@@ -180,11 +180,41 @@ struct BotThreadView: View {
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
             } else if let conversation = conversations.first {
                 ChatView(conversation: conversation, isThinking: brain.isThinking)
+                    .safeAreaInset(edge: .top) { needsYouBanner }
             } else {
                 ProgressView()
             }
         }
         .safeAreaInset(edge: .bottom) { BotBar() }
+    }
+
+    /// Pinned at the top: runs waiting for Approve or with a question. A tap
+    /// goes to the card; × hides it until something new needs you.
+    @ViewBuilder private var needsYouBanner: some View {
+        let items = NeedsYouBanner.items(bot?.runs ?? [], dismissed: brain.runs.dismissedBanner)
+        if let first = items.last {
+            HStack(spacing: Spacing.sm) {
+                StatusBadge(kind: .needsYou)
+                Button {
+                    router.focusRunId = first.id
+                } label: {
+                    Text(items.count == 1
+                         ? (first.phase == .proposed ? "Waiting for your Approve: \(first.task)" : "\(first.crew.name) has a question: \(first.task)")
+                         : "\(items.count) things need you")
+                        .font(AppFont.footnote(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                Button("Hide", systemImage: "xmark") { brain.runs.dismissedBanner.formUnion(items.map(\.id)) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Hide this; it stays in Activity")
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
+            .background(.bar)
+        }
     }
 
     private func markRead() {
