@@ -543,7 +543,7 @@ final class BotBrain {
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
             if last.phase == .result {
                 // Your reply after a result changes that same run (a Tweak).
-                runs.tweak(text, run: last, store: store, echo: false)
+                await rerun(last, change: text, store: store)
             } else {
                 // A stopped or failed run runs again only after Approve.
                 store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Run it again with that change?", to: conversation)
@@ -690,11 +690,46 @@ final class BotBrain {
         let focus = parts.viewport ?? widths[0]
         let measured = LayoutMeasure.summarize(facts, focus: focus)
         let brief = Self.withMeasurements(base, measured)
-        if !measured.foundProblem, parts.expected == nil {
+        if !measured.foundProblem, measured.layoutSwitch == nil, parts.expected == nil {
             let question = "At \(focus)px I measured nothing wider than the screen and no section without side padding. What should change?"
             return .ask(question, PendingDispatch(task: task, crew: crew) { brief + "\nWhat should change: \($0)" })
         }
         return .dispatch(task: task, brief: brief)
+    }
+
+    /// Runs `run` again with `change`: a finished run continues as a Tweak,
+    /// a stopped or failed one is sent again (after Approve already given).
+    /// An issue run's brief is rebuilt from the issue, never just its title.
+    func rerun(_ run: BotRun, change: String, store: BotStore) async {
+        let rebuilt = await rerunBrief(for: run, change: change)
+        if run.phase == .result {
+            runs.tweak(change, run: run, store: store, echo: false, message: rebuilt)
+        } else if let bot = run.bot {
+            let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
+                                         brief: rebuilt ?? RunCoordinator.tweakMessage(for: run, change: change))
+            runs.decide(.approve, on: again, store: store)
+        }
+    }
+
+    /// For a run made from a GitHub issue ("Fix #10: … (owner/repo)"): the
+    /// issue's brief, measured in the preview when it's visual, with what
+    /// it already changed and your words. nil for any other run (it keeps
+    /// "Earlier task / Now change this").
+    func rerunBrief(for run: BotRun, change: String) async -> String? {
+        guard let number = Intent.issueNumber(in: run.task),
+              let repo = run.task.range(of: #"\(([\w.-]+/[\w.-]+)\)$"#, options: .regularExpression)
+                .map({ String(run.task[$0].dropFirst().dropLast()) }),
+              let issue = try? await github.issue(repo: repo, number: number) else { return nil }
+        let base: String
+        switch await plan(issue: issue, repo: repo, crew: run.crew, bot: run.bot) {
+        case let .dispatch(_, brief): base = brief
+        case let .ask(_, pending): base = pending.brief("").replacingOccurrences(of: "\nWhat should change: ", with: "")
+        case .cannot: return nil
+        }
+        var parts = [base]
+        if !run.changedFiles.isEmpty { parts.append("You already changed: \(run.changedFiles.joined(separator: ", ")).") }
+        parts.append("What should change: \(change)")
+        return parts.joined(separator: "\n")
     }
 
     /// The measured block (and the likely file from the matched @media
@@ -845,14 +880,9 @@ final class BotBrain {
         case let .tweak(runId, change):
             guard let run = store.run(id: runId) else { return }
             // A finished run continues as a Tweak; one that was stopped or
-            // failed is sent again with the change.
-            if run.phase == .result {
-                runs.tweak(change, run: run, store: store, echo: false)
-            } else if let bot = run.bot {
-                let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
-                                             brief: RunCoordinator.tweakMessage(for: run, change: change))
-                runs.decide(.approve, on: again, store: store)
-            }
+            // failed is sent again with the change. An issue run's brief is
+            // rebuilt from the issue first (GitHub, the preview), so async.
+            Task { await rerun(run, change: change, store: store) }
             return
         }
         store.append(.system, note, to: store.conversation(for: chat))

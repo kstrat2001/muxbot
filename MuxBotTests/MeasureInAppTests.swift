@@ -58,7 +58,8 @@ struct LayoutMeasureTests {
     }
 
     @Test func theIssuesWidthWhenItsAPresetPlusDesktop() {
-        #expect(LayoutMeasure.widths(forViewport: 820) == [820, 1440])
+        #expect(LayoutMeasure.widths(forViewport: 820) == [820, 768, 1440], "the next preset down shows a layout switch")
+        #expect(LayoutMeasure.widths(forViewport: 1024) == [1024, 820, 1440])
         #expect(LayoutMeasure.widths(forViewport: 390) == [390, 1440])
         #expect(LayoutMeasure.widths(forViewport: 700) == [390, 768, 820, 1024, 1440])
         #expect(LayoutMeasure.widths(forViewport: nil) == [390, 768, 820, 1024, 1440])
@@ -140,11 +141,11 @@ struct MeasureBeforeDispatchTests {
 
     @Test(arguments: ["fix #10", "any open issues?"])
     func issueTenIsMeasuredAt820AndDesktopBeforeTheCard(message: String) async throws {
-        let probe = MockProbe([820: overflowingAt820(), 1440: fitsAt(1440)])
+        let probe = MockProbe([820: overflowingAt820(), 768: fitsAt(768), 1440: fitsAt(1440)])
         let (store, bot, brain) = setUp([issueTen], probe: probe)
         await brain.send(message, in: .bot(bot.id), store: store)
         #expect(probe.asked.count == 1)
-        #expect(probe.asked.first?.widths == [820, 1440])
+        #expect(probe.asked.first?.widths == [820, 768, 1440])
         #expect(probe.asked.first?.url.absoluteString == "http://127.0.0.1:5999/")
         let run = try #require(bot.runs?.first)
         #expect(run.phase == .proposed)
@@ -176,7 +177,7 @@ struct MeasureBeforeDispatchTests {
 
     @Test func nothingMeasuredWrongAndNoExpectedAsksOneQuestionFirst() async throws {
         let vague = GitHubIssue(number: 12, title: "Tablet layout looks off", body: "**What's wrong**\nlooks off\n\n**Steps**\n1. Open / at 820px wide\n2. Look at `section.hero`")
-        let probe = MockProbe([820: fitsAt(820), 1440: fitsAt(1440)])
+        let probe = MockProbe([820: fitsAt(820), 1440: fitsAt(1440)])   // no 768: no switch to report
         let (store, bot, brain) = setUp([vague], probe: probe)
         await brain.send("fix #12", in: .bot(bot.id), store: store)
         #expect(bot.runs?.isEmpty ?? true, "asks first")
@@ -214,5 +215,94 @@ struct WebLayoutProbeTests {
         let phone = try #require(await probe.measure(html: html, width: 390))
         #expect(phone.media.first?.matches == true)
         #expect(phone.scrollWidth <= 390, "\(phone.scrollWidth)")
+    }
+}
+
+
+/// hcr's hero as measured on 2026-11-07: a row at 820px, a column at 768px
+/// (its only @media rule stops at 768px).
+func heroAt(_ width: Int) -> LayoutFacts {
+    let row = width > 768
+    return LayoutFacts(viewport: width, scrollWidth: width, clientWidth: width, wide: [],
+                       media: [.init(media: "(max-width: 768px)", matches: !row, selectors: [".hero"], source: "/inertia/css/app.css")],
+                       sections: [.init(selector: "section.hero.container.flex", width: width, left: 0, display: "flex", columns: nil,
+                                        paddingLeft: "20px", paddingRight: "20px", fontSize: "16px", maxWidth: "1200px",
+                                        textLeft: 20, textRight: width - 20, flexDirection: row ? "row" : "column",
+                                        children: row ? [402, 378] : [728, 260])])
+}
+
+struct LayoutSwitchTests {
+    @Test func theHeroSwitchingBetween820And768IsReportedWithItsRule() {
+        let m = LayoutMeasure.summarize([heroAt(820), heroAt(768), heroAt(1440)], focus: 820)
+        #expect(m.lines.contains("At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."), "\(m.lines)")
+        #expect(m.doneWhen == "at 820px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now.")
+        #expect(m.likelyFile == "inertia/css/app.css")
+        #expect(m.layoutSwitch != nil)
+    }
+
+    @Test func noSwitchNoLine() {
+        let m = LayoutMeasure.summarize([heroAt(1024), heroAt(820)], focus: 1024)
+        #expect(m.layoutSwitch == nil, "\(m.lines)")
+        #expect(!m.lines.contains { $0.contains("at 820px it's") })
+    }
+}
+
+/// A re-run or a reply to an issue run is rebuilt from the issue (body and
+/// measurements) plus what you said, never "Earlier task: <title>" (Fix #10,
+/// 2026-11-07: Coder got only the title and looped on grep).
+@Suite(.serialized) @MainActor
+struct IssueRerunTests {
+    let kains = "the 820 wide tablet size preview reveals the problem at that size. smaller at 768 changes the layout"
+
+    private func setUp() -> (BotStore, Bot, BotBrain, BotRun) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
+        // The run as it was: a bare title, then stopped.
+        let old = store.proposeRun(task: "Fix #10: Tablet sizing looks off (kstrat2001/hcr)", crew: .coder, on: bot)
+        store.apply(.cancel, to: old)
+        return (store, bot, brain, old)
+    }
+
+    @Test func theRebuiltBriefCarriesTheIssueTheMeasurementsAndYourWords() async throws {
+        let (_, _, brain, old) = setUp()
+        let brief = try #require(await brain.rerunBrief(for: old, change: kains))
+        #expect(brief.contains("Page: / (at 820px wide)"), "\(brief)")
+        #expect(brief.contains("Element: div#app > div.layout > main > section.hero.container:nth-of-type(1)"))
+        #expect(brief.contains("- At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."))
+        #expect(brief.contains("Likely file: inertia/css/app.css"))
+        #expect(brief.contains("Done when: at 820px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now."))
+        #expect(brief.hasSuffix("What should change: \(kains)"))
+        #expect(!brief.contains("Earlier task:"))
+    }
+
+    @Test func runningAStoppedIssueRunAgainUsesTheRebuiltBrief() async throws {
+        let (store, bot, brain, old) = setUp()
+        await brain.rerun(old, change: kains, store: store)
+        let again = try #require((bot.runs ?? []).first { $0.id != old.id })
+        #expect(again.brief?.contains("Measured in the preview:") == true, "\(again.brief ?? "")")
+        #expect(again.brief?.hasSuffix("What should change: \(kains)") == true)
+    }
+
+    @Test func continuingAFinishedIssueRunUsesTheRebuiltBrief() async throws {
+        let (store, bot, brain, _) = setUp()
+        let done = store.proposeRun(task: "Fix #10: Tablet sizing looks off (kstrat2001/hcr)", crew: .coder, on: bot)
+        store.apply(.approve, to: done)
+        store.apply(.finish(summary: "Changed nothing."), to: done)
+        await brain.rerun(done, change: kains, store: store)
+        let message = try #require(brain.runs.lastTweakMessage)
+        #expect(message.contains("Measured in the preview:"), "\(message)")
+        #expect(message.hasSuffix("What should change: \(kains)"))
+    }
+
+    @Test func aRunThatIsntAnIssueKeepsTheEarlierTask() async {
+        let (store, bot, brain, _) = setUp()
+        let plain = store.proposeRun(task: "Tighten the footer", crew: .coder, on: bot)
+        #expect(await brain.rerunBrief(for: plain, change: "less") == nil)
     }
 }

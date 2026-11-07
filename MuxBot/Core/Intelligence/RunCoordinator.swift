@@ -463,9 +463,16 @@ final class RunCoordinator {
     }
 
     /// Sends a follow-up to the same run (and, once wired, the same worktree).
-    func tweak(_ request: String, run: BotRun, store: BotStore, echo: Bool = true) {
+    /// The last message a Tweak composed (tests read it).
+    private(set) var lastTweakMessage: String?
+
+    /// `message` replaces the default "Earlier task / Now change this" one
+    /// (an issue run's brief rebuilt from the issue, `BotBrain.rerunBrief`).
+    func tweak(_ request: String, run: BotRun, store: BotStore, echo: Bool = true, message: String? = nil) {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let bot = run.bot else { return }
+        let composed = message ?? Self.tweakMessage(for: run, change: text)
+        lastTweakMessage = composed
         if echo { store.append(.user, text, to: store.conversation(for: .bot(bot.id))) }
         tweakRunId = nil
         if let reason = whyRunCannotStart(run) {
@@ -475,7 +482,7 @@ final class RunCoordinator {
         guard store.apply(.tweak, to: run) else { return }
         // darkmux keeps a Tweak's changes together with the run it continues.
         let continues = run.darkmuxWorkId
-        _ = startRealRun(run, message: Self.tweakMessage(for: run, change: text), store: store, continues: continues)
+        _ = startRealRun(run, message: composed, store: store, continues: continues)
     }
 
 

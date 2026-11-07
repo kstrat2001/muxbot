@@ -31,6 +31,27 @@ struct LayoutFacts: Sendable, Equatable, Codable {
         /// container keeps the text in.
         var textLeft: Int? = nil
         var textRight: Int? = nil
+        /// `row` or `column` for a flex box.
+        var flexDirection: String? = nil
+        /// Its direct children's widths (the first four).
+        var children: [Int]? = nil
+
+        /// How its children are arranged, to compare across widths.
+        var arrangement: String { "\(display)|\(flexDirection ?? "")|\(columns ?? 1)" }
+
+        /// "a row (402px and 378px side by side)", "a column", "a 2-column grid".
+        var arrangementText: String {
+            if display.contains("flex") {
+                if flexDirection?.hasPrefix("column") == true { return "a column" }
+                let kids = children ?? []
+                return kids.count >= 2 ? "a row (\(kids.prefix(3).map { "\($0)px" }.joined(separator: " and ")) side by side)" : "a row"
+            }
+            if display.contains("grid") {
+                let c = columns ?? 1
+                return c > 1 ? "a \(c)-column grid" : "one column"
+            }
+            return display
+        }
     }
 
     var viewport: Int
@@ -65,7 +86,10 @@ enum LayoutMeasure {
     /// The issue's width when it's a device preset, with desktop to
     /// compare; otherwise every preset and desktop.
     static func widths(forViewport viewport: Int?) -> [Int] {
-        if let viewport, presets.contains(viewport) { return [viewport, desktop] }
+        if let viewport, let i = presets.firstIndex(of: viewport) {
+            // The next preset down shows whether the layout switches between them.
+            return [viewport] + (i > 0 ? [presets[i - 1]] : []) + [desktop]
+        }
         return presets + [desktop]
     }
 
@@ -75,6 +99,8 @@ enum LayoutMeasure {
         var likelyFile: String?
         /// Overflow, something wider than the screen, or no side padding.
         var foundProblem: Bool
+        /// A section laid out differently at the next preset down, and why.
+        var layoutSwitch: String? = nil
     }
 
     static func summarize(_ facts: [LayoutFacts], focus: Int?) -> Measured {
@@ -140,10 +166,29 @@ enum LayoutMeasure {
                 lines.append("\(at) fits; nothing is wider than the screen.")
             }
         }
+        // The same section arranged differently at the next preset down (a
+        // row at 820px, a column at 768px), and the @media rule that switches it.
+        var switchLine: String?
+        if let focus, let at = facts.first(where: { $0.viewport == focus }),
+           let below = facts.filter({ $0.viewport < focus }).max(by: { $0.viewport < $1.viewport }) {
+            for s in at.sections {
+                guard let other = below.sections.first(where: { $0.selector == s.selector }), other.arrangement != s.arrangement else { continue }
+                let rule = below.media.first { m in m.matches && !at.media.contains { $0.media == m.media && $0.matches } }
+                let from = rule.map { r in ", from @media \(r.media)\(file(r.source).map { " in \($0)" } ?? "")" } ?? ""
+                switchLine = "At \(focus)px \(s.selector) is \(s.arrangementText); at \(below.viewport)px it's \(other.arrangementText)\(from)."
+                lines.insert(switchLine!, at: 0)
+                if let f = rule.flatMap({ file($0.source) }) { files.insert(f, at: 0) }
+                if done == nil {
+                    let keep = facts.contains { $0.viewport == desktop } ? ", and \(desktop)px looks the same as now" : ""
+                    done = "at \(focus)px \(s.selector) is \(other.arrangementText.replacingOccurrences(of: #" \(.*\)"#, with: "", options: .regularExpression)), as at \(below.viewport)px\(keep)."
+                }
+                break
+            }
+        }
         // Deduplicate lines while keeping their order.
         var seen = Set<String>()
         lines = lines.filter { seen.insert($0).inserted }
-        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem)
+        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine)
     }
 
     /// The block a brief carries.
@@ -222,7 +267,9 @@ enum LayoutMeasure {
           }
           return { selector: sel(el), width: Math.round(r.width), left: Math.round(r.left), display: cs.display, columns: cols,
                    paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight, fontSize: cs.fontSize, maxWidth: cs.maxWidth,
-                   textLeft: textLeft === null ? null : Math.round(textLeft), textRight: textRight === null ? null : Math.round(textRight) };
+                   textLeft: textLeft === null ? null : Math.round(textLeft), textRight: textRight === null ? null : Math.round(textRight),
+                   flexDirection: cs.display.includes('flex') ? cs.flexDirection : null,
+                   children: Array.from(el.children).slice(0, 4).map(c => Math.round(c.getBoundingClientRect().width)) };
         });
         return JSON.stringify({ viewport: vw, scrollWidth: de.scrollWidth, clientWidth: de.clientWidth,
                                 wide: wide.slice(0, 8), media, sections });
