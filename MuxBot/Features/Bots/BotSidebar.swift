@@ -16,11 +16,13 @@ struct BotSidebar: View {
             Section {
                 row(name: LeadBot.name, look: .lead, unread: unread(nil), state: nil)
                     .tag(SidebarItem.lead)
+                    .botContextMenu(nil)
                 ForEach(bots) { bot in
                     row(name: bot.name, look: bot.look, unread: unread(bot.id), state: bot.state)
                         .tag(SidebarItem.bot(bot.id))
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
+                        .botContextMenu(bot)
                 }
                 Button { router.showNewBot = true } label: {
                     Label("New bot", systemImage: "plus")

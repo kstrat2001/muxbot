@@ -36,6 +36,7 @@ struct HomeView: View {
                                         RoleTile(role: role)
                                     }
                                     .buttonStyle(.plain)
+                                    .botContextMenu(role)
                                 }
                             }
                         }
@@ -54,8 +55,17 @@ struct HomeView: View {
         .safeAreaInset(edge: .bottom) { BotBar() }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("darkmux", systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
-                    .help(connection.isPaired ? "Paired with darkmux" : "Pair with darkmux")
+                #if os(iOS)
+                // Runs start from the Mac app for now; this says where.
+                Button("darkmux", systemImage: "laptopcomputer") { router.showPairing = true }
+                    .labelStyle(.titleAndIcon)
+                    .accessibilityHint("How this app reaches darkmux")
+                #else
+                Button(connection.isPaired ? "darkmux: paired" : "Pair with darkmux",
+                       systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
+                    .labelStyle(.titleAndIcon)
+                    .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
+                #endif
                 Button("New bot", systemImage: "plus") { router.showNewBot = true }
             }
         }
@@ -73,7 +83,8 @@ struct RoleTile: View {
                 HStack(alignment: .top) {
                     RoleAvatar(role: role, tint: tint)
                     Spacer()
-                    StatusBadge(kind: role.state.kind)
+                    // A badge only when there's something to say: no dot for idle.
+                    if role.state != .ready { StatusBadge(kind: role.state.kind) }
                 }
                 Text(role.name).font(AppFont.headline())
                 Text(detail)

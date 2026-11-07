@@ -16,6 +16,13 @@ struct FleetPairingView: View {
         Form {
             switch connection.state {
             case .unpaired, .failed:
+                #if os(iOS)
+                Section {
+                    Label("On iPhone and iPad, runs start from the Mac app for now.", systemImage: "laptopcomputer")
+                    Text("Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later.")
+                        .foregroundStyle(.secondary)
+                }
+                #else
                 Section {
                     Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time.")
                         .foregroundStyle(.secondary)
@@ -31,6 +38,7 @@ struct FleetPairingView: View {
                 } footer: {
                     Text("darkmux's app connection has to be running on this Mac (the command above starts it).")
                 }
+                #endif
             case let .waiting(code, expires):
                 Section {
                     #if os(macOS)
