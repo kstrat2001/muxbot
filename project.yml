@@ -1,0 +1,67 @@
+name: MuxBot
+options:
+  bundleIdPrefix: com.darklyenergized
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+  developmentLanguage: en
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # DEVELOPMENT_TEAM is deliberately not set here: see Config/Base.xcconfig.
+    ENABLE_PREVIEWS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_WARN_UNGUARDED_AVAILABILITY: YES_AGGRESSIVE
+
+targets:
+  MuxBot:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: MuxBot
+    info:
+      path: MuxBot/Info.plist
+      properties:
+        CFBundleDisplayName: Mux Bot
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.developer-tools
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.darklyenergized.darkmuxapp.refresh
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.darklyenergized.darkmuxapp
+        PRODUCT_NAME: MuxBot
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+schemes:
+  MuxBot:
+    build:
+      targets:
+        MuxBot: all
+    run:
+      config: Debug
+    archive:
+      config: Release

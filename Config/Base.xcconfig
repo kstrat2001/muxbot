@@ -1,0 +1,4 @@
+// Shared build settings. Signing team is NOT committed: forks are encouraged.
+// Copy Config/Local.xcconfig.example to Config/Local.xcconfig (gitignored)
+// and set your own DEVELOPMENT_TEAM, or set it in Xcode.
+#include? "Local.xcconfig"
