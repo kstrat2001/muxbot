@@ -38,7 +38,7 @@ struct OpenPRTests {
         let entries = tree["tree"] as? [[String: Any]] ?? []
         #expect(entries.first { $0["path"] as? String == "inertia/pages/pricing.tsx" }?["sha"] as? String == "blob1")
         #expect(entries.first { $0["path"] as? String == "gone.txt" }?["sha"] is NSNull, "a deletion")
-        #expect(body("/git/commits")["parents"] as? [String] == ["b0b0"])
+        #expect(body("/git/commits")["parents"] as? [String] == ["b0b0"], "a new branch starts on the base")
         #expect(body("/git/refs")["ref"] as? String == "refs/heads/mux/hcr-3cfe8f")
         #expect(body("/git/refs")["sha"] as? String == "commit1")
         let pull = body("/pulls")
@@ -48,21 +48,45 @@ struct OpenPRTests {
         #expect(GitHubStub.seen.allSatisfy { $0.auth == "Bearer ghu_abc" })
     }
 
-    @Test func anExistingBranchIsMovedAndAnExistingPRIsReused() async throws {
+    @Test func anExistingBranchGetsANewCommitOnTopNeverAForcePush() async throws {
         GitHubStub.reset()
         GitHubStub.on("POST /repos/kstrat2001/hcr/git/blobs", 201, #"{"sha":"blob1"}"#)
         GitHubStub.on("GET /repos/kstrat2001/hcr/git/commits/b0b0", 200, #"{"sha":"b0b0","tree":{"sha":"tree0"}}"#)
+        GitHubStub.on("GET /repos/kstrat2001/hcr/git/ref/heads/mux/hcr-3cfe8f", 200, #"{"ref":"refs/heads/mux/hcr-3cfe8f","object":{"sha":"remote1"}}"#)
         GitHubStub.on("POST /repos/kstrat2001/hcr/git/trees", 201, #"{"sha":"tree1"}"#)
         GitHubStub.on("POST /repos/kstrat2001/hcr/git/commits", 201, #"{"sha":"commit2"}"#)
-        GitHubStub.on("POST /repos/kstrat2001/hcr/git/refs", 422, #"{"message":"Reference already exists"}"#)
         GitHubStub.on("PATCH /repos/kstrat2001/hcr/git/refs/heads/mux/hcr-3cfe8f", 200, #"{"ref":"refs/heads/mux/hcr-3cfe8f"}"#)
         GitHubStub.on("POST /repos/kstrat2001/hcr/pulls", 422, #"{"message":"Validation Failed","errors":[{"message":"A pull request already exists for kstrat2001:mux/hcr-3cfe8f."}]}"#)
         GitHubStub.on("GET /repos/kstrat2001/hcr/pulls", 200, #"[{"number":12,"html_url":"https://github.com/kstrat2001/hcr/pull/12"}]"#)
         let pr = try await GitHubPR(session: GitHubStub.session, token: "t").open(changes, repo: "kstrat2001/hcr", title: "x", body: "y")
-        #expect(pr.number == 12)
-        let patch = GitHubStub.seen.first { $0.method == "PATCH" }?.body ?? [:]
+        #expect(pr.number == 12, "the open PR is reused")
+        let body = { (method: String, path: String) in GitHubStub.seen.first { $0.method == method && $0.path.hasSuffix(path) }?.body ?? [:] }
+        #expect(body("POST", "/git/commits")["parents"] as? [String] == ["remote1"], "on top of the branch as it is on GitHub")
+        #expect(body("POST", "/git/trees")["base_tree"] as? String == "tree0", "the full current state")
+        let patch = body("PATCH", "/git/refs/heads/mux/hcr-3cfe8f")
         #expect(patch["sha"] as? String == "commit2")
-        #expect(patch["force"] as? Bool == true)
+        #expect((patch["force"] as? Bool ?? false) == false, "never a force push")
+        #expect(!GitHubStub.seen.contains { $0.method == "POST" && $0.path.hasSuffix("/git/refs") })
+    }
+
+    @Test func ifSomeoneElsePushedToTheBranchItStops() async {
+        GitHubStub.reset()
+        GitHubStub.on("POST /repos/kstrat2001/hcr/git/blobs", 201, #"{"sha":"blob1"}"#)
+        GitHubStub.on("GET /repos/kstrat2001/hcr/git/commits/b0b0", 200, #"{"sha":"b0b0","tree":{"sha":"tree0"}}"#)
+        GitHubStub.on("GET /repos/kstrat2001/hcr/git/ref/heads/mux/hcr-3cfe8f", 200, #"{"object":{"sha":"remote1"}}"#)
+        GitHubStub.on("POST /repos/kstrat2001/hcr/git/trees", 201, #"{"sha":"tree1"}"#)
+        GitHubStub.on("POST /repos/kstrat2001/hcr/git/commits", 201, #"{"sha":"commit2"}"#)
+        GitHubStub.on("PATCH /repos/kstrat2001/hcr/git/refs/heads/mux/hcr-3cfe8f", 422, #"{"message":"Update is not a fast forward"}"#)
+        do {
+            _ = try await GitHubPR(session: GitHubStub.session, token: "t").open(changes, repo: "kstrat2001/hcr", title: "x", body: "y")
+            Issue.record("expected it to stop")
+        } catch let error as GitHubPR.Failure {
+            #expect(error == .branchMoved("mux/hcr-3cfe8f"))
+            #expect(error.localizedDescription.contains("mux/hcr-3cfe8f"))
+        } catch {
+            Issue.record("unexpected \(error)")
+        }
+        #expect(!GitHubStub.seen.contains { $0.path.hasSuffix("/pulls") }, "no PR from a branch it couldn't update")
     }
 
     @Test func aRepoTheAppCantWriteToSaysSo() async {

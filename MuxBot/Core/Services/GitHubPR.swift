@@ -10,10 +10,13 @@ struct GitHubPR: Sendable {
     enum Failure: Error, Equatable, LocalizedError {
         /// The Mux Bot GitHub App can't write to this repo (not installed there).
         case cantWrite(String)
+        /// Someone else pushed to the PR branch: never overwritten.
+        case branchMoved(String)
         case github(String)
         var errorDescription: String? {
             switch self {
             case let .cantWrite(repo): "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it."
+            case let .branchMoved(branch): "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it. Pull their commits into the bot's branch first."
             case let .github(why): "GitHub said: \(why)"
             }
         }
@@ -37,13 +40,23 @@ struct GitHubPR: Sendable {
             }
         }
         let base: Commit = try await send("GET", "\(api)/git/commits/\(changes.base)", nil, repo: repo)
+        // The tree is the branch's full current state (the base plus every
+        // change). If the branch is already on GitHub (an earlier PR), the new
+        // commit goes on top of its head and the ref moves forward; never a
+        // force push.
+        struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
+        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(changes.branch)", repo: repo)
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
-        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": title, "tree": tree.sha, "parents": [changes.base]], repo: repo)
-        do {
+        let parent = remote?.object.sha ?? changes.base
+        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": title, "tree": tree.sha, "parents": [parent]], repo: repo)
+        if remote == nil {
             let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(changes.branch)", "sha": commit.sha], repo: repo)
-        } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
-            // The branch is there from an earlier PR: move it to this commit.
-            let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(changes.branch)", ["sha": commit.sha, "force": true], repo: repo)
+        } else {
+            do {
+                let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(changes.branch)", ["sha": commit.sha, "force": false], repo: repo)
+            } catch Failure.github {
+                throw Failure.branchMoved(changes.branch)
+            }
         }
         struct Pull: Decodable { var number: Int; var html_url: String }
         do {
@@ -56,6 +69,19 @@ struct GitHubPR: Sendable {
             guard let pull = open.first else { throw Failure.github(why) }
             return PR(number: pull.number, url: URL(string: pull.html_url)!)
         }
+    }
+
+    /// A GET whose 404 means "not there yet" (nil), not "can't write".
+    private func sendOptional<T: Decodable>(_ method: String, _ url: String, repo: String) async throws -> T? {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 404 { return nil }
+        guard status == 200 else { throw status == 403 ? Failure.cantWrite(repo) : Failure.github("status \(status)") }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String) async throws -> T {
