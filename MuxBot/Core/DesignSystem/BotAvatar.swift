@@ -199,8 +199,11 @@ struct AvatarPainter {
         stroke(&ctx, p, color, width)
     }
     private func whiskers(_ ctx: inout GraphicsContext, y: CGFloat, inner: CGFloat, drop: CGFloat) {
-        for (a, b) in [((inner, y), (18, y)), ((inner, y + 4), (19, y + 4 + drop)),
-                       ((100 - inner, y), (82, y)), ((100 - inner, y + 4), (81, y + 4 + drop))] {
+        let lines: [((CGFloat, CGFloat), (CGFloat, CGFloat))] = [
+            ((inner, y), (18, y)), ((inner, y + 4), (19, y + 4 + drop)),
+            ((100 - inner, y), (82, y)), ((100 - inner, y + 4), (81, y + 4 + drop)),
+        ]
+        for (a, b) in lines {
             stroke(&ctx, line(a, b), Self.ink, 1.6, opacity: 0.5)
         }
     }
