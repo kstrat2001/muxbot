@@ -48,3 +48,38 @@ struct FleetConnectionTests {
         #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content.hasPrefix("Simulated run: this app isn't paired") })
     }
 }
+
+@MainActor
+struct SidebarRoutingTests {
+    @Test func inSidebarModeOpeningABotSelectsItWithoutPushing() {
+        let router = AppRouter()
+        router.usesSidebar = true
+        let id = UUID()
+        router.navigate(to: .bot(id))
+        #expect(router.sidebar == .bot(id))
+        #expect(router.path.isEmpty)
+        #expect(router.context == .bot(id))
+        router.sidebar = .work
+        #expect(router.context == .lead)
+    }
+
+    @Test func inTabModeOpeningABotPushesIt() {
+        let router = AppRouter()
+        let id = UUID()
+        router.navigate(to: .bot(id))
+        #expect(router.path == [.bot(id)])
+        #expect(router.context == .bot(id))
+    }
+
+    @Test func unreadIsABotMessageNewerThanTheLastLook() {
+        let store = TestStore.fresh()
+        let thread = store.conversation(for: .lead)
+        #expect(!thread.hasUnread)
+        store.append(.assistant, "hi", to: thread)
+        #expect(thread.hasUnread)
+        thread.lastReadAt = .now
+        #expect(!thread.hasUnread)
+        store.append(.user, "hello", to: thread)
+        #expect(!thread.hasUnread)
+    }
+}

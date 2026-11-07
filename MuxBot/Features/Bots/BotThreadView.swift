@@ -77,6 +77,8 @@ struct BotThreadView: View {
                 }
             }
         }
+        .onAppear { markRead() }
+        .onChange(of: conversations.first?.messages?.count) { markRead() }
         .task {
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] { await brain.loadRecipe(for: repo) }
@@ -100,6 +102,12 @@ struct BotThreadView: View {
             }
         }
         .safeAreaInset(edge: .bottom) { BotBar() }
+    }
+
+    private func markRead() {
+        guard let thread = conversations.first else { return }
+        thread.lastReadAt = .now
+        try? modelContext.save()
     }
 
     private func greetIfNew() {

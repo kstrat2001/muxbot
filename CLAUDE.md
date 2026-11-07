@@ -35,7 +35,7 @@ Mux Bot is about getting work done, not managing machines. Lead with the work (r
 
 ## Layout
 
-- `MuxBot/App`: entry point, `ContentView` (Bots and Work tabs, sidebar on macOS/iPad), typed navigation (`AppRouter`, `Route`).
+- `MuxBot/App`: entry point, `ContentView` (macOS/iPad: `BotSidebar` of Mux Bot, bots, Work, with the thread beside it; iPhone: Bots and Work tabs), typed navigation (`AppRouter`, `Route`).
 - `MuxBot/Core`: design system, the bot brain (`BotBrain`, `FallbackBrain`, `LeadBot`), models (bots, threads, `FleetSnapshot`), notification/background services, keychain, SwiftData container.
 - `MuxBot/Features`: Home (lead bot card + bot tiles), Bots (`BotBar`, owned by the Bots tab and following `AppRouter.context`; `BotThreadView`; `BotInfoView` for resources; `NewBotView`), Work (`WorkView`, read-only runs grouped by bot, then mission: in progress, needs you, done), Chat (shared transcript UI).
 - `MuxBotTests`: Swift Testing suites (`xcodebuild ... -destination 'platform=macOS' test`).

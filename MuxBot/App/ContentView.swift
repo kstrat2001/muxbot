@@ -1,25 +1,26 @@
 import SwiftUI
 
-/// Two tabs: Bots, where all work starts in conversation, and Work, a
-/// read-only view of what the fleet is doing. Sidebar on macOS and iPad.
+/// macOS and iPad: a sidebar of Mux Bot, each bot and Work, with the
+/// selected thread beside it. iPhone: two tabs, Bots (Home grid, then
+/// threads) and Work.
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var wantsSidebar: Bool { sizeClass == .regular }
+    #else
+    private let wantsSidebar = true
+    #endif
+
     var body: some View {
         @Bindable var router = router
-        TabView(selection: $router.tab) {
-            Tab("Bots", systemImage: "bubble.left.and.bubble.right", value: AppTab.bots) {
-                NavigationStack(path: $router.path) {
-                    HomeView()
-                        .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
-                }
-            }
-            Tab("Work", systemImage: "checklist", value: AppTab.work) {
-                NavigationStack { WorkView() }
-            }
+        Group {
+            if wantsSidebar { split } else { tabs }
         }
-        .tabViewStyle(.sidebarAdaptable)
+        .onAppear { router.usesSidebar = wantsSidebar }
+        .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif
@@ -40,9 +41,10 @@ struct ContentView: View {
         #endif
         if UserDefaults.standard.bool(forKey: "showPreview") { router.showPreview = true }
         guard let name = UserDefaults.standard.string(forKey: "openBot") else { return }
-        if name == LeadBot.name { router.path = [.lead]; return }
+        router.usesSidebar = wantsSidebar
+        if name == LeadBot.name { router.navigate(to: .lead); return }
         if let bot = BotStore(context: context).allBots().first(where: { $0.name == name }) {
-            router.path = [.bot(bot.id)]
+            router.navigate(to: .bot(bot.id))
         }
     }
 
@@ -59,4 +61,38 @@ struct ContentView: View {
     }
     #endif
     #endif
+
+    private var tabs: some View {
+        @Bindable var router = router
+        return TabView(selection: $router.tab) {
+            Tab("Bots", systemImage: "bubble.left.and.bubble.right", value: AppTab.bots) {
+                NavigationStack(path: $router.path) {
+                    HomeView()
+                        .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+                }
+            }
+            Tab("Work", systemImage: "checklist", value: AppTab.work) {
+                NavigationStack { WorkView() }
+            }
+        }
+    }
+
+    private var split: some View {
+        @Bindable var router = router
+        return NavigationSplitView {
+            BotSidebar()
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        } detail: {
+            NavigationStack(path: $router.path) {
+                Group {
+                    switch router.sidebar {
+                    case .work?: WorkView()
+                    case let .bot(id)?: BotThreadView(context: .bot(id)).id(id)
+                    case .lead?, nil: BotThreadView(context: .lead)
+                    }
+                }
+                .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
+            }
+        }
+    }
 }
