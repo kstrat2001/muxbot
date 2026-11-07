@@ -1,0 +1,609 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$lld"
+          }
+        }
+      }
+    },
+    "%@ has no %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ has no %2$@"
+          }
+        }
+      }
+    },
+    "%@ reads this to send the right work here. You can change it later in the bot's info." : {
+
+    },
+    "%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@"
+          }
+        }
+      }
+    },
+    "%@'s notes" : {
+
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld bots" : {
+
+    },
+    "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
+
+    },
+    "About" : {
+
+    },
+    "About %@" : {
+
+    },
+    "Activity" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add %@" : {
+
+    },
+    "Add a repo and I'll look for its preview recipe." : {
+
+    },
+    "Add a resource" : {
+
+    },
+    "Add an example bot" : {
+
+    },
+    "Add folder…" : {
+
+    },
+    "Allow notifications" : {
+
+    },
+    "Apple Intelligence is ready. Bots answer on this device." : {
+
+    },
+    "Approve" : {
+
+    },
+    "Approve this app on your Mac" : {
+
+    },
+    "Approved" : {
+
+    },
+    "Back" : {
+
+    },
+    "Back to chat (Esc)" : {
+
+    },
+    "Bot" : {
+
+    },
+    "Bot info" : {
+
+    },
+    "Bot info and resources" : {
+
+    },
+    "Bots" : {
+
+    },
+    "Bots fall back to simple keyword matching until it's available." : {
+
+    },
+    "Branch %@" : {
+
+    },
+    "Bug: %@" : {
+
+    },
+    "Can't reach darkmux on this Mac. Still trying…" : {
+
+    },
+    "Can't run yet: %@." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Canceled" : {
+
+    },
+    "Change folder…" : {
+
+    },
+    "Clear %@'s conversation?" : {
+
+    },
+    "Clear Conversation" : {
+
+    },
+    "Clear Conversation…" : {
+
+    },
+    "Close preview" : {
+
+    },
+    "Code %@" : {
+
+    },
+    "Code and links" : {
+
+    },
+    "Coming soon: a bot drafts the recipe for you to approve." : {
+
+    },
+    "Commit these changes to the work copy's branch" : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy a screenshot of the preview to the clipboard" : {
+
+    },
+    "Copy picked element" : {
+
+    },
+    "Copy screenshot" : {
+
+    },
+    "Copy visible preview" : {
+
+    },
+    "Couldn't check %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't check %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Couldn't set up %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't set up %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Create" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete %@?" : {
+
+    },
+    "Delete %@…" : {
+
+    },
+    "Details" : {
+
+    },
+    "Discard" : {
+
+    },
+    "Dispatch to %@" : {
+
+    },
+    "Don't have darkmux yet? Install it" : {
+
+    },
+    "Done" : {
+
+    },
+    "Draft one" : {
+
+    },
+    "Duration" : {
+
+    },
+    "File on GitHub" : {
+
+    },
+    "Fix it now" : {
+
+    },
+    "Fixes run on darkmux after you approve." : {
+
+    },
+    "From your folder %@" : {
+
+    },
+    "Full window" : {
+
+    },
+    "GitHub URL or link (optional)" : {
+
+    },
+    "Go" : {
+
+    },
+    "Hand to %@" : {
+
+    },
+    "Hide Preview" : {
+
+    },
+    "Hide preview" : {
+
+    },
+    "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
+
+    },
+    "Keep" : {
+
+    },
+    "Keep running" : {
+
+    },
+    "Kind" : {
+
+    },
+    "Live" : {
+
+    },
+    "Look" : {
+
+    },
+    "Machine" : {
+
+    },
+    "Message %@…" : {
+
+    },
+    "Message the Bot" : {
+
+    },
+    "Messages" : {
+
+    },
+    "Mux Bot couldn't open its data" : {
+
+    },
+    "Name" : {
+
+    },
+    "Name your bot" : {
+
+    },
+    "Needs you" : {
+
+    },
+    "New Bot…" : {
+
+    },
+    "New bot" : {
+
+    },
+    "New bot: %@" : {
+
+    },
+    "Next" : {
+
+    },
+    "No code yet" : {
+
+    },
+    "No preview recipe yet" : {
+
+    },
+    "No pull request." : {
+
+    },
+    "None yet." : {
+
+    },
+    "Not available: %@." : {
+
+    },
+    "Not now" : {
+
+    },
+    "Not opened." : {
+
+    },
+    "Not set up on this Mac yet" : {
+
+    },
+    "Nothing found." : {
+
+    },
+    "Nothing running or waiting" : {
+
+    },
+    "Notifications" : {
+
+    },
+    "On-device model" : {
+
+    },
+    "Open %@ on GitHub" : {
+
+    },
+    "Open Activity" : {
+
+    },
+    "Open Mux Bot" : {
+
+    },
+    "Open Terminal" : {
+
+    },
+    "Opens %@" : {
+
+    },
+    "Opens your conversation with %@" : {
+
+    },
+    "Pair with darkmux" : {
+
+    },
+    "Pair with darkmux to run fixes." : {
+
+    },
+    "Pair with darkmux…" : {
+
+    },
+    "Paired as %@" : {
+
+    },
+    "Paired with darkmux" : {
+
+    },
+    "Paired with darkmux on this Mac" : {
+
+    },
+    "Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time." : {
+
+    },
+    "Pass to %@" : {
+
+    },
+    "Pick" : {
+
+    },
+    "Pick the project folder you already have. darkmux works on its own copy on a new branch, so your files and changes are never touched." : {
+
+    },
+    "Point at part of the page; your next message is about it." : {
+
+    },
+    "Preview" : {
+
+    },
+    "Preview at phone, tablet or desktop width" : {
+
+    },
+    "Preview fills the window (⇧⌘F)" : {
+
+    },
+    "Preview ready · from %@" : {
+
+    },
+    "Pull request" : {
+
+    },
+    "Put the changed files back as they were" : {
+
+    },
+    "Ready on %@" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Resources" : {
+
+    },
+    "Role" : {
+
+    },
+    "Running" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search Bots and Messages…" : {
+
+    },
+    "Search bots and messages" : {
+
+    },
+    "Send" : {
+
+    },
+    "Set up %@ on %@? darkmux makes its own copy on a new branch, so your files aren't touched." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Set up %1$@ on %2$@? darkmux makes its own copy on a new branch, so your files aren't touched."
+          }
+        }
+      }
+    },
+    "Set up now" : {
+
+    },
+    "Setting up %@ on %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Setting up %1$@ on %2$@…"
+          }
+        }
+      }
+    },
+    "Setting up on %@…" : {
+
+    },
+    "Show Preview" : {
+
+    },
+    "Show chat" : {
+
+    },
+    "Show preview" : {
+
+    },
+    "Start" : {
+
+    },
+    "Start fresh" : {
+
+    },
+    "Start fresh keeps your old data: the files are renamed, not deleted, next to the new store." : {
+
+    },
+    "Started" : {
+
+    },
+    "Stop" : {
+
+    },
+    "Stop this run" : {
+
+    },
+    "Stop this run?" : {
+
+    },
+    "Stop tweaking" : {
+
+    },
+    "Stop tweaking (Esc)" : {
+
+    },
+    "Task" : {
+
+    },
+    "Tell me when a run has a result or didn't finish" : {
+
+    },
+    "The Dock icon shows how many runs are waiting on you." : {
+
+    },
+    "The code expired. Cancel and pair again." : {
+
+    },
+    "The messages go; runs stay in Activity." : {
+
+    },
+    "Try again" : {
+
+    },
+    "Tweak" : {
+
+    },
+    "Tweak: %@" : {
+
+    },
+    "URL or note" : {
+
+    },
+    "Unpair this app" : {
+
+    },
+    "Unread" : {
+
+    },
+    "Waiting for you to approve… code expires in %lld:%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Waiting for you to approve… code expires in %1$lld:%2$@"
+          }
+        }
+      }
+    },
+    "What %@ gets" : {
+
+    },
+    "What about it?" : {
+
+    },
+    "What should change?" : {
+
+    },
+    "What this bot is about" : {
+
+    },
+    "Work copy" : {
+
+    },
+    "You can also revoke it in Terminal:" : {
+
+    },
+    "Your bots" : {
+
+    },
+    "Your preview link, until darkmux runs previews itself." : {
+
+    },
+    "darkmux" : {
+
+    },
+    "darkmux on this Mac decides which models apps may use." : {
+
+    },
+    "darkmux says there's nothing to approve?" : {
+
+    },
+    "darkmux's app connection has to be running on this Mac (the command above starts it)." : {
+
+    },
+    "darkmux's local endpoint must be running on this Mac. In another Terminal window, run:" : {
+
+    },
+    "darkmux: paired" : {
+
+    },
+    "·" : {
+
+    }
+  },
+  "version" : "1.0"
+}
