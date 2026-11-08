@@ -9,17 +9,28 @@ struct ModelPreferenceTests {
     let flint = DarkmuxClient.ProfileInfo(name: "flint-rec", description: "Flint", model: "flint", endpoint: "url", reachable: true, loaded: true)
     let fold = DarkmuxClient.ProfileInfo(name: "q38-27b-tensorfold", description: nil, model: "mlx-community/Qwen3.8-27B-4bit", endpoint: "url", reachable: true, loaded: true)
 
-    @Test func theFirstListedThatAnswersGoesFirst() {
-        #expect(ModelPreference.first(in: [flint, fold]) == "flint-rec")
+    /// What darkmux lists with clients.profiles unset: the role's own first,
+    /// then every other local profile, alphabetically.
+    func listing(_ own: DarkmuxClient.ProfileInfo, _ rest: [DarkmuxClient.ProfileInfo]) -> [DarkmuxClient.ProfileInfo] { [own] + rest }
+    let big = DarkmuxClient.ProfileInfo(name: "bakeoff-a10b", description: nil, model: "qwen3.5-122b", endpoint: "lmstudio", reachable: true, loaded: false)
+
+    @Test func thePreferredModelThatAnswersGoesFirst() {
+        #expect(ModelPreference.first(in: listing(fold, [big, flint])) == "flint-rec", "fast coder first, wherever darkmux lists it")
         var down = flint; down.reachable = false
-        #expect(ModelPreference.first(in: [down, fold]) == "q38-27b-tensorfold")
+        #expect(ModelPreference.first(in: listing(fold, [big, down])) == "q38-27b-tensorfold")
         #expect(ModelPreference.first(in: []) == nil, "none listed: darkmux's own default")
     }
 
-    @Test func notMetMovesToTheNextOne() {
-        #expect(ModelPreference.next(after: "flint-rec", in: [flint, fold]) == "q38-27b-tensorfold")
-        #expect(ModelPreference.next(after: "q38-27b-tensorfold", in: [flint, fold]) == "q38-27b-tensorfold", "the last one stays")
-        #expect(ModelPreference.next(after: nil, in: [flint, fold]) == "flint-rec")
+    @Test func withoutPreferredNamesItsDarkmuxsDefault() {
+        let own = DarkmuxClient.ProfileInfo(name: "their-coder", description: nil, model: "m", endpoint: "lmstudio", reachable: true, loaded: true)
+        #expect(ModelPreference.first(in: listing(own, [big])) == "their-coder", "the role's own, listed first")
+        #expect(ModelPreference.next(after: "their-coder", in: listing(own, [big])) == "their-coder", "never wanders to another local model")
+    }
+
+    @Test func notMetMovesToTheNextPreferred() {
+        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, flint])) == "q38-27b-tensorfold")
+        #expect(ModelPreference.next(after: "q38-27b-tensorfold", in: listing(fold, [big, flint])) == "q38-27b-tensorfold", "the last stays")
+        #expect(ModelPreference.next(after: nil, in: listing(fold, [big, flint])) == "flint-rec")
     }
 
     @Test func darkmuxsReplyDecodes() throws {
