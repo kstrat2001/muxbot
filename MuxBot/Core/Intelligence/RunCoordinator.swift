@@ -453,9 +453,11 @@ final class RunCoordinator {
             do {
                 // darkmux picks the profile for this role (its role binding, else
                 // the default) and checks it against what the owner granted.
+                // The app's choice of model (`runProfiles`), else darkmux's default.
+                if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
                                                                                message: Self.workBrief(message, recipe: recipes.recipe(for: bot)),
-                                                                               profile: nil, workspace: workspace, continues: continues)
+                                                                               profile: runProfiles[run.id], workspace: workspace, continues: continues)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, token: token, client: connection.client, store: store)
@@ -467,6 +469,31 @@ final class RunCoordinator {
     }
 
     /// Sends a follow-up to the same run (and, once wired, the same worktree).
+    // MARK: Choosing the model
+
+    /// The profile each run goes to darkmux with, chosen by the app (in
+    /// memory on this Mac, like `checkSpecs`); nil leaves it to darkmux.
+    var runProfiles: [UUID: String] = [:]
+    /// Tests list profiles here; nil asks darkmux (`GET /client/profiles`).
+    var profileSource: (@MainActor () async -> [DarkmuxClient.ProfileInfo])?
+
+    /// What this app may run Coder on here, and what answers now.
+    func listedProfiles() async -> [DarkmuxClient.ProfileInfo] {
+        if let profileSource { return await profileSource() }
+        guard let connection, let token = connection.token else { return [] }
+        return (try? await connection.client.profiles(token: token)) ?? []
+    }
+
+    /// Picks the run's model: the first that answers, or with `next` the one
+    /// after the model it last ran on (a done-when that wasn't met).
+    func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
+        let listed = await listedProfiles()
+        runProfiles[run.id] = next ? ModelPreference.next(after: previous ?? runProfiles[run.id], in: listed)
+                                   : ModelPreference.first(in: listed)
+    }
+
+    func profile(for run: BotRun) -> String? { runProfiles[run.id] }
+
     // MARK: Checking the done-when
 
     /// Measures pages (an offscreen web view in the app).

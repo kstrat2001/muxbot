@@ -377,6 +377,9 @@
     "Messages" : {
 
     },
+    "Model: %@" : {
+
+    },
     "Mux Bot couldn't open its data" : {
 
     },
@@ -522,6 +525,9 @@
 
     },
     "Pull request opened" : {
+
+    },
+    "Ran on %@" : {
 
     },
     "Ready on %@" : {

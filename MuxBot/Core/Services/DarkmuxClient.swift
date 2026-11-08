@@ -232,6 +232,30 @@ struct DarkmuxClient: Sendable {
         _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
     }
 
+    /// A profile this app may run work on here (`GET /client/profiles`):
+    /// what it is and whether its server answers now.
+    struct ProfileInfo: Decodable, Sendable, Equatable {
+        var name: String
+        var description: String?
+        var model: String?
+        var endpoint: String
+        var reachable: Bool
+        var loaded: Bool?
+        var error: String? = nil
+    }
+
+    struct ProfileList: Decodable, Sendable {
+        var role: String
+        var profiles: [ProfileInfo]
+    }
+
+    /// The profiles Coder may run on here, in the owner's grant order. An
+    /// older darkmux without the route answers 404: no list.
+    func profiles(token: String) async throws -> [ProfileInfo] {
+        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 5)
+        return try JSONDecoder().decode(ProfileList.self, from: data).profiles
+    }
+
     func workStatus(token: String, workId: String) async throws -> WorkStatus {
         let data = try await send("GET", "/client/work/\(workId)", headers: ["Authorization": "Bearer \(token)"])
         return try JSONDecoder().decode(WorkStatus.self, from: data)

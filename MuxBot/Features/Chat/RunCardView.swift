@@ -52,6 +52,10 @@ struct RunCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             DisclosureGroup("What \(run.crew.name) gets") {
+                if let model = brain.runs.profile(for: run) {
+                    Text("Model: \(model)").font(AppFont.footnote()).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -175,6 +179,9 @@ struct RunCardView: View {
             }
             DisclosureGroup("Details") {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let model = brain.runs.profile(for: run) {
+                        Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    }
                     if let branch = run.keptBranch {
                         Text("Committed to \(branch)\(run.keptCommit.map { " (\($0))" } ?? "")").font(AppFont.footnote()).foregroundStyle(.secondary)
                     } else if let why = run.details {
@@ -259,7 +266,7 @@ struct RunCardView: View {
                     ForEach(check.failures, id: \.self) { Text("• \($0)").font(AppFont.footnote()).textSelection(.enabled) }
                     if isLatest {
                         Button("Run again with these numbers", systemImage: "arrow.clockwise") {
-                            Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store) }
+                            Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, nextModel: true) }
                         }
                         .buttonStyle(.bordered)
                     }

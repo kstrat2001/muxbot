@@ -508,6 +508,7 @@ final class BotBrain {
             store.append(.assistant, "I'll send this to the \(pending.crew.name) crew. Approve to dispatch.", to: conversation)
             let run = store.proposeRun(task: pending.task, crew: pending.crew, on: bot, brief: pending.brief(text + target))
             runs.checkSpecs[run.id] = pending.check
+            await runs.chooseProfile(for: run)
             return
         }
         // "PR 9 is still not right": about that PR, never the open-issues list
@@ -605,7 +606,11 @@ final class BotBrain {
                 }
             }
             store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
-            if let bot { runs.checkSpecs[store.proposeRun(task: task, crew: crew, on: bot, brief: brief).id] = check }
+            if let bot {
+                let run = store.proposeRun(task: task, crew: crew, on: bot, brief: brief)
+                runs.checkSpecs[run.id] = check
+                await runs.chooseProfile(for: run)
+            }
             return
         case .issues?:
             var turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
@@ -711,16 +716,24 @@ final class BotBrain {
     /// Runs `run` again with `change`: a finished run continues as a Tweak,
     /// a stopped or failed one is sent again (after Approve already given).
     /// An issue run's brief is rebuilt from the issue, never just its title.
-    func rerun(_ run: BotRun, change: String, store: BotStore) async {
+    /// `nextModel`: the done-when wasn't met, so it runs on the next model
+    /// the app may use; otherwise it keeps the model it ran on.
+    func rerun(_ run: BotRun, change: String, store: BotStore, nextModel: Bool = false) async {
         let plan = await rerunPlan(for: run, change: change)
         if run.phase == .result {
             runs.runChecks[run.id] = nil
             if let check = plan?.check ?? runs.checkSpecs[run.id] { runs.checkSpecs[run.id] = check }
+            if nextModel { await runs.chooseProfile(for: run, next: true) }
             runs.tweak(change, run: run, store: store, echo: false, message: plan?.brief)
         } else if let bot = run.bot {
             let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
                                          brief: plan?.brief ?? RunCoordinator.tweakMessage(for: run, change: change))
             runs.checkSpecs[again.id] = plan?.check
+            if nextModel {
+                await runs.chooseProfile(for: again, next: true, after: runs.profile(for: run))
+            } else {
+                runs.runProfiles[again.id] = runs.profile(for: run)
+            }
             runs.decide(.approve, on: again, store: store)
         }
     }
@@ -828,7 +841,9 @@ final class BotBrain {
         case let .dispatch(crew, task)?:
             // Dispatches become a card in the thread, not a bar card.
             if let bot = context.botId.flatMap(store.bot(id:)) {
-                runs.checkSpecs[store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief).id] = result.check
+                let run = store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief)
+                runs.checkSpecs[run.id] = result.check
+                Task { await runs.chooseProfile(for: run) }
             }
         case let action?:
             store.proposeAction(action, in: context)
