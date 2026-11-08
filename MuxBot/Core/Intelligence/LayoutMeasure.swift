@@ -121,6 +121,12 @@ enum LayoutMeasure {
         /// "inertia/css/app.css, @media (max-width: 768px)" when a rule is
         /// behind the switch.
         var switchPlace: String? = nil
+        /// The switch, for checking after the run: the section, the
+        /// arrangement wanted, the preset below, and the top of the range.
+        var switchSelector: String? = nil
+        var switchWanted: String? = nil
+        var switchBelow: Int? = nil
+        var switchHigh: Int? = nil
 
         /// Where to look: the switching rule and its file, else the file.
         var likelyPlace: String? { switchPlace ?? likelyFile }
@@ -196,6 +202,7 @@ enum LayoutMeasure {
         var targetRange: String?
         var switchLead: String?
         var switchPlace: String?
+        var switchSelector: String?, switchWanted: String?, switchBelow: Int?, switchHigh: Int?
         if let focus, let at = facts.first(where: { $0.viewport == focus }),
            let below = facts.filter({ $0.viewport < focus }).max(by: { $0.viewport < $1.viewport }) {
             for s in at.sections {
@@ -210,7 +217,9 @@ enum LayoutMeasure {
                 let low = below.viewport + 1
                 let high = presets.filter { $0 > below.viewport }.max() ?? focus
                 targetRange = "\(low)–\(high)px"
+                switchSelector = s.selector; switchBelow = below.viewport; switchHigh = high
                 let wanted = Self.short(other.arrangementText), now = Self.short(s.arrangementText)
+                switchWanted = wanted
                 switchRule = rule.map { r in "@media \(r.media)\(file(r.source).map { " in \($0)" } ?? "")" }
                 switchPlace = rule.flatMap { r in file(r.source).map { "\($0), @media \(r.media)" } }
                 switchLead = (switchRule.map { "\($0) switches \(s.selector) to \(wanted) at \(below.viewport)px" }
@@ -227,7 +236,8 @@ enum LayoutMeasure {
         var seen = Set<String>()
         lines = lines.filter { seen.insert($0).inserted }
         return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine,
-                        switchRule: switchRule, targetRange: targetRange, switchLead: switchLead, switchPlace: switchPlace)
+                        switchRule: switchRule, targetRange: targetRange, switchLead: switchLead, switchPlace: switchPlace,
+                        switchSelector: switchSelector, switchWanted: switchWanted, switchBelow: switchBelow, switchHigh: switchHigh)
     }
 
     /// The block a brief carries.
@@ -243,7 +253,7 @@ enum LayoutMeasure {
     }
 
     /// "a row (402px and 378px side by side)" → "a row".
-    private static func short(_ arrangement: String) -> String {
+    static func short(_ arrangement: String) -> String {
         arrangement.replacingOccurrences(of: #" \(.*\)"#, with: "", options: .regularExpression)
     }
 

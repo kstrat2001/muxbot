@@ -167,6 +167,10 @@ final class RunCoordinator {
                 if let why = status.commitError { run.details = why }
                 let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
                 store.apply(.finish(summary: summary), to: run)
+                if !run.changedFiles.isEmpty, checkSpecs[run.id] != nil {
+                    // Give the preview's hot reload a moment, then check.
+                    Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
+                }
                 if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
             default:
@@ -463,6 +467,29 @@ final class RunCoordinator {
     }
 
     /// Sends a follow-up to the same run (and, once wired, the same worktree).
+    // MARK: Checking the done-when
+
+    /// Measures pages (an offscreen web view in the app).
+    var layoutProbe: (any LayoutProbing)?
+    /// What to measure after each run, from the measurement its brief was
+    /// built on. On this Mac, in memory: a relaunch drops unchecked ones.
+    var checkSpecs: [UUID: LayoutCheck.Spec] = [:]
+    /// The done-when, checked after the run.
+    var runChecks: [UUID: LayoutCheck.Result] = [:]
+    /// Runs being checked right now.
+    var checking: Set<UUID> = []
+
+    /// After a run that changed files: measure the preview again at the
+    /// widths its brief named, and say whether the done-when holds.
+    func check(_ run: BotRun) async {
+        guard !run.changedFiles.isEmpty, let spec = checkSpecs[run.id], let probe = layoutProbe else { return }
+        checking.insert(run.id)
+        defer { checking.remove(run.id) }
+        let after = await probe.measure(url: spec.page, widths: spec.widths)
+        guard !after.isEmpty else { return }
+        runChecks[run.id] = LayoutCheck.evaluate(spec, after: after)
+    }
+
     /// The last message a Tweak composed (tests read it).
     private(set) var lastTweakMessage: String?
 

@@ -58,6 +58,7 @@ enum BotAction: Sendable, Equatable, Codable {
 struct PendingDispatch {
     var task: String
     var crew: CrewRole
+    var check: LayoutCheck.Spec? = nil
     var brief: @MainActor (String) -> String
 }
 
@@ -67,6 +68,8 @@ struct BotTurn: Sendable, Equatable {
     /// The crew's brief for a `.dispatch` action (an issue's page, element
     /// and expected result); nil sends the task text alone.
     var brief: String? = nil
+    /// What to measure after that run (its done-when).
+    var check: LayoutCheck.Spec? = nil
 }
 
 // MARK: - Keyword fallback
@@ -292,7 +295,10 @@ final class BotBrain {
     /// Your next message answers it; anything else drops it.
     var pendingAnswers: [UUID: PendingDispatch] = [:]
     /// Measures pages for visual issues (an offscreen web view in the app).
-    var layoutProbe: (any LayoutProbing)?
+    var layoutProbe: (any LayoutProbing)? {
+        get { runs.layoutProbe }
+        set { runs.layoutProbe = newValue }
+    }
     /// Off in tests, so turns are deterministic keyword-fallback turns.
     var useOnDeviceModel = true { didSet { runs.useOnDeviceModel = useOnDeviceModel } }
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
@@ -500,7 +506,8 @@ final class BotBrain {
            Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()) {
             message.intentRaw = Intent.fix.rawValue
             store.append(.assistant, "I'll send this to the \(pending.crew.name) crew. Approve to dispatch.", to: conversation)
-            store.proposeRun(task: pending.task, crew: pending.crew, on: bot, brief: pending.brief(text + target))
+            let run = store.proposeRun(task: pending.task, crew: pending.crew, on: bot, brief: pending.brief(text + target))
+            runs.checkSpecs[run.id] = pending.check
             return
         }
         // "PR 9 is still not right": about that PR, never the open-issues list
@@ -571,6 +578,7 @@ final class BotBrain {
             let crew: CrewRole = intent == .fix ? .coder : .reviewer
             var task = text + target
             var brief: String?
+            var check: LayoutCheck.Spec?
             // "fix #8" or an issue link: dispatch that issue, with its body as the brief.
             if let number = Intent.issueNumber(in: text), let repo = repos.first?.repo {
                 let issue = try? await github.issue(repo: repo, number: number)
@@ -583,9 +591,10 @@ final class BotBrain {
                     return
                 }
                 switch await plan(issue: issue, repo: repo, crew: crew, bot: bot) {
-                case let .dispatch(planned, plannedBrief):
+                case let .dispatch(planned, plannedBrief, plannedCheck):
                     task = planned
                     brief = plannedBrief
+                    check = plannedCheck
                 case let .ask(question, pending):
                     if let bot { pendingAnswers[bot.id] = pending }
                     store.append(.assistant, question, to: conversation)
@@ -596,7 +605,7 @@ final class BotBrain {
                 }
             }
             store.append(.assistant, "I'll send this to the \(crew.name) crew. Approve to dispatch.", to: conversation)
-            if let bot { store.proposeRun(task: task, crew: crew, on: bot, brief: brief) }
+            if let bot { runs.checkSpecs[store.proposeRun(task: task, crew: crew, on: bot, brief: brief).id] = check }
             return
         case .issues?:
             var turn = await issuesTurn(for: text, repos: repos, lead: speaker == nil, bots: bots)
@@ -605,8 +614,9 @@ final class BotBrain {
             if case let .dispatch(crew, task)? = turn.action, let number = Intent.issueNumber(in: task), let repo = repos.first?.repo,
                let issue = try? await github.issue(repo: repo, number: number) {
                 switch await plan(issue: issue, repo: repo, crew: crew, bot: bot) {
-                case let .dispatch(_, brief):
+                case let .dispatch(_, brief, check):
                     turn.brief = brief
+                    turn.check = check
                 case let .ask(question, pending):
                     turn.action = nil
                     if let bot { pendingAnswers[bot.id] = pending }
@@ -662,7 +672,7 @@ final class BotBrain {
     }
 
     enum IssuePlan {
-        case dispatch(task: String, brief: String)
+        case dispatch(task: String, brief: String, check: LayoutCheck.Spec? = nil)
         /// One short question first; the answer completes the brief.
         case ask(String, PendingDispatch)
         case cannot(String)
@@ -690,23 +700,27 @@ final class BotBrain {
         let focus = parts.viewport ?? widths[0]
         let measured = LayoutMeasure.summarize(facts, focus: focus)
         let brief = Self.withMeasurements(base, measured)
+        let check = LayoutCheck.spec(from: measured, before: facts, focus: focus, page: url)
         if !measured.foundProblem, measured.layoutSwitch == nil, parts.expected == nil {
             let question = "At \(focus)px I measured nothing wider than the screen and no section without side padding. What should change?"
-            return .ask(question, PendingDispatch(task: task, crew: crew) { brief + "\nWhat should change: \($0)" })
+            return .ask(question, PendingDispatch(task: task, crew: crew, check: check) { brief + "\nWhat should change: \($0)" })
         }
-        return .dispatch(task: task, brief: brief)
+        return .dispatch(task: task, brief: brief, check: check)
     }
 
     /// Runs `run` again with `change`: a finished run continues as a Tweak,
     /// a stopped or failed one is sent again (after Approve already given).
     /// An issue run's brief is rebuilt from the issue, never just its title.
     func rerun(_ run: BotRun, change: String, store: BotStore) async {
-        let rebuilt = await rerunBrief(for: run, change: change)
+        let plan = await rerunPlan(for: run, change: change)
         if run.phase == .result {
-            runs.tweak(change, run: run, store: store, echo: false, message: rebuilt)
+            runs.runChecks[run.id] = nil
+            if let check = plan?.check ?? runs.checkSpecs[run.id] { runs.checkSpecs[run.id] = check }
+            runs.tweak(change, run: run, store: store, echo: false, message: plan?.brief)
         } else if let bot = run.bot {
             let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
-                                         brief: rebuilt ?? RunCoordinator.tweakMessage(for: run, change: change))
+                                         brief: plan?.brief ?? RunCoordinator.tweakMessage(for: run, change: change))
+            runs.checkSpecs[again.id] = plan?.check
             runs.decide(.approve, on: again, store: store)
         }
     }
@@ -716,20 +730,26 @@ final class BotBrain {
     /// it already changed and your words. nil for any other run (it keeps
     /// "Earlier task / Now change this").
     func rerunBrief(for run: BotRun, change: String) async -> String? {
+        await rerunPlan(for: run, change: change)?.brief
+    }
+
+    /// The rebuilt brief and the check that goes with it.
+    func rerunPlan(for run: BotRun, change: String) async -> (brief: String, check: LayoutCheck.Spec?)? {
         guard let number = Intent.issueNumber(in: run.task),
               let repo = run.task.range(of: #"\(([\w.-]+/[\w.-]+)\)$"#, options: .regularExpression)
                 .map({ String(run.task[$0].dropFirst().dropLast()) }),
               let issue = try? await github.issue(repo: repo, number: number) else { return nil }
         let base: String
+        var check: LayoutCheck.Spec?
         switch await plan(issue: issue, repo: repo, crew: run.crew, bot: run.bot) {
-        case let .dispatch(_, brief): base = brief
-        case let .ask(_, pending): base = pending.brief("").replacingOccurrences(of: "\nWhat should change: ", with: "")
+        case let .dispatch(_, brief, c): base = brief; check = c
+        case let .ask(_, pending): base = pending.brief("").replacingOccurrences(of: "\nWhat should change: ", with: ""); check = pending.check
         case .cannot: return nil
         }
         var parts = [base]
         if !run.changedFiles.isEmpty { parts.append("You already changed: \(run.changedFiles.joined(separator: ", ")).") }
         parts.append("What should change: \(change)")
-        return parts.joined(separator: "\n")
+        return (parts.joined(separator: "\n"), check)
     }
 
     /// The measured block (and the likely file from the matched @media
@@ -807,7 +827,9 @@ final class BotBrain {
         switch result.action {
         case let .dispatch(crew, task)?:
             // Dispatches become a card in the thread, not a bar card.
-            if let bot = context.botId.flatMap(store.bot(id:)) { store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief) }
+            if let bot = context.botId.flatMap(store.bot(id:)) {
+                runs.checkSpecs[store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief).id] = result.check
+            }
         case let action?:
             store.proposeAction(action, in: context)
         case nil:

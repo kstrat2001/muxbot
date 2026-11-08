@@ -184,6 +184,9 @@
     "Change folder…" : {
 
     },
+    "Checking the done-when in the preview…" : {
+
+    },
     "Clear %@'s conversation?" : {
 
     },
@@ -277,6 +280,12 @@
     "Done" : {
 
     },
+    "Done when: met (measured in the preview)" : {
+
+    },
+    "Done when: not met" : {
+
+    },
     "Draft one" : {
 
     },
@@ -332,7 +341,7 @@
     "Hide preview" : {
 
     },
-    "Hide this; it stays in Activity" : {
+    "Hide this here (and its badge) until something new needs you; it stays in Activity" : {
 
     },
     "How this app reaches darkmux" : {
@@ -537,6 +546,9 @@
 
     },
     "Role" : {
+
+    },
+    "Run again with these numbers" : {
 
     },
     "Running" : {

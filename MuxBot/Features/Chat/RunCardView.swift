@@ -161,6 +161,7 @@ struct RunCardView: View {
             // The bot's reply: what changed, in plain words. darkmux already
             // committed it to the bot's branch.
             Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
+            doneWhenCheck(run)
             HStack(spacing: Spacing.md) {
                 if let bot = run.bot, brain.runs.canPreview(bot) {
                     Button("See it in the preview", systemImage: "play.rectangle") { router.showPreview = true }
@@ -239,6 +240,31 @@ struct RunCardView: View {
             Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
                 .font(AppFont.caption()).foregroundStyle(.secondary)
             decisionError(run)
+        }
+    }
+
+    /// The done-when, measured in the preview after the run.
+    @ViewBuilder private func doneWhenCheck(_ run: BotRun) -> some View {
+        if brain.runs.checking.contains(run.id) {
+            Label("Checking the done-when in the preview…", systemImage: "ruler")
+                .font(AppFont.footnote()).foregroundStyle(.secondary)
+        } else if let check = brain.runs.runChecks[run.id] {
+            if check.met {
+                Label("Done when: met (measured in the preview)", systemImage: "checkmark.seal.fill")
+                    .font(AppFont.footnote(.semibold)).foregroundStyle(.green)
+            } else {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Label("Done when: not met", systemImage: "xmark.seal.fill")
+                        .font(AppFont.footnote(.semibold)).foregroundStyle(Color.brandOrange)
+                    ForEach(check.failures, id: \.self) { Text("• \($0)").font(AppFont.footnote()).textSelection(.enabled) }
+                    if isLatest {
+                        Button("Run again with these numbers", systemImage: "arrow.clockwise") {
+                            Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
         }
     }
 
