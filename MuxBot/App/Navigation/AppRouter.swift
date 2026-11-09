@@ -20,6 +20,8 @@ final class AppRouter {
     /// The Mac / iPad sidebar's own show-hide state (the toolbar toggle).
     var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
+    /// "What do you want to get done?" (`StartProjectView`).
+    var showStartProject = false
     var showPairing = false
     /// Search across bots and threads (⌘F).
     var showSearch = false

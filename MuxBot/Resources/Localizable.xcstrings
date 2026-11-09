@@ -428,6 +428,9 @@
     "From" : {
 
     },
+    "From its template's playbook when it was made. The bot uses the one that fits each request." : {
+
+    },
     "From the help:" : {
 
     },
@@ -474,6 +477,9 @@
 
     },
     "Hide this here (and its badge) until something new needs you; it stays in Activity" : {
+
+    },
+    "How should it feel?" : {
 
     },
     "How this app reaches darkmux" : {
@@ -718,6 +724,9 @@
     "Opens your conversation with %@" : {
 
     },
+    "Or make a bot for code you already have with New bot." : {
+
+    },
     "PR #%@" : {
 
     },
@@ -752,9 +761,6 @@
 
     },
     "Pass to %@" : {
-
-    },
-    "Paste a GitHub link in the bar below and I'll set it up, or start one yourself." : {
 
     },
     "Pick" : {
@@ -876,6 +882,9 @@
     "Set when the app is built." : {
 
     },
+    "Setting it up…" : {
+
+    },
     "Setting up %@ on %@…" : {
       "localizations" : {
         "en" : {
@@ -919,7 +928,16 @@
     "Signed in." : {
 
     },
+    "Skills" : {
+
+    },
     "Start" : {
+
+    },
+    "Start a project" : {
+
+    },
+    "Start a project…" : {
 
     },
     "Start fresh" : {
@@ -929,6 +947,9 @@
 
     },
     "Start it in Terminal and leave it running. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one." : {
+
+    },
+    "Start something new from a template, paste a GitHub link in the bar below, or make one for code you have." : {
 
     },
     "Started" : {
@@ -1025,6 +1046,12 @@
     "What about it?" : {
 
     },
+    "What do you want to get done?" : {
+
+    },
+    "What is it for?" : {
+
+    },
     "What should change?" : {
 
     },
@@ -1071,6 +1098,12 @@
 
     },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
+
+    },
+    "darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub." : {
+
+    },
+    "darkmux makes the project on your Mac, so pair Mux Bot with darkmux first. You can still make the bot now." : {
 
     },
     "darkmux on this Mac decides which models apps may use." : {

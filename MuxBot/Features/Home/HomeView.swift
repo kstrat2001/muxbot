@@ -45,7 +45,10 @@ struct HomeView: View {
                 if roles.isEmpty {
                     EmptyStateView(systemImage: "person.3", title: "No bots yet",
                                    message: "A bot is a project or theme you name, like your website. Tap + to add one, or paste a GitHub link to \(LeadBot.name) and it makes one.")
-                    Button("Add an example bot", systemImage: "sparkles") { BotStore(context: modelContext).addExample() }
+                    Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+                    Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -66,6 +69,7 @@ struct HomeView: View {
                     .labelStyle(.titleAndIcon)
                     .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
                 #endif
+                Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
                 Button("New bot", systemImage: "plus") { router.showNewBot = true }
             }
         }

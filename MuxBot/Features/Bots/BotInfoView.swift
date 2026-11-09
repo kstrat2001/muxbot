@@ -59,6 +59,19 @@ struct BotInfoView: View {
             } header: {
                 Text(brain.runs.machine.map { "Model on \($0.name)" } ?? "Model on this Mac")
             }
+            if !bot.skills.isEmpty {
+                Section {
+                    ForEach(bot.skills, id: \.name) { skill in
+                        DisclosureGroup(skill.name) {
+                            HelpText(text: skill.body).font(AppFont.footnote())
+                        }
+                    }
+                } header: {
+                    Text("Skills")
+                } footer: {
+                    Text("From its template's playbook when it was made. The bot uses the one that fits each request.")
+                }
+            }
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
                     Label {
@@ -125,6 +138,9 @@ struct BotInfoView: View {
         .task { if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() } }
         .task {
             for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
+            if bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
+                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github)
+            }
             await refreshBranch()
         }
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in

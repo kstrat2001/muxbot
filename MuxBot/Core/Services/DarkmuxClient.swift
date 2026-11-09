@@ -92,7 +92,11 @@ struct DarkmuxClient: Sendable {
         var repoURL: String?
         var sourcePath: String?
         var bot: String
-        enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot }
+        /// A template: a fresh project from `repoURL` at `ref` (no history,
+        /// no remote), never an existing workspace.
+        var template: Bool? = nil
+        var ref: String? = nil
+        enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot, template, ref }
     }
 
     struct Workspace: Decodable, Sendable, Equatable {

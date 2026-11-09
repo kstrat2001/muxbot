@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "website",
+      "repo": "kstrat2001/muxbot-template-vite-react",
+      "ref": "v1.0.0",
+      "title": "Build a website",
+      "icon": "globe"
+    }
+  ]
+}

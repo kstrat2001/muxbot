@@ -21,6 +21,10 @@ final class RecipeStore {
             recipes[repo] = .ready(local, fromLocalCopy: true)
             return
         }
+        guard !repo.hasPrefix("workspace:") else {
+            recipes[repo] = .missing
+            return
+        }
         do {
             guard let data = try await github.file(repo: repo, path: PreviewManifest.path) else {
                 recipes[repo] = .missing
@@ -32,10 +36,17 @@ final class RecipeStore {
         }
     }
 
-    /// The recipe already read for a bot's repo, if any.
+    /// The recipe already read for a bot's repo (or, for a project with no
+    /// repo yet, its workspace), if any.
     func recipe(for bot: Bot) -> PreviewManifest? {
-        guard let repo = bot.repoSlugs.first, case let .ready(manifest, _)? = recipes[repo] else { return nil }
+        guard let key = Self.key(for: bot), case let .ready(manifest, _)? = recipes[key] else { return nil }
         return manifest
+    }
+
+    /// Recipes are kept by repo; a local project (started from a template,
+    /// no GitHub repo yet) by its workspace.
+    static func key(for bot: Bot) -> String? {
+        bot.repoSlugs.first ?? bot.workspaceName.map { "workspace:\($0)" }
     }
 
 }

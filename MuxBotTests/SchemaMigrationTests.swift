@@ -141,6 +141,30 @@ struct SchemaMigrationTests {
         #expect(bot.look.animal == .raccoon)
     }
 
+    @Test func aV3StoreOpensAsV4AndBotsKeepTheirLookWithNoUseCase() throws {
+        let dir = tempDir()
+        let url = dir.appendingPathComponent("MuxBot.store")
+        let schema = Schema(versionedSchema: SchemaV3.self)
+        let v3 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let writer = ModelContext(v3)
+        let old = SchemaV3.Bot(name: "hcr", instructions: "Site")
+        old.avatarAnimal = "owl"
+        old.bodyColorHex = "0e9f8e"
+        writer.insert(old)
+        let resource = SchemaV3.BotResource(kind: .repo, value: "https://github.com/kstrat2001/hcr")
+        resource.bot = old
+        writer.insert(resource)
+        try writer.save()
+        let id = old.id
+
+        let container = try SharedModelContainer.open(storeURL: url, local: LocalBotState(fileURL: dir.appendingPathComponent("local.json")), cloudSync: false)
+        let bot = try #require(try ModelContext(container).fetch(FetchDescriptor<Bot>()).first { $0.id == id })
+        #expect(bot.avatarAnimal == "owl" && bot.bodyColorHex == "0e9f8e")
+        #expect(bot.useCaseId.isEmpty, "a bot from before use cases has none")
+        #expect(bot.skills.isEmpty)
+        #expect(bot.resources?.first?.value == "https://github.com/kstrat2001/hcr")
+    }
+
     @Test func renamingKeepsTheLookAndPickedLooksStick() {
         let bot = Bot(name: "humancodereader", instructions: "")
         let suggested = bot.look
@@ -188,14 +212,14 @@ struct SchemaMigrationTests {
     @Test func theSyncedModelsAreCloudKitSafe() {
         // No unique constraints, every attribute optional or defaulted, every
         // relationship optional: what CloudKit sync requires.
-        for entity in Schema(versionedSchema: SchemaV3.self).entities {
+        for entity in Schema(versionedSchema: SchemaV4.self).entities {
             #expect(entity.uniquenessConstraints.isEmpty, "\(entity.name)")
             for rel in entity.relationships { #expect(rel.isOptional, "\(entity.name).\(rel.name)") }
             for attr in entity.attributes where !attr.isOptional {
                 #expect(attr.defaultValue != nil, "\(entity.name).\(attr.name) needs a default")
             }
         }
-        let bot = Schema(versionedSchema: SchemaV3.self).entities.first { $0.name == "Bot" }
+        let bot = Schema(versionedSchema: SchemaV4.self).entities.first { $0.name == "Bot" }
         let names = Set(bot?.attributes.map(\.name) ?? [])
         #expect(names.isDisjoint(with: ["workspaceName", "workspaceMachine", "folderBookmark", "folderName", "modelName"]))
     }

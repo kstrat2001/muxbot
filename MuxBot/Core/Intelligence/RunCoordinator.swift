@@ -96,9 +96,10 @@ final class RunCoordinator {
     /// Every darkmux run gets the same working rules after its task, plus
     /// the repo's own hints from its `.darkmux/preview.json`, never a guess
     /// about how some other kind of project is laid out.
-    nonisolated static func workBrief(_ task: String, recipe: PreviewManifest? = nil) -> String {
+    nonisolated static func workBrief(_ task: String, recipe: PreviewManifest? = nil, skills: [BotSkill] = []) -> String {
         let hints = recipe?.conventions.map { "\n\nAbout this repository: \($0)" } ?? ""
-        return task + hints + """
+        let howTo = skills.map { "\n\nHow this kind of change is done here (\($0.name)):\n\($0.body)" }.joined()
+        return task + hints + howTo + """
 
 
             You are working in this repository (the current directory). Find the file responsible, \
@@ -360,12 +361,15 @@ final class RunCoordinator {
     /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
     /// folder you picked (on its own branch, from the fetched default
     /// branch), else a clone of its GitHub repo. Stores only the name.
-    func setUpWorkCopy(for bot: Bot, store: BotStore, sourcePath: String? = nil) async {
-        guard let connection, let token = connection.token else {
+    func setUpWorkCopy(for bot: Bot, store: BotStore, sourcePath: String? = nil, template: TemplateEntry? = nil) async {
+        let token = connection?.token
+        guard workspaceMaker != nil || token != nil else {
             workCopySetup[bot.id] = .failed(RunBlocker.unpaired.message)
             return
         }
-        let bodyAndAccess = sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
+        let bodyAndAccess = template.map {
+            (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: $0.repoURL, sourcePath: nil, bot: bot.name, template: true, ref: $0.ref)), release: {})
+        } ?? sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
             ?? workspaceRequest(for: bot)
         guard let body = bodyAndAccess.body else {
             workCopySetup[bot.id] = .failed(RunBlocker.noCode.message)
@@ -374,21 +378,33 @@ final class RunCoordinator {
         defer { bodyAndAccess.release() }
         workCopySetup[bot.id] = .settingUp
         do {
-            let made = try await connection.client.setUpWorkspace(token: token, body)
+            let made: DarkmuxClient.Workspace
+            if let workspaceMaker {
+                made = try await workspaceMaker(body)
+            } else if let connection, let token {
+                made = try await connection.client.setUpWorkspace(token: token, body)
+            } else {
+                return
+            }
             bot.workspaceName = made.workspace
             bot.workspaceMachine = FleetConnection.machineName
-            if bot.repoSlugs.isEmpty, let repo = made.repo, let slug = GitHubIssue.repoSlug(from: repo) {
+            // A template's project is local: its origin is never the bot's repo.
+            if template == nil, bot.repoSlugs.isEmpty, let repo = made.repo, let slug = GitHubIssue.repoSlug(from: repo) {
                 store.addResource(.repo, "https://github.com/\(slug)", to: bot)
             }
             store.save()
             workCopySetup[bot.id] = nil
             let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
             store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
-            if let repo = bot.repoSlugs.first { recipes.recipes[repo] = nil; await recipes.load(for: repo, workspace: made.workspace, connection: connection, github: github) }
+            let key = RecipeStore.key(for: bot)
+            if let key { recipes.recipes[key] = nil; await recipes.load(for: key, workspace: made.workspace, connection: connection, github: github) }
         } catch {
             workCopySetup[bot.id] = .failed(error.localizedDescription)
         }
     }
+
+    /// Tests answer workspace requests here; nil asks darkmux.
+    var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
 
     /// The request for a bot's workspace, with folder access held until
     /// `release` (the picked folder is security-scoped).
@@ -456,7 +472,8 @@ final class RunCoordinator {
                 // The app's choice of model (`runProfiles`), else darkmux's default.
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
-                                                                               message: Self.workBrief(message, recipe: recipes.recipe(for: bot)),
+                                                                               message: Self.workBrief(message, recipe: recipes.recipe(for: bot),
+                                                                                                        skills: BotSkill.relevant(bot.skills, to: run.task)),
                                                                                profile: runProfiles[run.id], workspace: workspace, continues: continues)
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)

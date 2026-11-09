@@ -33,8 +33,15 @@ targets:
       - path: MuxBot
         excludes:
           - "Features/Guide/Help"
+          - "Features/Start/Templates"
       # Mux Bot's help articles, bundled as a folder (Help/*.md).
       - path: MuxBot/Features/Guide/Help
+        type: folder
+        buildPhase: resources
+      # The template list and playbooks built into the app, for offline
+      # (copies of kstrat2001/muxbot-templates and each template's
+      # PLAYBOOK.md at its pinned ref).
+      - path: MuxBot/Features/Start/Templates
         type: folder
         buildPhase: resources
     info:

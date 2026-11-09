@@ -55,6 +55,12 @@ final class Bot {
     var avatarAnimal: String = ""
     var bodyColorHex: String = ""
     var eyeColorHex: String = ""
+    /// The use case it was started from (a template registry id, like
+    /// "website"); empty for a bot made by hand.
+    var useCaseId: String = ""
+    /// Its skills, copied from the template's PLAYBOOK.md when it was made
+    /// (JSON of `[BotSkill]`), so a later template never changes it.
+    var skillsJSON: String = ""
     var state: BotState = BotState.ready
     var createdAt: Date = Date()
 
@@ -189,5 +195,13 @@ final class BotTask {
         self.title = title
         self.why = why
         self.crew = crew
+    }
+}
+
+extension Bot {
+    /// The skills copied from its playbook (`skillsJSON`).
+    var skills: [BotSkill] {
+        get { (try? JSONDecoder().decode([BotSkill].self, from: Data(skillsJSON.utf8))) ?? [] }
+        set { skillsJSON = newValue.isEmpty ? "" : (try? String(data: JSONEncoder().encode(newValue), encoding: .utf8)) ?? "" }
     }
 }

@@ -33,6 +33,12 @@ struct ContentView: View {
         .sheet(isPresented: $router.showNewBot) {
             NavigationStack { NewBotView() }
         }
+        .sheet(isPresented: $router.showStartProject) {
+            NavigationStack { StartProjectView() }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 460)
+                #endif
+        }
         .sheet(isPresented: $router.showPairing) {
             NavigationStack { FleetPairingView() }
         }

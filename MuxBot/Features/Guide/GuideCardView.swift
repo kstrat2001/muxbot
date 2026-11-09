@@ -148,9 +148,12 @@ struct FirstBotCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Label("Make your first bot", systemImage: "plus.bubble").font(AppFont.headline())
-            Text("Paste a GitHub link in the bar below and I'll set it up, or start one yourself.")
+            Text("Start something new from a template, paste a GitHub link in the bar below, or make one for code you have.")
                 .font(AppFont.footnote()).foregroundStyle(.secondary)
-            Button("New bot…", systemImage: "plus") { router.showNewBot = true }.buttonStyle(.borderedProminent)
+            HStack {
+                Button("Start a project…", systemImage: "sparkles") { router.showStartProject = true }.buttonStyle(.borderedProminent)
+                Button("New bot…", systemImage: "plus") { router.showNewBot = true }.buttonStyle(.bordered)
+            }
         }
     }
 }

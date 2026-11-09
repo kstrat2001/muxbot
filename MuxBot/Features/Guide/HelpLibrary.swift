@@ -107,7 +107,7 @@ final class HelpLibrary: @unchecked Sendable {
 
     /// The parts that answer `question`, best first; empty when the help
     /// doesn't cover it. `in` limits it to one article.
-    func search(_ question: String, in articleId: String? = nil, limit: Int = 2) -> [Hit] {
+    func search(_ question: String, in articleId: String? = nil, limit: Int = 2, minCoverage: Double = HelpLibrary.threshold) -> [Hit] {
         lock.lock(); defer { lock.unlock() }
         let words = Self.lemmas(question)
         guard !words.isEmpty else { return [] }
@@ -117,7 +117,7 @@ final class HelpLibrary: @unchecked Sendable {
         let query = embedder?.vector(for: question)
         let hits = parts.filter { articleId == nil || $0.article.id == articleId }.compactMap { part -> Hit? in
             let coverage = words.filter(part.words.contains).map(weight).reduce(0, +) / total
-            guard coverage >= Self.threshold else { return nil }
+            guard coverage >= minCoverage, coverage > 0 else { return nil }
             let inHeading = Double(words.filter(part.headingWords.contains).count) / Double(words.count)
             let similarity = query.map { q in part.vectors.map { Self.cosine(q, $0) }.max() ?? 0 } ?? 0
             // The article the question names ("what is a bot" → Bots).
