@@ -120,6 +120,12 @@ struct BotIssueLookupTests {
         #expect(bot.runs?.isEmpty ?? true)
     }
 
+    @Test func aMissingRepoSaysToSignInNotThatSignInIsMissing() {
+        let why = GitHubError(status: 404).localizedDescription
+        #expect(!why.contains("isn't supported"), "\(why)")
+        #expect(why.contains("sign in with GitHub"), "\(why)")
+    }
+
     @Test func noRepoAsksForOne() async {
         let (store, bot, brain) = setUp(repo: false)
         await brain.send("any bug tickets?", in: .bot(bot.id), store: store)

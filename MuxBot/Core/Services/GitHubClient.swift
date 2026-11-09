@@ -245,7 +245,7 @@ struct GitHubError: LocalizedError {
     var errorDescription: String? {
         switch status {
         case 403, 429: "GitHub's rate limit for unsigned-in requests is used up (60 an hour)."
-        case 404: "GitHub can't find that repo, or it's private (sign-in isn't supported yet)."
+        case 404: "GitHub can't find that repo. If it's private, sign in with GitHub (Settings › GitHub) and install Mux Bot on it."
         default: "GitHub answered with status \(status)."
         }
     }
