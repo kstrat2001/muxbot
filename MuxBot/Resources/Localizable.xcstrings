@@ -151,6 +151,9 @@
     "A folder on this Mac" : {
 
     },
+    "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
+
+    },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
 
     },
@@ -223,6 +226,9 @@
     "Any model that runs on this Mac" : {
 
     },
+    "Anyone can see a public repo. Mux Bot puts the template's files in it as the first commit." : {
+
+    },
     "Apple Intelligence is ready. Bots answer on this device." : {
 
     },
@@ -264,6 +270,9 @@
 
     },
     "Back to chat (Esc)" : {
+
+    },
+    "Back up %@'s work" : {
 
     },
     "Bear" : {
@@ -413,11 +422,24 @@
     "Copy" : {
 
     },
+    "Copy command" : {
+
+    },
     "Copy screenshot" : {
 
     },
     "Copy the visible preview" : {
 
+    },
+    "Couldn't back up this work to %@ on GitHub: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't back up this work to %1$@ on GitHub: %2$@"
+          }
+        }
+      }
     },
     "Couldn't check %@: %@" : {
       "localizations" : {
@@ -586,6 +608,9 @@
     "GitHub URL or link (optional)" : {
 
     },
+    "GitHub said: %@" : {
+
+    },
     "GitHub sign-in" : {
 
     },
@@ -646,6 +671,16 @@
     "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
 
     },
+    "I made github.com/%@, but couldn't add the template's files to it (%@). It's empty: delete it on GitHub or try again with another name." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "I made github.com/%1$@, but couldn't add the template's files to it (%2$@). It's empty: delete it on GitHub or try again with another name."
+          }
+        }
+      }
+    },
     "Idle" : {
 
     },
@@ -689,6 +724,9 @@
     "LM Studio has %lld models." : {
 
     },
+    "Left blank, it's %@; if you already have one by that name, the next free one." : {
+
+    },
     "Left out %@ you approved: the bot's changes already have one, and I don't write over it." : {
 
     },
@@ -717,6 +755,9 @@
 
     },
     "Making %@'s project on this Mac…" : {
+
+    },
+    "Making the repo on GitHub, then the project on this Mac…" : {
 
     },
     "Measured in the preview" : {
@@ -786,6 +827,9 @@
     "Mux Bot picks: the first in the Auto order that's running." : {
 
     },
+    "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the “Repository creation” permission, then approve the update." : {
+
+    },
     "Mux Bot, your guide" : {
 
     },
@@ -793,6 +837,9 @@
 
     },
     "Name" : {
+
+    },
+    "Name of the GitHub repo" : {
 
     },
     "Name your bot" : {
@@ -819,7 +866,13 @@
     "Next" : {
 
     },
+    "No checkout of yours to preview" : {
+
+    },
     "No code yet" : {
+
+    },
+    "No preview for new projects yet" : {
 
     },
     "No preview recipe yet" : {
@@ -886,6 +939,9 @@
 
     },
     "On %@" : {
+
+    },
+    "On GitHub" : {
 
     },
     "On iPhone and iPad, runs start from the Mac app for now." : {
@@ -1020,7 +1076,16 @@
     "Preview ready · from %@" : {
 
     },
+    "Previews are off on this Mac" : {
+
+    },
     "Private" : {
+
+    },
+    "Private: only you can see it. Mux Bot puts the template's files in it as the first commit." : {
+
+    },
+    "Public" : {
 
     },
     "Pull request" : {
@@ -1299,6 +1364,9 @@
     "The preview started from the new recipe." : {
 
     },
+    "The template can't be copied: %@" : {
+
+    },
     "There's already a .darkmux/preview.json there; I never overwrite it." : {
 
     },
@@ -1330,6 +1398,9 @@
 
     },
     "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout." : {
+
+    },
+    "This project has no preview setup" : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -1534,6 +1605,9 @@
         }
       }
     },
+    "You already have repos named %@ and the next few after it. Pick another name." : {
+
+    },
     "You can also revoke it in Terminal:" : {
 
     },
@@ -1546,8 +1620,21 @@
     "Your preview link, until darkmux runs previews itself." : {
 
     },
+    "Your project gets its own repo in your GitHub account, so sign in first." : {
+
+    },
     "darkmux" : {
 
+    },
+    "darkmux cloned %@, and it runs a preview only from your own checkout, never from a copy a bot writes to. Add your checkout of %@ and the preview starts from it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "darkmux cloned %1$@, and it runs a preview only from your own checkout, never from a copy a bot writes to. Add your checkout of %2$@ and the preview starts from it."
+          }
+        }
+      }
     },
     "darkmux cloned this repo, and a clone gets no preview: darkmux runs a preview only from your own checkout. Add your checkout with Add folder in my info to see one." : {
 
@@ -1591,10 +1678,16 @@
     "darkmux on this Mac decides which models apps may use." : {
 
     },
+    "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update." : {
+
+    },
     "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does." : {
 
     },
     "darkmux says there's nothing to approve?" : {
+
+    },
+    "darkmux starts a preview from .darkmux/preview.json in %@, and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again." : {
 
     },
     "darkmux works on your Mac, so pick a repo here and finish setting it up on your Mac once Mux Bot there is paired." : {
@@ -1634,6 +1727,12 @@
     "it didn't start within %lld minutes" : {
 
     },
+    "it has a submodule (%@)" : {
+
+    },
+    "it has more files than GitHub lists at once" : {
+
+    },
     "it isn't a JSON object." : {
 
     },
@@ -1655,7 +1754,13 @@
     "this Mac" : {
 
     },
+    "this repo" : {
+
+    },
     "yes" : {
+
+    },
+    "your checkout" : {
 
     },
     "·" : {

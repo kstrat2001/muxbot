@@ -16,7 +16,7 @@ Ask Mux Bot "check my setup". It shows a checklist that ticks itself off as each
 
 ## Your first project
 
-With no bots yet, Mux Bot opens on "What do you want to get done?". Pick a use case, such as Build a website, and answer its questions: the name, what it's for, and how it should feel (tap a suggestion or write your own). darkmux makes the project on this Mac and the preview starts. The new bot's first message offers a first change written from your answers; tap Approve to see it in the preview.
+With no bots yet, Mux Bot opens on "What do you want to get done?". Pick a use case, such as Build a website, and answer its questions: the name, what it's for, and how it should feel (tap a suggestion or write your own). Each project gets its own repo in your GitHub account, so sign in to GitHub first: it's private unless you switch Public on, and it starts with the template's files. Then darkmux makes the project on this Mac and the preview starts. The bot's committed work is backed up to its own branch on that repo, and Open PR asks to merge it. The new bot's first message offers a first change written from your answers; tap Approve to see it in the preview.
 
 ## Your first bot for code you have
 

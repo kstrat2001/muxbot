@@ -10,6 +10,9 @@ struct StartProjectView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(FleetConnection.self) private var connection
     @Environment(AppRouter.self) private var router
+    @Environment(GitHubAuth.self) private var github
+    @State private var problem: String?
+    @State private var signingIn = false
     /// Shown in place (Home or the window with no bots yet), not as a sheet.
     var inline = false
 
@@ -46,11 +49,18 @@ struct StartProjectView: View {
             if let picked, let playbook = playbooks[picked.id] {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") { Task { await start(picked, playbook) } }
-                        .disabled(!answers.canStart || starting)
+                        .disabled(!answers.canStart || starting || github.token == nil)
                 }
             }
         }
         .task { await load() }
+        .sheet(isPresented: $signingIn) {
+            NavigationStack {
+                GitHubSignInView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { signingIn = false } } }
+            }
+            .onChange(of: github.token != nil) { if github.token != nil { signingIn = false } }
+        }
     }
 
     private var chooser: some View {
@@ -139,8 +149,32 @@ struct StartProjectView: View {
                     Text("darkmux makes the project on your Mac, so pair Mux Bot with darkmux first. You can still make the bot now.")
                 }
             }
+            Section {
+                if github.token == nil {
+                    Text("Your project gets its own repo in your GitHub account, so sign in first.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    Button("Sign in with GitHub", systemImage: "person.badge.key") { signingIn = true }
+                } else {
+                    QuestionField(question: PlaybookQuestion(String(localized: "Name of the GitHub repo")),
+                                  text: $answers.repoName, lines: 1...1)
+                    if answers.repoName.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text("Left blank, it's \(GitHubRepoMaker.slug(answers.name)); if you already have one by that name, the next free one.")
+                            .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                    }
+                    Toggle("Public", isOn: $answers.isPublic)
+                    Text(answers.isPublic
+                         ? "Anyone can see a public repo. Mux Bot puts the template's files in it as the first commit."
+                         : "Private: only you can see it. Mux Bot puts the template's files in it as the first commit.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                }
+            } header: {
+                Text("On GitHub")
+            }
             if starting {
-                Section { Label("Setting it up…", systemImage: "hourglass") }
+                Section { Label("Making the repo on GitHub, then the project on this Mac…", systemImage: "hourglass") }
+            }
+            if let problem {
+                Section { Label(problem, systemImage: "exclamationmark.triangle").fixedSize(horizontal: false, vertical: true) }
             }
         }
         .formStyle(.grouped)
@@ -174,9 +208,20 @@ struct StartProjectView: View {
     }
 
     private func start(_ entry: TemplateEntry, _ playbook: Playbook) async {
+        guard let token = github.token else { signingIn = true; return }
         starting = true
+        problem = nil
         let store = BotStore(context: context)
-        let bot = await StartProject.start(entry, playbook: playbook, answers: answers, store: store, runs: brain.runs)
+        let bot: Bot
+        do {
+            bot = try await StartProject.start(entry, playbook: playbook, answers: answers, github: GitHubRepoMaker(token: token),
+                                               store: store, runs: brain.runs)
+        } catch {
+            // Nothing was made on this Mac; the form says why.
+            starting = false
+            problem = error.localizedDescription
+            return
+        }
         starting = false
         if inline { picked = nil } else { dismiss() }
         router.navigate(to: .bot(bot.id))

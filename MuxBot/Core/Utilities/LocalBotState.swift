@@ -26,10 +26,13 @@ final class LocalBotState: @unchecked Sendable {
         /// bytes), added to each PR's commit until the base branch has them
         /// (`PreviewSetup`).
         var prFiles: [String: Data]?
+        /// A project started on GitHub: its start commit there, its default
+        /// branch and the branch the bot's work goes to (`GitHubPR.Start`).
+        var githubStart: GitHubPR.Start?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
-                && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty
+                && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
         }
     }
 

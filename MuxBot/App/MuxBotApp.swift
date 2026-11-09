@@ -30,6 +30,7 @@ struct MuxBotApp: App {
                         if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
                         brain.connection = connection
                         brain.notifier = notifications
+                        brain.runs.githubToken = { [github] in github.token }
                         brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
                         #if os(macOS)
                         appDelegate.runs = brain.runs
