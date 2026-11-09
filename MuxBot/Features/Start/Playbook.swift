@@ -94,6 +94,17 @@ struct BotSkill: Codable, Equatable, Sendable {
     var name: String
     var body: String
 
+    /// What the bot asks when the skill is picked by name: what exactly,
+    /// with the first example ask from its "When:" line.
+    var question: String {
+        let when = body.components(separatedBy: "\n").first { $0.lowercased().hasPrefix("when:") } ?? ""
+        let quoted = when.split(separator: "\"", omittingEmptySubsequences: false)
+        if quoted.count >= 3, !quoted[1].isEmpty {
+            return String(localized: "\(name): what exactly? For example, “\(String(quoted[1]))”.")
+        }
+        return String(localized: "\(name): what exactly should I do?")
+    }
+
     /// The skills that fit a request, best first (at most two), searched on
     /// device like the help. A skill only needs some of the request's words:
     /// it adds notes to a brief, it never answers on its own.

@@ -29,6 +29,11 @@ final class LeadGuide {
             store.postGuideCard(.firstBot, summary: String(localized: "Make your first bot"))
         case let .setting(id):
             await respondAboutSetting(id, text: text, store: store, brain: brain)
+        case .settingsOverview:
+            let paired = brain.runs.connection?.isPaired ?? false
+            let shown = GuideSettings.all.filter { !$0.isReadOnly || ($0.isDarkmux && paired) }
+            store.append(.assistant, String(localized: "Here are the settings I can change for you. Flip one and it changes right away; ask me about any of them."), to: thread)
+            for setting in shown { store.postGuideCard(.setting(setting.id), summary: setting.title) }
         case .help:
             await answer(text, store: store, brain: brain)
         }

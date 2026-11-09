@@ -518,6 +518,14 @@ final class BotBrain {
         }
         let bot = context.botId.flatMap(store.bot(id:))
         let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
+        // A skill by its name (its chip): one question for the specifics; the
+        // answer becomes the run, with the skill's notes in its brief.
+        if let bot, explicit == nil, let skill = bot.skills.first(where: { $0.name.caseInsensitiveCompare(text) == .orderedSame }) {
+            message.intentRaw = Intent.fix.rawValue
+            pendingAnswers[bot.id] = PendingDispatch(task: skill.name, crew: .coder) { "\(skill.name): \($0)" }
+            store.append(.assistant, skill.question, to: conversation)
+            return
+        }
         // The answer to the bot's one question becomes the run it was about.
         if let bot, let pending = pendingAnswers.removeValue(forKey: bot.id), explicit == nil || explicit == .fix,
            Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()) {

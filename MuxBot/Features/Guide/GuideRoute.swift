@@ -14,6 +14,8 @@ enum GuideRoute: Equatable, Sendable {
     case setup
     case firstBot(resource: String?)
     case setting(GuideSettingID)
+    /// "Change a setting": the settings he can show switches for.
+    case settingsOverview
     case help
 
     private static let setupPhrases = [
@@ -39,6 +41,10 @@ enum GuideRoute: Equatable, Sendable {
             return .firstBot(resource: resource)
         }
         if let setting = GuideSettings.match(lower) { return .setting(setting) }
+        if ["change a setting", "change settings", "my settings", "which settings", "what settings", "show settings", "open settings"]
+            .contains(where: lower.contains) || lower == "settings" {
+            return .settingsOverview
+        }
         if isQuestion(lower) { return .help }
         return nil
     }

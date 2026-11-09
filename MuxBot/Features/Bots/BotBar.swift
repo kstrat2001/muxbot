@@ -62,6 +62,10 @@ struct BotBar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("About \(element.chip)")
             }
+            if !chips.isEmpty, ChatShortcuts.showsRow(draft: router.barDraft, tweaking: tweakRun != nil,
+                                                      picked: preview.picked != nil, waitingCard: hasWaitingCard) {
+                ChatShortcutRow(chips: chips, run: run)
+            }
             #if os(macOS)
             HStack(spacing: Spacing.sm) {
                 field.textFieldStyle(.roundedBorder)
@@ -87,6 +91,28 @@ struct BotBar: View {
             // "Report a bug here" from the preview starts a bug report.
             if preview.picked?.intent == "bug", router.barDraft.isEmpty { router.barDraft = "bug: " }
         }
+    }
+
+    /// The shortcuts for the thread on screen.
+    private var chips: [ChatShortcut] {
+        guard let id = router.context.botId else { return ChatShortcuts.lead() }
+        guard let bot = bots.first(where: { $0.id == id }) else { return [] }
+        return ChatShortcuts.bot(.init(hasRepo: !bot.repoSlugs.isEmpty, canPreview: brain.runs.canPreview(bot),
+                                       skills: bot.skills.map(\.name)))
+    }
+
+    /// A dispatch or action card in this thread is waiting for Approve.
+    private var hasWaitingCard: Bool {
+        let botId = router.context.botId
+        if runs.contains(where: { $0.phase == .proposed && $0.bot?.id == botId && botId != nil }) { return true }
+        let thread = BotStore(context: context).existingConversation(for: router.context)
+        return (thread?.messages ?? []).contains { $0.kind == .actionCard && $0.actionState == .waiting }
+    }
+
+    private func run(_ chip: ChatShortcut) {
+        let chat = router.context
+        let store = BotStore(context: context)
+        Task { await ChatShortcuts.run(chip, in: chat, brain: brain, store: store, router: router, preview: preview) }
     }
 
     private var field: some View {

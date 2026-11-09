@@ -63,6 +63,19 @@
         }
       }
     },
+    "%@: what exactly should I do?" : {
+
+    },
+    "%@: what exactly? For example, “%@”." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: what exactly? For example, “%2$@”."
+          }
+        }
+      }
+    },
     "%lld" : {
 
     },
@@ -252,6 +265,9 @@
     "Change" : {
 
     },
+    "Change a setting" : {
+
+    },
     "Change folder…" : {
 
     },
@@ -259,6 +275,9 @@
 
     },
     "Check it yourself" : {
+
+    },
+    "Check my setup" : {
 
     },
     "Checking the done-when in the preview…" : {
@@ -416,6 +435,9 @@
     "File on GitHub" : {
 
     },
+    "Fix an issue" : {
+
+    },
     "Fix it now" : {
 
     },
@@ -458,6 +480,9 @@
     "Hand to %@" : {
 
     },
+    "Here are the settings I can change for you. Flip one and it changes right away; ask me about any of them." : {
+
+    },
     "Here's the switch. Changing it changes the setting right away." : {
 
     },
@@ -477,6 +502,9 @@
 
     },
     "Hide this here (and its badge) until something new needs you; it stays in Activity" : {
+
+    },
+    "How does this work?" : {
 
     },
     "How should it feel?" : {
@@ -718,7 +746,13 @@
     "Open a pull request with this bot's committed changes" : {
 
     },
+    "Open issues" : {
+
+    },
     "Opens %@" : {
+
+    },
+    "Opens it" : {
 
     },
     "Opens your conversation with %@" : {
@@ -770,6 +804,9 @@
 
     },
     "Point at part of the page; your next message is about it." : {
+
+    },
+    "Point at something" : {
 
     },
     "Preview" : {
@@ -853,6 +890,9 @@
     "Send the steps to your Mac" : {
 
     },
+    "Sends it to the bot now" : {
+
+    },
     "Set to %@ on %@." : {
       "localizations" : {
         "en" : {
@@ -899,6 +939,9 @@
 
     },
     "Setup check" : {
+
+    },
+    "Shortcuts" : {
 
     },
     "Show Preview" : {
