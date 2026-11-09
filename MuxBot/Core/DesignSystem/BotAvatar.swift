@@ -73,6 +73,29 @@ struct BotLook: Equatable, Sendable {
     static let lead = BotLook(animal: .octopus, bodyHex: "5b5bd6", eyeHex: "3fdcff")
 
     /// A stable starting look for a bot that hasn't picked one, from its name.
+    /// A new bot's look: a random animal (never the lead bot's octopus),
+    /// one of those the `existing` bots use least, a main color that animal
+    /// doesn't have yet when there is one, and a random eye color. `animals`
+    /// narrows the choice (tests).
+    static func fresh<G: RandomNumberGenerator>(avoiding existing: [BotLook], using rng: inout G,
+                                                animals: [BotAnimal] = BotAnimal.allCases.filter { $0 != .octopus }) -> BotLook {
+        let uses = Dictionary(existing.map { ($0.animal, 1) }, uniquingKeysWith: +)
+        let fewest = animals.map { uses[$0, default: 0] }.min() ?? 0
+        let animal = animals.filter { uses[$0, default: 0] == fewest }.randomElement(using: &rng) ?? .fox
+        let taken = Set(existing.filter { $0.animal == animal }.map(\.bodyHex))
+        let freeColors = bodyColors.filter { !taken.contains($0) }
+        let body = (freeColors.isEmpty ? bodyColors : freeColors).randomElement(using: &rng) ?? bodyColors[0]
+        let eye = eyeColors.randomElement(using: &rng) ?? eyeColors[0]
+        return BotLook(animal: animal, bodyHex: body, eyeHex: eye)
+    }
+
+    static func fresh(avoiding existing: [BotLook]) -> BotLook {
+        var rng = SystemRandomNumberGenerator()
+        return fresh(avoiding: existing, using: &rng)
+    }
+
+    /// A look worked out from a name (stable): for bots whose look was never
+    /// set, and older stores.
     static func suggested(for name: String) -> BotLook {
         let known: [String: BotAnimal] = ["humancodereader": .owl, "darkmux": .raccoon,
                                           "personal brand": .fox, "daily update": .penguin]

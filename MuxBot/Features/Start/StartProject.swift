@@ -33,10 +33,10 @@ enum StartProject {
     /// the same commit. When the GitHub step fails nothing is made here, and
     /// the error says why (naming a repo that was made but couldn't be
     /// filled). Off, it's the bot and darkmux's local project only.
-    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, github: GitHubRepoMaker?,
-                      store: BotStore, runs: RunCoordinator) async throws -> Bot {
+    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, look: BotLook? = nil,
+                      github: GitHubRepoMaker?, store: BotStore, runs: RunCoordinator) async throws -> Bot {
         guard answers.backUpToGitHub else {
-            return await start(entry, playbook: playbook, answers: answers, store: store, runs: runs)
+            return await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
         }
         guard let github else { throw GitHubRepoMaker.Failure.github(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -46,7 +46,7 @@ enum StartProject {
         let made = try await github.make(name: repoName, isPrivate: !answers.isPublic,
                                          description: answers.purpose.trimmingCharacters(in: .whitespacesAndNewlines),
                                          from: entry)
-        let bot = await start(entry, playbook: playbook, answers: answers, store: store, runs: runs) { bot in
+        let bot = await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs) { bot in
             store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
             bot.githubStart = GitHubPR.Start(commit: made.startCommit, branch: made.defaultBranch,
                                              head: "mux/\(GitHubRepoMaker.slug(name))")
@@ -57,15 +57,14 @@ enum StartProject {
     /// Makes the bot and asks darkmux for its workspace. The bot exists even
     /// if the workspace fails; its thread says why and it can be retried.
     @discardableResult
-    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers,
+    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, look: BotLook? = nil,
                       store: BotStore, runs: RunCoordinator, before: (Bot) -> Void = { _ in }) async -> Bot {
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let bot = store.add(name: name, instructions: instructions(playbook, answers: answers, name: name),
                             systemImage: playbook.icon)
-        let suggested = BotLook.suggested(for: name)
-        bot.look = BotLook(animal: playbook.animal ?? suggested.animal,
-                           bodyHex: playbook.bodyHex ?? suggested.bodyHex,
-                           eyeHex: playbook.eyeHex ?? suggested.eyeHex)
+        // The look you saw on the form (else a fresh one, unlike the bots you
+        // have); a template's animal and colors no longer set it.
+        bot.look = look ?? BotLook.fresh(avoiding: store.allBots().filter { $0.id != bot.id }.map(\.look))
         bot.useCaseId = entry.id
         bot.skills = playbook.skills
         before(bot)

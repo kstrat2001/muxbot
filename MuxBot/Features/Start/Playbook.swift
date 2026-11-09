@@ -13,6 +13,9 @@ struct Playbook: Equatable, Sendable {
     var title: String
     var icon: String
     var pitch: String
+    /// `animal` and `colors`: still read, so older playbooks parse, but they
+    /// no longer set a new bot's look (each bot gets a fresh one,
+    /// `BotLook.fresh`).
     var animal: BotAnimal?
     var bodyHex: String?
     var eyeHex: String?

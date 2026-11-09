@@ -223,7 +223,7 @@ struct StartProjectFlowTests {
         #expect(bot.name == "Bakery")
         #expect(bot.useCaseId == "website")
         #expect(bot.skills.map(\.name) == ["Add a page", "Change the look"])
-        #expect(bot.look == BotLook(animal: .fox, bodyHex: "0e9f8e", eyeHex: "ffffff"))
+        #expect(bot.look.animal != .octopus, "a fresh look, not the template's fixed one (and never the lead bot's)")
         #expect(bot.instructions.hasPrefix("You look after Bakery, a website built with Vite."))
         #expect(bot.instructions.contains("A small bakery's site"))
         #expect(bot.instructions.contains("Warm and friendly"))
@@ -243,7 +243,6 @@ struct StartProjectFlowTests {
         let bot = await StartProject.start(entry, playbook: playbook, answers: StartProject.Answers(name: "Manual"),
                                            store: store, runs: brain.runs)
         #expect(bot.useCaseId == "docs")
-        #expect(bot.look.animal == .owl)
         #expect(bot.instructions == "You write Manual.")
     }
 }

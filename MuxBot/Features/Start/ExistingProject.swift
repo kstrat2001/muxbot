@@ -70,15 +70,13 @@ enum ExistingProject {
     /// Makes the bot from the source and your answers, then has darkmux set
     /// up its work copy: a worktree of your checkout, or a clone of the repo.
     /// Returns the bot and, for a folder that can't be used, why.
-    static func start(_ source: Source, name: String, purpose: String, projectPlaybook: String?,
+    static func start(_ source: Source, name: String, purpose: String, projectPlaybook: String?, look: BotLook? = nil,
                       store: BotStore, runs: RunCoordinator) async -> (bot: Bot, problem: String?) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let (playbook, skillsSource) = self.playbook(projectText: projectPlaybook)
         let bot = store.add(name: name, instructions: StartProject.instructions(playbook, answers: .init(name: name, purpose: purpose), name: name),
                             systemImage: playbook.icon)
-        let suggested = BotLook.suggested(for: name)
-        bot.look = BotLook(animal: playbook.animal ?? suggested.animal, bodyHex: playbook.bodyHex ?? suggested.bodyHex,
-                           eyeHex: playbook.eyeHex ?? suggested.eyeHex)
+        bot.look = look ?? BotLook.fresh(avoiding: store.allBots().filter { $0.id != bot.id }.map(\.look))
         bot.skills = playbook.skills
         store.save()
         let thread = store.conversation(for: .bot(bot.id))
