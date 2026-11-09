@@ -19,8 +19,18 @@ struct StartProjectView: View {
     @State private var picked: TemplateEntry?
     @State private var answers = StartProject.Answers(name: "")
     @State private var starting = false
+    /// "Work on a project I already have" is open.
+    @State private var existing = false
 
     var body: some View {
+        if existing {
+            ExistingProjectView(inline: inline) { existing = false }
+        } else {
+            templates
+        }
+    }
+
+    private var templates: some View {
         Group {
             if let picked, let playbook = playbooks[picked.id] {
                 questions(picked, playbook)
@@ -56,9 +66,10 @@ struct StartProjectView: View {
                             .buttonStyle(.plain)
                             .disabled(playbooks[entry.id] == nil)
                     }
+                    // Built in, not fetched: your own code, no template.
+                    Button { existing = true } label: { existingTile }
+                        .buttonStyle(.plain)
                 }
-                Text("Or make a bot for code you already have with New bot.")
-                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 if inline {
                     // Mux Bot, the guide, helps with setup first.
                     Button { router.navigate(to: .lead) } label: {
@@ -69,6 +80,21 @@ struct StartProjectView: View {
             }
             .padding(Spacing.xl)
         }
+    }
+
+    private var existingTile: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Image(systemName: ExistingProject.icon).font(.title).foregroundStyle(Color.brandBlue)
+                Text(ExistingProject.title).font(AppFont.headline())
+                Text(ExistingProject.summary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    .lineLimit(3, reservesSpace: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
     }
 
     private func tile(_ entry: TemplateEntry) -> some View {

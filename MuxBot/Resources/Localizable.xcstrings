@@ -43,6 +43,15 @@
     "%@ reads this to send the right work here. You can change it later in the bot's info." : {
 
     },
+    "%@ restarts on changes (--watch), without hot reload" : {
+
+    },
+    "%@ serves its home page at /" : {
+
+    },
+    "%@ takes its port this way" : {
+
+    },
     "%@%@" : {
       "localizations" : {
         "en" : {
@@ -52,6 +61,9 @@
           }
         }
       }
+    },
+    "%@'s dev server reloads changes" : {
+
     },
     "%@'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start." : {
 
@@ -133,7 +145,13 @@
     "A bot is a project you name. Paste its GitHub link here, or use New bot to add a folder from this Mac." : {
 
     },
+    "A folder on this Mac" : {
+
+    },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
+
+    },
+    "A repo on my GitHub" : {
 
     },
     "About" : {
@@ -706,6 +724,9 @@
     "Mux Bot, your guide" : {
 
     },
+    "My skills come from this project's PLAYBOOK.md." : {
+
+    },
     "Name" : {
 
     },
@@ -895,6 +916,9 @@
     "Pick the project folder you already have. darkmux works on its own copy on a new branch, so your files and changes are never touched." : {
 
     },
+    "Point Mux Bot at your code, on this Mac or on GitHub, and keep improving it." : {
+
+    },
     "Point at part of the page; your next message is about it." : {
 
     },
@@ -919,6 +943,9 @@
     "Preview ready · from %@" : {
 
     },
+    "Private" : {
+
+    },
     "Pull request" : {
 
     },
@@ -932,6 +959,9 @@
 
     },
     "Ran on %@" : {
+
+    },
+    "Reading your repos…" : {
 
     },
     "Ready on %@" : {
@@ -989,6 +1019,9 @@
 
     },
     "Search bots and messages" : {
+
+    },
+    "Search your repos" : {
 
     },
     "See it in the preview" : {
@@ -1064,6 +1097,9 @@
 
     },
     "Show preview" : {
+
+    },
+    "Showing your first %lld repos. Search narrows these." : {
 
     },
     "Sign in so bots can read your private repos and open pull requests. The sign-in stays on this device." : {
@@ -1150,6 +1186,9 @@
     "The Dock icon shows how many runs are waiting on you." : {
 
     },
+    "The bot's skills come from this project's PLAYBOOK.md." : {
+
+    },
     "The checkpoint didn't happen: %@ The changes are in the work copy, uncommitted." : {
 
     },
@@ -1166,6 +1205,12 @@
 
     },
     "This one is changed in darkmux on your Mac; here's its value." : {
+
+    },
+    "This project has no PLAYBOOK.md, so I start with general skills." : {
+
+    },
+    "This project has no PLAYBOOK.md, so the bot starts with general skills." : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -1273,6 +1318,16 @@
     "Use %@ for this run" : {
 
     },
+    "Using your checkout of %@ (%@) on this Mac, so it gets a preview." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Using your checkout of %1$@ (%2$@) on this Mac, so it gets a preview."
+          }
+        }
+      }
+    },
     "Waiting for you to approve… code expires in %lld:%@" : {
       "localizations" : {
         "en" : {
@@ -1301,16 +1356,28 @@
     "What is it for?" : {
 
     },
+    "What is this project, in a sentence?" : {
+
+    },
     "What should change?" : {
 
     },
+    "What should the bot be called?" : {
+
+    },
     "What this bot is about" : {
+
+    },
+    "Where is the code?" : {
 
     },
     "Work copies are set up from the Mac app for now." : {
 
     },
     "Work copy" : {
+
+    },
+    "Work on a project I already have" : {
 
     },
     "Working" : {
@@ -1334,6 +1401,12 @@
     "darkmux" : {
 
     },
+    "darkmux cloned this repo, and a clone gets no preview: darkmux runs a preview only from your own checkout. Add your checkout with Add folder in my info to see one." : {
+
+    },
+    "darkmux clones %@. A clone gets no preview: darkmux runs a preview only from your own checkout. You can add yours later with Add folder." : {
+
+    },
     "darkmux didn't list its models: %@" : {
 
     },
@@ -1352,10 +1425,16 @@
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
 
     },
+    "darkmux makes its own copy on a new branch, so your files aren't touched. A preview runs only from your own checkout, so a folder on this Mac gets one; a repo darkmux clones doesn't." : {
+
+    },
     "darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub." : {
 
     },
     "darkmux makes the project on your Mac, so pair Mux Bot with darkmux first. You can still make the bot now." : {
+
+    },
+    "darkmux makes the work copy once Mux Bot is paired with it on your Mac. You can make the bot now." : {
 
     },
     "darkmux on this Mac decides which models apps may use." : {
@@ -1365,6 +1444,9 @@
 
     },
     "darkmux says there's nothing to approve?" : {
+
+    },
+    "darkmux works on your Mac, so pick a repo here and finish setting it up on your Mac once Mux Bot there is paired." : {
 
     },
     "darkmux's app connection" : {
@@ -1378,6 +1460,22 @@
     },
     "darkmux: paired" : {
 
+    },
+    "found %@" : {
+
+    },
+    "found .env.example, so the project reads a .env" : {
+
+    },
+    "found in package.json: scripts.%@ = “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "found in package.json: scripts.%1$@ = “%2$@”"
+          }
+        }
+      }
     },
     "iCloud sync" : {
 

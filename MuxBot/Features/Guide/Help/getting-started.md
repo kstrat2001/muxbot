@@ -20,4 +20,6 @@ With no bots yet, Mux Bot opens on "What do you want to get done?". Pick a use c
 
 ## Your first bot for code you have
 
-A bot is a project you name, like your website. Ask Mux Bot "make a bot for my repo" and paste a GitHub link, or use New bot (in the More menu) and add a project folder.
+A bot is a project you name, like your website. In "What do you want to get done?", choose Work on a project I already have, then a folder on this Mac or a repo on your GitHub (sign in to see your repos). Mux Bot suggests a name and asks what the project is. darkmux makes its own copy on a new branch, so your files aren't touched. A preview runs only from your own checkout: a folder on this Mac gets one, and a repo darkmux clones doesn't until you add your checkout with Add folder. The bot's skills come from the project's own PLAYBOOK.md if it has one, else general ones.
+
+You can also ask Mux Bot "make a bot for my repo" and paste a GitHub link, or use New bot in the More menu.

@@ -172,6 +172,24 @@ final class GitHubAuth {
         }
     }
 
+    /// Pages of 100 read for your repo list (1,000 repos).
+    static let repoPageCap = 10
+
+    /// The repos you own, collaborate on or reach through an organization,
+    /// most recently pushed first, paged; `truncated` past the page cap.
+    func myRepos() async throws -> (repos: [GitHubRepoSummary], truncated: Bool) {
+        guard let token else { throw GitHubError(status: 401) }
+        var repos: [GitHubRepoSummary] = []
+        var next: String? = "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=100"
+        for _ in 0..<Self.repoPageCap {
+            guard let url = next else { break }
+            let page: ([GitHubRepoSummary], String?) = try await getPage(url, token: token)
+            repos += page.0
+            next = page.1
+        }
+        return (repos, next != nil)
+    }
+
     private func post<T: Decodable>(_ url: String, _ form: [String: String]) async throws -> T {
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = "POST"
