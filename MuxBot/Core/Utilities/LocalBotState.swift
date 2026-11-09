@@ -29,10 +29,15 @@ final class LocalBotState: @unchecked Sendable {
         /// A project started on GitHub: its start commit there, its default
         /// branch and the branch the bot's work goes to (`GitHubPR.Start`).
         var githubStart: GitHubPR.Start?
+        /// The bot's runs started from this device (by id): this Mac's
+        /// darkmux has them. Others (synced from another Mac) are never
+        /// followed, stopped or undone from here.
+        var localRuns: [String]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
+                && (localRuns ?? []).isEmpty
         }
     }
 

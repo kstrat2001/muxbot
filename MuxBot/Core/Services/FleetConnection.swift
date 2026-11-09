@@ -28,6 +28,7 @@ final class FleetConnection {
         if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
             state = .paired(name: name)
         }
+        client.onUnauthorized = { [weak self] in Task { @MainActor in self?.revoked() } }
     }
 
     /// The token, read from the Keychain once and kept: views ask for it on
@@ -93,6 +94,20 @@ final class FleetConnection {
         cachedToken = .some(token)
         state = .paired(name: name)
         onPaired?()
+    }
+
+    /// What the pairing screen says when darkmux forgot this app.
+    static let revokedMessage = String(localized: "darkmux no longer knows this app. Pair again.")
+    /// Shows pairing (set by the app).
+    var onRevoked: (() -> Void)?
+
+    /// darkmux answered 401 with this app's token: the pairing was revoked
+    /// there. Forget the token, say so plainly, and show pairing.
+    func revoked() {
+        guard token != nil else { return }
+        unpair()
+        state = .failed(Self.revokedMessage)
+        onRevoked?()
     }
 
     func cancelPairing() {

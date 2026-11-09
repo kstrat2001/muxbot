@@ -40,6 +40,9 @@
     "%@ info" : {
 
     },
+    "%@ isn't here anymore, so nothing was handed off." : {
+
+    },
     "%@ reads this to send the right work here. You can change it later in the bot's info." : {
 
     },
@@ -47,6 +50,9 @@
 
     },
     "%@ serves its home page at /" : {
+
+    },
+    "%@ still has a run on darkmux, and this app isn't paired to stop it. Pair again, then delete it." : {
 
     },
     "%@ takes its port this way" : {
@@ -227,6 +233,9 @@
 
     },
     "Always ask" : {
+
+    },
+    "Another program is using the model's port." : {
 
     },
     "Another program was using the preview's port. Try again." : {
@@ -739,6 +748,9 @@
     "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
+    "Its running work and preview stop, and its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
+
+    },
     "Keep improving %@." : {
 
     },
@@ -851,6 +863,9 @@
     "Mux Bot is paired with darkmux on this Mac." : {
 
     },
+    "Mux Bot isn't paired with darkmux" : {
+
+    },
     "Mux Bot isn't paired with darkmux." : {
 
     },
@@ -858,6 +873,9 @@
 
     },
     "Mux Bot picks: the first in the Auto order that's running." : {
+
+    },
+    "Mux Bot quit before darkmux started it." : {
 
     },
     "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the “Repository creation” permission, then approve the update." : {
@@ -1035,6 +1053,15 @@
 
     },
     "Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later." : {
+
+    },
+    "Pair Mux Bot to see this" : {
+
+    },
+    "Pair Mux Bot with darkmux again to stop it." : {
+
+    },
+    "Pair Mux Bot with darkmux on this Mac to see the preview." : {
 
     },
     "Pair once, then approve it in Terminal." : {
@@ -1371,6 +1398,9 @@
     "Stop" : {
 
     },
+    "Stop it from the Mac it runs on." : {
+
+    },
     "Stop this run" : {
 
     },
@@ -1420,6 +1450,21 @@
 
     },
     "The messages go; runs stay in Activity." : {
+
+    },
+    "The model doesn't fit on this Mac. Pick a smaller one in Settings › Models." : {
+
+    },
+    "The model was busy with another run. Run it again in a moment." : {
+
+    },
+    "The model wouldn't start." : {
+
+    },
+    "The model's server is busy with something else." : {
+
+    },
+    "The model's server isn't running." : {
 
     },
     "The persona and conventions are drafted on this device from your README. Check them." : {
@@ -1593,6 +1638,9 @@
     "Undo" : {
 
     },
+    "Undo it from the Mac it ran on." : {
+
+    },
     "Unpair this app" : {
 
     },
@@ -1745,11 +1793,24 @@
     "darkmux clones %@. A clone gets no preview: darkmux runs a preview only from your own checkout. You can add yours later with Add folder." : {
 
     },
+    "darkmux couldn't free the model for this run." : {
+
+    },
     "darkmux didn't list its models: %@" : {
 
     },
     "darkmux didn't start the preview from it: %@. Open the preview to try again." : {
 
+    },
+    "darkmux didn't stop “%@”, so %@ wasn't deleted: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "darkmux didn't stop “%1$@”, so %2$@ wasn't deleted: %3$@"
+          }
+        }
+      }
     },
     "darkmux has models ready." : {
 
@@ -1778,10 +1839,16 @@
     "darkmux makes the work copy once Mux Bot is paired with it on your Mac. You can make the bot now." : {
 
     },
+    "darkmux no longer knows this app. Pair again." : {
+
+    },
     "darkmux on this Mac decides which models apps may use." : {
 
     },
     "darkmux reads “%@”." : {
+
+    },
+    "darkmux restarted and lost track of this run. Check the project before running it again." : {
 
     },
     "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update." : {
@@ -1794,6 +1861,9 @@
 
     },
     "darkmux starts a preview from .darkmux/preview.json in %@, and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again." : {
+
+    },
+    "darkmux stopped it." : {
 
     },
     "darkmux works on your Mac, so pick a repo here and finish setting it up on your Mac once Mux Bot there is paired." : {

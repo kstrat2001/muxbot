@@ -31,7 +31,8 @@ struct MuxBotApp: App {
                         brain.connection = connection
                         brain.notifier = notifications
                         brain.runs.githubToken = { [github] in github.token }
-                        brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
+                        brain.runs.adoptLegacyRuns(store: BotStore(context: container.mainContext))
+                    brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
                         #if os(macOS)
                         appDelegate.runs = brain.runs
                         #endif

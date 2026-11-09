@@ -6,6 +6,7 @@ import SwiftData
 /// threads) and Activity.
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var context
     @Environment(NotificationService.self) private var notifications
     @Query private var runs: [BotRun]
@@ -29,6 +30,9 @@ struct ContentView: View {
         .onAppear {
             router.usesSidebar = wantsSidebar
             router.openOnStart(botCount: bots.count)
+            // darkmux forgot this app (401): show pairing, which says why.
+            let router = router
+            connection.onRevoked = { router.showPairing = true }
         }
         .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
         // Runs an earlier build kept become committed results (Open PR).

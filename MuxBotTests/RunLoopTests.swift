@@ -129,7 +129,9 @@ struct StopRunTests {
         let bot = store.add(name: "humancodereader", instructions: "Website")
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.apply(.approve, to: run)
-        await BotBrain().runs.stop(run, store: store)
+        let runs = BotBrain().runs
+        runs.markStartedHere(run)
+        await runs.stop(run, store: store)
         #expect(run.phase == .canceled)
         #expect(bot.state == .ready)
         #expect((store.conversation(for: .bot(bot.id)).messages ?? []).contains { $0.content == "Stopped." })

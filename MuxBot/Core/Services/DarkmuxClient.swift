@@ -5,6 +5,11 @@ import Foundation
 /// darkmux build only.
 struct DarkmuxClient: Sendable {
     var baseURL = URL(string: "http://127.0.0.1:8767")!
+    /// Tests answer here instead of darkmux.
+    var session: URLSession = .shared
+    /// darkmux answered 401 to a call with this app's token: it no longer
+    /// knows this app (the pairing was revoked).
+    var onUnauthorized: (@Sendable () -> Void)?
 
     struct PairStatus: Decodable, Sendable {
         var status: String
@@ -29,13 +34,16 @@ struct DarkmuxClient: Sendable {
         var commit: String?
         var branch: String?
         var commitError: String?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch; case commitError = "commit_error" }
+        /// Why it failed, for an app (`busy`, `wont_fit`, …; darkmux #3468).
+        var code: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code; case commitError = "commit_error" }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             status = try c.decode(String.self, forKey: .status)
             error = try c.decodeIfPresent(String.self, forKey: .error)
             reason = try c.decodeIfPresent(String.self, forKey: .reason)
+            code = try? c.decodeIfPresent(String.self, forKey: .code)
             changes = try? c.decodeIfPresent(Changes.self, forKey: .changes)
             commit = try? c.decodeIfPresent(String.self, forKey: .commit)
             branch = try? c.decodeIfPresent(String.self, forKey: .branch)
@@ -303,8 +311,9 @@ struct DarkmuxClient: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401, headers["Authorization"] != nil { onUnauthorized?() }
         guard (200..<300).contains(status) else {
             let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
             throw ClientError(message: detail ?? "darkmux answered \(status)", status: status)

@@ -25,9 +25,11 @@ struct RunResultTextTests {
     }
 
     @Test(arguments: [
-        ("Error: dispatch killed by signal 15 (SIGTERM); exit 143", RunEnd.stopped),
+        // Sweep batch 2: words like "killed" or SIGTERM are failures; only
+        // darkmux's own "cancelled" is a stop.
+        ("Error: dispatch killed by signal 15 (SIGTERM); exit 143", RunEnd.failed("dispatch killed by signal 15 (SIGTERM); exit 143")),
         ("cancelled", .stopped),
-        ("signal 9/SIGKILL", .stopped),
+        ("signal 9/SIGKILL", .failed("signal 9/SIGKILL")),
         ("[darkmux-liveness] ts +8617ms credential-read\nError: model endpoint refused the connection", .failed("model endpoint refused the connection")),
     ])
     func errorsBecomeAPlainOutcome(raw: String, expected: RunEnd) {

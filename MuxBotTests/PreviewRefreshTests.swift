@@ -96,6 +96,7 @@ struct PreviewRefreshTests {
         run.changedFiles = ["a.css +1 −1"]
         run.keptCommit = "abc1234"
         run.darkmuxWorkId = "w-1"
+        brain.runs.markStartedHere(run)
         brain.runs.workUndoer = { _ in DarkmuxClient.UndoResult.fixture }
         brain.runs.decide(.discard, on: run, store: store)
         await until { brain.runs.previewReloads[bot.id] != nil }

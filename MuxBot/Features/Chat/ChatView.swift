@@ -83,9 +83,10 @@ struct ChatView: View {
 
     /// Scrolls to the focused run's newest card and outlines it briefly.
     private func focus(_ proxy: ScrollViewProxy) {
-        guard let runId = router.focusRunId,
-              let card = messages.last(where: { $0.runId == runId }) else { return }
+        guard let runId = router.focusRunId else { return }
+        // Cleared even when its card is gone, so it never fires later.
         router.focusRunId = nil
+        guard let card = messages.last(where: { $0.runId == runId }) else { return }
         withAnimation { proxy.scrollTo(card.id, anchor: .center) }
         flashRunId = runId
         Task {

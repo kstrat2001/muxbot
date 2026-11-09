@@ -116,6 +116,7 @@ struct RunFlowReviewTests {
         run.changedFiles = ["a.css +1 −1"]
         run.keptCommit = "abc1234"
         run.darkmuxWorkId = "w-1"
+        brain.runs.markStartedHere(run)
         let gate = Gate()
         brain.runs.workUndoer = { _ in await gate.wait(); return DarkmuxClient.UndoResult.fixture }
         brain.runs.decide(.discard, on: run, store: store)
@@ -138,6 +139,7 @@ struct RunFlowReviewTests {
         run.changedFiles = ["a.css +1 −1"]
         run.keptCommit = "abc1234"
         run.darkmuxWorkId = "w-1"
+        brain.runs.markStartedHere(run)
         let gate = Gate()
         brain.runs.workUndoer = { _ in await gate.wait(); return DarkmuxClient.UndoResult.fixture }
         brain.runs.decide(.discard, on: run, store: store)
@@ -232,15 +234,16 @@ struct RunFlowReviewTests {
         #expect(!NeedsYou.isDismissed(run))
     }
 
-    /// G10: handed-off tasks keep a bot Working, never stuck on Needs you.
-    @Test func aBotWithTasksIsWorkingNotStuckOnNeedsYou() {
+    /// G10, revised in sweep batch 2: a hand-off is a dispatch card waiting
+    /// for Approve (Needs you), never "Working" with nothing running.
+    @Test func aHandOffWaitsForApproveNotWorking() {
         let (store, bot, _) = setUp()
         let run = store.proposeRun(task: "Fix it", crew: .coder, on: bot)
-        bot.state = .needsYou
         store.handOff(task: "Look at the footer", from: "Mux Bot", to: bot)
         run.phase = .done
         store.refreshState(of: bot)
-        #expect(bot.state == .working)
+        #expect(bot.state == .needsYou)
+        #expect(bot.runs?.contains { $0.task == "Look at the footer" && $0.phase == .proposed } == true)
     }
 
     /// Grok 4510124753: a run kept by an earlier build becomes a committed
@@ -446,7 +449,8 @@ struct PreviewStartTests {
         let connection = FleetConnection(keychain: MemoryKeychain(), defaults: UserDefaults(suiteName: "muxbot-tests-preview-\(UUID().uuidString)")!)
         brain.runs.connection = connection
         await brain.runs.ensurePreview(for: bot)
-        #expect(brain.runs.livePreviews[bot.id]?.status == .waiting)
+        // Sweep batch 2: unpaired is said plainly (with Pair), not "waiting".
+        #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.notPaired))
         let retried = Recorder()
         brain.runs.retryPreview = { retried.add($0.name) }
         connection.completePairing(token: "t0ken", name: "Mux Bot")
