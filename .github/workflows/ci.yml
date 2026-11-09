@@ -52,4 +52,4 @@ jobs:
             DEVELOPMENT_TEAM= \
             'CODE_SIGN_STYLE[sdk=macosx*]=Manual' 'CODE_SIGN_IDENTITY[sdk=macosx*]=-' \
             'ENABLE_HARDENED_RUNTIME[sdk=macosx*]=NO' \
-            'CODE_SIGNING_ALLOWED[sdk=iphone*]=NO' -quiet $NO_ICLOUD
+            'CODE_SIGNING_ALLOWED[sdk=iphone*]=NO' $NO_ICLOUD

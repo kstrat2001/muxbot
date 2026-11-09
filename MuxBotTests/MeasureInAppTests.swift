@@ -237,7 +237,9 @@ struct WebLayoutProbeTests {
         let facts = await probe.measure(width: 400) { _ in }
         #expect(facts == nil)
         #expect(ContinuousClock.now - start < .seconds(10))
-        // Still usable after a timeout.
+        // Still usable after a timeout (with a normal timeout again: a cold
+        // WebKit on a CI runner can take longer than 300ms to load anything).
+        probe.loadTimeout = .seconds(20)
         #expect(await probe.measure(html: html, width: 390)?.viewport == 390)
     }
 }
