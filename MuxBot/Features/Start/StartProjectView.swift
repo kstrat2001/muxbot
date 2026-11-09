@@ -129,9 +129,9 @@ struct StartProjectView: View {
                 }
             }
             Section {
-                TextField(question(playbook, 0, String(localized: "Name")).label, text: $answers.name)
-                field(question(playbook, 1, String(localized: "What is it for?")), text: $answers.purpose)
-                field(question(playbook, 2, String(localized: "How should it feel?")), text: $answers.style)
+                QuestionField(question: question(playbook, 0, String(localized: "Name")), text: $answers.name, lines: 1...1)
+                QuestionField(question: question(playbook, 1, String(localized: "What is it for?")), text: $answers.purpose)
+                QuestionField(question: question(playbook, 2, String(localized: "How should it feel?")), text: $answers.style)
             } footer: {
                 if connection.isPaired {
                     Text("darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub.")
@@ -151,25 +151,6 @@ struct StartProjectView: View {
         PlaybookQuestion(playbook.questions.indices.contains(index) ? playbook.questions[index] : fallback)
     }
 
-    /// A question's field, with its examples as suggestions you tap.
-    @ViewBuilder private func field(_ question: PlaybookQuestion, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            TextField(question.label, text: text, axis: .vertical)
-                .lineLimit(1...3)
-            if !question.suggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.sm) {
-                        ForEach(question.suggestions, id: \.self) { suggestion in
-                            Button(suggestion) { text.wrappedValue = PlaybookQuestion.adding(suggestion, to: text.wrappedValue) }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .accessibilityHint("Adds “\(suggestion)” to your answer")
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     private func look(_ playbook: Playbook) -> BotLook {
         let suggested = BotLook.suggested(for: answers.name)
@@ -183,6 +164,13 @@ struct StartProjectView: View {
         for entry in entries where details[entry.id] == nil {
             details[entry.id] = await registry.template(for: entry)
         }
+        #if DEBUG
+        // `-startTemplate <id>` opens that template's questions (layout checks).
+        if let id = UserDefaults.standard.string(forKey: "startTemplate"), picked == nil {
+            picked = entries.first { $0.id == id }
+            answers.name = UserDefaults.standard.string(forKey: "startName") ?? ""
+        }
+        #endif
     }
 
     private func start(_ entry: TemplateEntry, _ playbook: Playbook) async {

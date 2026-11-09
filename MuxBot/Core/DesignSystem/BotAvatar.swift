@@ -594,13 +594,16 @@ struct BotLookPicker: View {
     private var moods: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("Preview a state").font(AppFont.caption(.semibold)).foregroundStyle(Color.secondaryText)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: Spacing.xs)], alignment: .leading, spacing: Spacing.xs) {
+            // One row of five, each the same width, so none drops to a
+            // line of its own.
+            HStack(spacing: Spacing.xs) {
                 ForEach(AvatarMood.allCases) { state in
                     let on = mood == state
                     Button { var p = preview; p.show(state); mood = p.mood } label: {
                         Text(state.name)
                             .font(AppFont.caption(on ? .semibold : .regular))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Spacing.xs + 1)
                             .background(Capsule().fill(on ? Color.brandBlue.opacity(0.2) : Color.secondary.opacity(0.1)))
@@ -618,8 +621,9 @@ struct BotLookPicker: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(title).font(AppFont.caption(.semibold)).foregroundStyle(Color.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // A wrapping grid, not an HStack: 12 swatches are wider than a phone's form row.
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 30, maximum: 34), spacing: Spacing.sm)], alignment: .leading, spacing: Spacing.sm) {
+            // Even rows (12 as 12, 6 or 4 per row as width allows): never one
+            // swatch on a line of its own.
+            EvenGrid(spacing: Spacing.sm) {
                 ForEach(Array(hexes.enumerated()), id: \.element) { index, hex in
                     Button { pick(hex) } label: {
                         Circle().fill(Color(hex: hex))
