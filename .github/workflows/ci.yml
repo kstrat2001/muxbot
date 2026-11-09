@@ -43,9 +43,13 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -quiet CODE_SIGNING_ALLOWED=NO $NO_ICLOUD
 
+      # The scheme also lists the iOS-only UI test target, so iOS products
+      # get built here too: sign ad hoc on macOS only, not at all for iOS.
       - name: Unit tests on macOS
         run: |
           xcodebuild test -project MuxBot.xcodeproj -scheme MuxBot \
             -destination 'platform=macOS' -only-testing:MuxBotTests \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
-            ENABLE_HARDENED_RUNTIME=NO -quiet $NO_ICLOUD
+            DEVELOPMENT_TEAM= \
+            'CODE_SIGN_STYLE[sdk=macosx*]=Manual' 'CODE_SIGN_IDENTITY[sdk=macosx*]=-' \
+            'ENABLE_HARDENED_RUNTIME[sdk=macosx*]=NO' \
+            'CODE_SIGNING_ALLOWED[sdk=iphone*]=NO' -quiet $NO_ICLOUD
