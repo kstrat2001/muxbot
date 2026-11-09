@@ -41,8 +41,15 @@ final class AppRouter {
     /// Whether the thread on screen is a bot's (the lead bot has no info).
     var canShowInfo: Bool { context.botId != nil }
 
-    /// ⌘I: the info of the bot on screen.
-    func showInfo() { infoBotId = context.botId }
+    /// ⌘I: the info of the bot on screen. It's a popover on the bot's
+    /// sidebar row, so a collapsed sidebar (or a full-window preview) comes
+    /// back first.
+    func showInfo() {
+        infoBotId = context.botId
+        guard infoBotId != nil else { return }
+        if columnVisibility == .detailOnly { columnVisibility = .all }
+        if previewFullScreen { previewFullScreen = false }
+    }
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.

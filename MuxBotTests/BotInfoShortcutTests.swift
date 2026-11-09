@@ -15,6 +15,27 @@ struct BotInfoShortcutTests {
         #expect(router.infoBotId == id)
     }
 
+    /// The info is a popover on the bot's sidebar row: with the sidebar
+    /// collapsed, ⌘I shows the sidebar so the info has somewhere to open.
+    @Test func commandIWorksWithTheSidebarCollapsed() {
+        let router = AppRouter()
+        router.usesSidebar = true
+        router.columnVisibility = .detailOnly
+        let id = UUID()
+        router.sidebar = .bot(id)
+        router.showInfo()
+        #expect(router.infoBotId == id)
+        #expect(router.columnVisibility != .detailOnly)
+
+        // A full-window preview hides the sidebar too.
+        router.infoBotId = nil
+        router.showPreview = true
+        router.previewFullScreen = true
+        router.showInfo()
+        #expect(router.infoBotId == id)
+        #expect(!router.previewFullScreen)
+    }
+
     @Test func theLeadBotHasNoInfo() {
         let router = AppRouter()
         router.usesSidebar = true
