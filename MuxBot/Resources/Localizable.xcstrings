@@ -650,6 +650,9 @@
     "Mux Bot picks: the first in the Auto order that's running." : {
 
     },
+    "Mux Bot, your guide" : {
+
+    },
     "Name" : {
 
     },
@@ -672,9 +675,6 @@
 
     },
     "New bot…" : {
-
-    },
-    "New here? Ask me to check your setup, or to make a bot from your repo." : {
 
     },
     "Next" : {
@@ -780,9 +780,6 @@
 
     },
     "Opens it" : {
-
-    },
-    "Opens your conversation with %@" : {
 
     },
     "Or make a bot for code you already have with New bot." : {

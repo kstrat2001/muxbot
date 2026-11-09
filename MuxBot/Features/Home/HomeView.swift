@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// "Your bots": the lead bot on top, then bot tiles grouped Needs you /
+/// "Your bots": Mux Bot featured on top (LeadBotTile), then bot tiles grouped Needs you /
 /// Working / Ready from stored state. The bar at the bottom talks to the lead bot.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
@@ -14,7 +14,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
-                Button { router.navigate(to: .lead) } label: { LeadBotCard() }
+                Button { router.navigate(to: .lead) } label: { LeadBotTile() }
                     .buttonStyle(.plain)
                 ForEach(BotState.allCases, id: \.self) { state in
                     let group = roles.filter { $0.state == state }
@@ -152,35 +152,5 @@ struct RoleAvatar: View {
         #else
         NSImage(data: data).map(Image.init(nsImage:))
         #endif
-    }
-}
-
-/// The lead bot's card: its latest line, tap to open the full thread.
-struct LeadBotCard: View {
-    @Query(filter: #Predicate<ChatConversation> { $0.roleId == nil }) private var threads: [ChatConversation]
-
-    private var latest: String {
-        let messages = (threads.first?.messages ?? []).filter { $0.role == .assistant }
-        return messages.max { $0.timestamp < $1.timestamp }?.content
-            ?? (Guide.isEnabled ? String(localized: "New here? Ask me to check your setup, or to make a bot from your repo.")
-                : "Tell me what needs doing and I'll get the right bot on it.")
-    }
-
-    var body: some View {
-        CardView {
-            HStack(alignment: .top, spacing: Spacing.md) {
-                BotAvatarView(look: .lead, size: 44)
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(LeadBot.name).font(AppFont.headline())
-                    Text(latest)
-                        .font(AppFont.subheadline())
-                        .foregroundStyle(Color.secondaryText)
-                        .lineLimit(3)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens your conversation with \(LeadBot.name)")
     }
 }

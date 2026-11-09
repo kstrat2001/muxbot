@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// The macOS / iPad sidebar: Mux Bot, each bot (character, name, unread dot,
-/// status), "New bot", then Activity.
+/// The macOS / iPad sidebar (`SidebarLayout`): Mux Bot featured on top, then
+/// each bot (character, name, unread dot, status), "New bot", then Activity.
 struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
@@ -22,9 +22,15 @@ struct BotSidebar: View {
         @Bindable var router = router
         return List(selection: $router.sidebar) {
             Section {
-                Self.row(name: LeadBot.name, look: .lead, id: nil, unread: unread(nil), state: nil)
-                    .tag(SidebarItem.lead)
-                    .botContextMenu(nil)
+                Button { router.sidebar = .lead } label: {
+                    LeadBotTile(selected: router.sidebar == .lead, unread: unread(nil))
+                }
+                .buttonStyle(.plain)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .botContextMenu(nil)   // ⌘1 (Go menu) opens it from the keyboard
+            }
+            Section {
                 ForEach(bots) { bot in
                     Self.row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: NeedsYou.shownState(bot))
                         #if os(macOS)
