@@ -38,7 +38,9 @@ final class GitHubAuth {
         self.session = session
         self.keychain = keychain
         self.sleep = sleep
-        if keychain.get(key: Self.tokenKey) != nil {
+        let stored = keychain.get(key: Self.tokenKey)
+        cachedToken = .some(stored)
+        if stored != nil {
             state = .signedIn(login: UserDefaults.standard.string(forKey: Self.loginKey) ?? "GitHub")
         }
     }
@@ -47,7 +49,15 @@ final class GitHubAuth {
     /// Config/Local.xcconfig).
     var isConfigured: Bool { clientID.map { !$0.isEmpty && !$0.hasPrefix("$(") } ?? false }
 
-    var token: String? { keychain.get(key: Self.tokenKey) }
+    /// The token, read from the Keychain once and kept: views ask for it on
+    /// every redraw, and a Keychain read takes milliseconds.
+    var token: String? {
+        if let cachedToken { return cachedToken }
+        let read = keychain.get(key: Self.tokenKey)
+        cachedToken = .some(read)
+        return read
+    }
+    @ObservationIgnored private var cachedToken: String??
 
     /// Starts the device flow and waits for your approval. `showCode` gets
     /// the code to type and where (the UI also opens the page).
@@ -71,6 +81,7 @@ final class GitHubAuth {
                 ])
                 if let token = p.access_token {
                     _ = keychain.save(key: Self.tokenKey, value: token)
+                    cachedToken = .some(token)
                     await loadUser()
                     return
                 }
@@ -108,6 +119,7 @@ final class GitHubAuth {
     func signOut() {
         flow?.cancel()
         keychain.delete(key: Self.tokenKey)
+        cachedToken = .some(nil)
         UserDefaults.standard.removeObject(forKey: Self.loginKey)
         state = .signedOut
     }

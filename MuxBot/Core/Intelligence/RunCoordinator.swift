@@ -629,7 +629,8 @@ final class RunCoordinator {
 
     /// The bot's committed runs not yet in a PR from this thread.
     func unshippedRuns(_ bot: Bot, store: BotStore) -> [BotRun] {
-        let lastPR = (store.conversation(for: .bot(bot.id)).messages ?? [])
+        // Read on every redraw of the thread's toolbar: never makes a thread.
+        let lastPR = (store.existingConversation(for: .bot(bot.id))?.messages ?? [])
             .filter { $0.kind == .prCard }.map(\.timestamp).max() ?? .distantPast
         return (bot.runs ?? []).filter { $0.keptCommit != nil && $0.phase == .result && ($0.finishedAt ?? $0.createdAt) > lastPR }
             .sorted { $0.createdAt < $1.createdAt }

@@ -197,6 +197,12 @@ struct BotStore {
 
     /// The thread for a context, created on first use. The lead bot's
     /// thread has no role id.
+    /// The thread if it exists, without making one (safe from a view's body).
+    func existingConversation(for chat: ChatContext) -> ChatConversation? {
+        let roleId = chat.botId
+        return ((try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId }))) ?? []).first
+    }
+
     func conversation(for chat: ChatContext) -> ChatConversation {
         let roleId = chat.botId
         let matching = (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId }))) ?? []
