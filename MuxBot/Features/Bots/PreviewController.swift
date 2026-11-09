@@ -71,6 +71,14 @@ final class PreviewController: PageInspecting {
         #endif
     }
 
+    /// Loads the page again (after a run changed files): what the preview
+    /// shows is then what the dev server serves now, whether or not its
+    /// hot reload reached the page.
+    func reload() {
+        guard loadedURL != nil else { return }
+        _ = page.reload()
+    }
+
     func facts(for terms: [String]) async -> PageFacts? {
         guard loadedURL != nil, !page.isLoading else { return nil }
         let json = try? await page.callJavaScript(BugReport.factsScript, arguments: ["terms": terms]) as? String

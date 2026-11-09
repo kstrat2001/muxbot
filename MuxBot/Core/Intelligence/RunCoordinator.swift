@@ -99,6 +99,7 @@ final class RunCoordinator {
             if let workUndoer { undone = try await workUndoer(workId) } else { undone = try await connection.client.undoWork(token: token, workId: workId) }
             store.append(.system, RunResultText.discarded(restored: undone.files, removed: []).replacingOccurrences(of: "Put back", with: "Undone: put back"), to: thread)
             decisionErrors[run.id] = nil
+            Task { await self.refreshPreview(for: bot) }
             if run.phase == .result {
                 store.apply(.discard, to: run)
             } else {
@@ -214,6 +215,8 @@ final class RunCoordinator {
         run.details = status.commitError
         let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
         store.apply(.finish(summary: summary), to: run)
+        // Show the change in the preview you have open.
+        if !run.changedFiles.isEmpty, let bot = run.bot { Task { await self.refreshPreview(for: bot) } }
         if !run.changedFiles.isEmpty, checkSpecs[run.id] != nil {
             // Give the preview's hot reload a moment, then check.
             Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
@@ -354,6 +357,38 @@ final class RunCoordinator {
 
     /// darkmux-run previews, by bot.
     var livePreviews: [UUID: LivePreview] = [:]
+    /// Counts up each time a bot's open preview should reload (after a run
+    /// changed files, or Undo); the panel reloads its page on a change.
+    var previewReloads: [UUID: Int] = [:]
+
+    /// After a run changed files (or Undo put them back): the preview this
+    /// app opened shows the result. darkmux is asked its status first, so a
+    /// preview that stopped meanwhile is never left on screen as a stale
+    /// page: a live one is reloaded, a stopped one restarted (the panel
+    /// shows its status card meanwhile). A preview nobody opened isn't
+    /// started.
+    func refreshPreview(for bot: Bot) async {
+        guard let name = bot.workspaceName, previewWorkspaces[bot.id] != nil,
+              let status = livePreviews[bot.id]?.status, status == .ready else { return }
+        let now: LivePreview?
+        if let previewFetcher {
+            now = try? await previewFetcher(false)
+        } else if let connection, let token = connection.token {
+            now = try? await connection.client.previewStatus(token: token, workspace: name).live
+        } else {
+            now = nil
+        }
+        // Left the thread meanwhile: nothing to show.
+        guard livePreviews[bot.id]?.status == .ready else { return }
+        if let now, now.status == .ready {
+            livePreviews[bot.id] = now
+            previewReloads[bot.id, default: 0] += 1
+            return
+        }
+        Self.previewLog.info("preview \(name, privacy: .public): not running after the run, starting it again")
+        livePreviews[bot.id] = now ?? LivePreview(status: .stopped)
+        await ensurePreview(for: bot)
+    }
 
     /// The URL the preview panel shows for a bot.
     func previewURL(for bot: Bot) -> URL? {

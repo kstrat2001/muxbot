@@ -19,6 +19,7 @@ struct PreviewPanel: View {
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
+    @Environment(BotBrain.self) private var brain
     @State private var copiedNote: String?
     /// The camera shows a checkmark for a moment after a copy.
     @State private var copied = false
@@ -96,6 +97,8 @@ struct PreviewPanel: View {
                 }
         }
         .task(id: url) { preview.show(url) }
+        // A run changed files (or Undo): show what the server serves now.
+        .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { preview.reload() }
     }
 
     private func settle(for size: CGSize) {
