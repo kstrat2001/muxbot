@@ -12,7 +12,13 @@ final class LeadGuide {
     var library = HelpLibrary.bundled
     private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "guide")
 
-    static let dontKnow = String(localized: "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux.")
+    static let dontKnow = String(localized: "I don't know that one: it isn't in Mux Bot's help. I can help you start a project, get set up, and answer questions about Mux Bot and darkmux.")
+
+    /// The first thing Mux Bot says in his thread.
+    nonisolated static let intro = String(localized: "Hi, I'm \(LeadBot.name). I can help you start a project, check your setup, change a setting, and answer questions about how Mux Bot and darkmux work. Try “start a project”.")
+    /// His reply to anything the guide doesn't take: what he does, never an
+    /// improvised answer.
+    nonisolated static let menuText = String(localized: "I can help you start a project, check your setup, change a setting, or explain how something works. Pick one below, or tell me which.")
 
     func respond(_ route: GuideRoute, to text: String, store: BotStore, brain: BotBrain) async {
         let thread = store.conversation(for: .lead)
@@ -42,6 +48,11 @@ final class LeadGuide {
             for setting in shown { store.postGuideCard(.setting(setting.id), summary: setting.title) }
         case .help:
             await answer(text, store: store, brain: brain)
+        case let .startProject(template):
+            let title = template.flatMap { id in TemplateRegistry.knownTemplates().first { $0.id == id }?.title }
+            store.append(.assistant, title.map { String(localized: "Let's start: \($0).") }
+                         ?? String(localized: "Let's start a project. Pick what you want to make."), to: thread)
+            brain.openStart?(template)
         }
     }
 

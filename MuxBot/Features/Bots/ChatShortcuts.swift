@@ -57,6 +57,12 @@ enum ChatShortcuts {
 
     /// Whether the row shows: not while you're typing, tweaking or pointing,
     /// and not while a card in this thread waits for Approve.
+    /// Mux Bot's chips stay while you type in his thread (Start a project
+    /// is what you're likely after); only a card waiting for Approve hides them.
+    static func showsRow(draft: String, tweaking: Bool, picked: Bool, waitingCard: Bool, lead: Bool) -> Bool {
+        lead ? !waitingCard : showsRow(draft: draft, tweaking: tweaking, picked: picked, waitingCard: waitingCard)
+    }
+
     static func showsRow(draft: String, tweaking: Bool, picked: Bool, waitingCard: Bool) -> Bool {
         draft.isEmpty && !tweaking && !picked && !waitingCard
     }

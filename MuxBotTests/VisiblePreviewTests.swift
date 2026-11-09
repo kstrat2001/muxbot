@@ -30,10 +30,14 @@ struct VisiblePreviewTests {
             .frame(width: size.width, height: size.height)
             .scaleEffect(scale, anchor: .topLeading)
             .frame(width: size.width * scale, height: size.height * scale, alignment: .topLeading)
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale),
+        // Far off every screen, so nobody sees a test window flash (the web
+        // view still renders and snapshots there).
+        let window = NSWindow(contentRect: CGRect(x: -20_000, y: -20_000, width: size.width * scale, height: size.height * scale),
                               styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: content)
         window.orderFrontRegardless()
+        window.setFrameOrigin(CGPoint(x: -20_000, y: -20_000))
         preview.show(try #require(URL(string: "data:text/html;base64," + Data(Self.html.utf8).base64EncodedString())))
         for _ in 0..<100 where preview.page.isLoading || preview.page.url == nil {
             try await Task.sleep(for: .milliseconds(50))
@@ -68,7 +72,7 @@ struct VisiblePreviewTests {
         let preview = PreviewController()
         let size = CGSize(width: 400, height: 600)
         let window = try await host(preview, size: size, scale: scale)
-        defer { window.orderOut(nil) }
+        defer { window.close() }
         try await scroll(preview, to: 500)
 
         let png = try #require(await preview.visiblePNG(scale: window.backingScaleFactor), "\(label): no copy")
@@ -88,7 +92,7 @@ struct VisiblePreviewTests {
         let preview = PreviewController()
         let size = CGSize(width: 400, height: 600)
         let window = try await host(preview, size: size, scale: 1)
-        defer { window.orderOut(nil) }
+        defer { window.close() }
         // The panel hands the controller its display's scale; do the same here,
         // so the check holds on a 1x screen (CI) as well as a 2x one.
         preview.displayScale = window.backingScaleFactor

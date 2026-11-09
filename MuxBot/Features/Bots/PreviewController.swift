@@ -5,19 +5,68 @@ import WebKit
 /// snapshot, while the panel shows it.
 @MainActor @Observable
 final class PreviewController: PageInspecting {
-    let page: WebPage
+    /// The page the panel shows. Each bot gets a fresh one (`show(_:for:)`),
+    /// so its history never holds another bot's preview.
+    private(set) var page: WebPage
     private let relay = PickRelay()
+    /// The bot whose preview `page` shows.
+    private(set) var botId: UUID?
 
     init() {
-        // The page posts picks to the app the moment they happen; the
-        // selection menu script is installed on every load.
+        page = Self.makePage(relay: relay)
+        relay.onPick = { [weak self] element in self?.received(element) }
+        watchForMarks()
+    }
+
+    /// A page with the app's scripts: picks are posted to the app the moment
+    /// they happen, and the selection menu is installed on every load. Back
+    /// and forward are refused (a key or swipe must never bring back an
+    /// older page, or a stopped preview's cached one).
+    private static func makePage(relay: PickRelay) -> WebPage {
         var config = WebPage.Configuration()
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: BugReport.pageScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         scripts.add(relay, name: BugReport.handlerName)
         config.userContentController = scripts
-        page = WebPage(configuration: config)
-        relay.onPick = { [weak self] element in self?.received(element) }
+        return WebPage(configuration: config, navigationDecider: NoBackForward())
+    }
+
+    /// Shows `url` as `bot`'s preview. Another bot's preview gets a fresh
+    /// page: no history, no pick and no page from the bot before.
+    func show(_ url: URL, for bot: UUID?) {
+        if bot != botId {
+            botId = bot
+            isPicking = false
+            picked = nil
+            pickedCrop = nil
+            loadedURL = nil
+            page = Self.makePage(relay: relay)
+            watchForMarks()
+        }
+        show(url)
+    }
+
+    /// A reload or a new page while a chip is attached: outline its element
+    /// again once the page is there (gone: no outline). Restarted for each
+    /// bot's fresh page, so it always watches the page on screen.
+    private func watchForMarks() {
+        markWatch?.cancel()
+        let page = page
+        markWatch = Task { [weak self] in
+            do {
+                for try await event in page.navigations where event == .finished {
+                    guard !Task.isCancelled else { return }
+                    guard let self, self.page === page, let picked = self.picked else { continue }
+                    await self.mark(picked)
+                }
+            } catch {}
+        }
+    }
+    private var markWatch: Task<Void, Never>?
+
+    /// Outlines the picked element in the page while its chip is attached.
+    private func mark(_ element: PickedElement) async {
+        _ = try? await page.callJavaScript("return window.__muxMark ? window.__muxMark(sel) : false", arguments: ["sel": element.selector])
     }
     private(set) var loadedURL: URL?
     /// Pick mode: hover highlights, a click picks an element.
@@ -44,7 +93,10 @@ final class PreviewController: PageInspecting {
             try? element.selector.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-pick.txt"), atomically: true, encoding: .utf8)
         }
         #endif
-        Task { pickedCrop = await crop(element) }
+        Task {
+            pickedCrop = await crop(element)
+            await mark(element)
+        }
     }
 
     /// The crop of the element in the last message sent, for its bug card.
@@ -52,6 +104,7 @@ final class PreviewController: PageInspecting {
 
     func clearPick() {
         if picked != nil { lastSentCrop = pickedCrop }
+        if picked != nil { Task { _ = try? await page.callJavaScript("if (window.__muxUnmark) window.__muxUnmark(); return true;") } }
         picked = nil
         pickedCrop = nil
     }
@@ -133,6 +186,16 @@ final class PreviewController: PageInspecting {
         CGRect(x: Double(element.x) - scrollX - 12, y: Double(element.y) - scrollY - 12,
                width: Double(element.width) + 24, height: Double(element.height) + 24)
     }
+}
+
+/// Refuses back and forward navigations in the preview (Delete, a swipe,
+/// a menu): the preview always shows the bot's current page.
+struct NoBackForward: WebPage.NavigationDeciding {
+    func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
+        action.navigationType == .backForward ? .cancel : .allow
+    }
+
+    func decidePolicy(for response: WebPage.NavigationResponse) async -> WKNavigationResponsePolicy { .allow }
 }
 
 /// Receives the page's posted picks (WebKit calls it on the main thread).

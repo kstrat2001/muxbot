@@ -662,6 +662,9 @@
     "Hi, I'm %@. Here's a first change, made from what you told me. Tap Approve to see it in the preview, then tell me what to change or point at something on the page." : {
 
     },
+    "Hi, I'm %@. I can help you start a project, check your setup, change a setting, and answer questions about how Mux Bot and darkmux work. Try “start a project”." : {
+
+    },
     "Hi, I'm %@. I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”." : {
 
     },
@@ -692,10 +695,16 @@
     "How this app reaches darkmux" : {
 
     },
+    "I can help you start a project, check your setup, change a setting, or explain how something works. Pick one below, or tell me which." : {
+
+    },
     "I can make %@ for that. Approve to add it." : {
 
     },
     "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
+
+    },
+    "I don't know that one: it isn't in Mux Bot's help. I can help you start a project, get set up, and answer questions about Mux Bot and darkmux." : {
 
     },
     "I made github.com/%@, but couldn't add the template's files to it (%@). It's empty: delete it on GitHub or try again with another name." : {
@@ -761,6 +770,12 @@
 
     },
     "Left out %@ you approved: the repo already has one, and I don't write over it." : {
+
+    },
+    "Let's start a project. Pick what you want to make." : {
+
+    },
+    "Let's start: %@." : {
 
     },
     "Live" : {
@@ -885,6 +900,9 @@
 
     },
     "New Bot…" : {
+
+    },
+    "New Project…" : {
 
     },
     "New bot" : {
@@ -1164,6 +1182,12 @@
     "Ready when this page answers" : {
 
     },
+    "Reinstalls the project's packages, then starts the preview again. Your files aren't touched." : {
+
+    },
+    "Reload the preview" : {
+
+    },
     "Remove" : {
 
     },
@@ -1350,6 +1374,9 @@
     "Start a project" : {
 
     },
+    "Start a project (⌘N)" : {
+
+    },
     "Start a project…" : {
 
     },
@@ -1360,6 +1387,9 @@
 
     },
     "Start it in Terminal and leave it running. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one." : {
+
+    },
+    "Start over" : {
 
     },
     "Start something new from a template, paste a GitHub link in the bar below, or make one for code you have." : {
