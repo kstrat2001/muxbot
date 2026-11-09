@@ -20,6 +20,7 @@ struct PreviewPanel: View {
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
     @Environment(BotBrain.self) private var brain
+    @Environment(\.modelContext) private var context
     /// Copies are made at this screen's scale.
     @Environment(\.displayScale) private var displayScale
     @State private var copiedNote: String?
@@ -53,6 +54,14 @@ struct PreviewPanel: View {
                 Menu {
                     ForEach(PreviewViewport.allCases, id: \.self) { option in
                         Button(option.label, systemImage: option.systemImage) { choose(option) }
+                    }
+                    // "Something's off": reinstall the packages and start again.
+                    if brain.runs.canStartOver, let bot = startOverBot {
+                        Divider()
+                        Button("Start over", systemImage: "arrow.counterclockwise") {
+                            Task { await brain.runs.startOver(for: bot) }
+                        }
+                        .help(PreviewFailure.startOverNote)
                     }
                 } label: {
                     Label(currentViewport.label, systemImage: currentViewport.systemImage)
@@ -100,8 +109,14 @@ struct PreviewPanel: View {
                 }
         }
         .task(id: url) { preview.show(url) }
+        .task { await brain.runs.checkStartOver() }
         // A run changed files (or Undo): show what the server serves now.
         .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { preview.reload() }
+    }
+
+    /// The bot whose darkmux preview this is (Start over needs its workspace).
+    private var startOverBot: Bot? {
+        botId.flatMap { BotStore(context: context).bot(id: $0) }.flatMap { $0.workspaceName == nil ? nil : $0 }
     }
 
     private func settle(for size: CGSize) {
