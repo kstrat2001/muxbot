@@ -70,6 +70,9 @@ enum PreviewViewport: String, CaseIterable, Sendable {
     /// ways. Desktop lays out at its width, scaled down to fit across, and
     /// tall enough to fill the panel; Fit is the panel.
     func layout(in size: CGSize) -> Layout {
+        // SwiftUI's first pass can be .zero: never a size under 1pt to
+        // divide by (a NaN or infinite height otherwise).
+        let size = CGSize(width: max(1, size.width), height: max(1, size.height))
         guard let width else { return Layout(width: size.width, height: size.height, scale: 1) }
         if let height {
             let room = CGSize(width: max(1, size.width - 2 * Self.devicePadding), height: max(1, size.height - 2 * Self.devicePadding))

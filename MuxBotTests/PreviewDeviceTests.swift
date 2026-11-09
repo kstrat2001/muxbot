@@ -52,6 +52,20 @@ struct PreviewDeviceLayoutTests {
         #expect(l.origin(in: CGSize(width: 720, height: 900)) == .zero)
     }
 
+    /// Before the panel has a size (SwiftUI's first pass is .zero), and at
+    /// slivers, every size gives finite numbers: no NaN or infinite height.
+    @Test(arguments: [CGSize.zero, CGSize(width: 0, height: 900), CGSize(width: 0.5, height: 0), CGSize(width: 1, height: 1),
+                      CGSize(width: 900, height: 0), CGSize(width: -10, height: -10)])
+    func anEmptyOrTinyPanelGivesFiniteLayouts(size: CGSize) {
+        for viewport in PreviewViewport.allCases {
+            let l = viewport.layout(in: size)
+            #expect(l.width.isFinite && l.height.isFinite && l.scale.isFinite, "\(viewport) in \(size): \(l)")
+            #expect(l.scale > 0 && l.width >= 0 && l.height >= 0, "\(viewport) in \(size): \(l)")
+            let o = l.origin(in: size)
+            #expect(o.x.isFinite && o.y.isFinite, "\(viewport) in \(size)")
+        }
+    }
+
     @Test func fitIsThePanelAsIs() {
         let l = PreviewViewport.fit.layout(in: CGSize(width: 683, height: 900))
         #expect(l == .init(width: 683, height: 900, scale: 1))
