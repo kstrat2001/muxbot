@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// "What do you want to get done?": pick a use case (a template), answer the
 /// playbook's questions, and Mux Bot makes the bot and its project on this
@@ -20,6 +21,10 @@ struct StartProjectView: View {
     @State private var details: [String: TemplateDetails] = [:]
     private var playbooks: [String: Playbook] { details.compactMapValues(\.playbook) }
     @State private var picked: TemplateEntry?
+    /// The new bot's look: fresh when a template is picked, rerolled with
+    /// Shuffle, and exactly what the bot gets.
+    @State private var look = BotLook.fresh(avoiding: [])
+    @Query private var bots: [Bot]
     @State private var answers = StartProject.Answers(name: "")
     @State private var starting = false
     /// "Work on a project I already have" is open.
@@ -54,6 +59,8 @@ struct StartProjectView: View {
             }
         }
         .task { await load() }
+        // A fresh look each time a template is picked.
+        .onChange(of: picked?.id) { if picked != nil { look = BotLook.fresh(avoiding: bots.map(\.look)) } }
         .sheet(isPresented: $signingIn) {
             NavigationStack {
                 GitHubSignInView()
@@ -134,7 +141,11 @@ struct StartProjectView: View {
         Form {
             Section {
                 HStack(spacing: Spacing.md) {
-                    BotAvatarView(look: look(playbook), size: 44)
+                    BotAvatarView(look: look, size: 44)
+                    Button("Shuffle the look", systemImage: "shuffle") { look = BotLook.fresh(avoiding: bots.map(\.look)) }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Shuffle the look")
                     Text(playbook.pitch).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
             }
@@ -190,11 +201,6 @@ struct StartProjectView: View {
     }
 
 
-    private func look(_ playbook: Playbook) -> BotLook {
-        let suggested = BotLook.suggested(for: answers.name)
-        return BotLook(animal: playbook.animal ?? suggested.animal, bodyHex: playbook.bodyHex ?? suggested.bodyHex,
-                       eyeHex: playbook.eyeHex ?? suggested.eyeHex)
-    }
 
     private func load() async {
         let registry = TemplateRegistry.shared
@@ -218,7 +224,7 @@ struct StartProjectView: View {
         let store = BotStore(context: context)
         let bot: Bot
         do {
-            bot = try await StartProject.start(entry, playbook: playbook, answers: answers, github: github.token.map { GitHubRepoMaker(token: $0) },
+            bot = try await StartProject.start(entry, playbook: playbook, answers: answers, look: look, github: github.token.map { GitHubRepoMaker(token: $0) },
                                                store: store, runs: brain.runs)
         } catch {
             // Nothing was made on this Mac; the form says why.
