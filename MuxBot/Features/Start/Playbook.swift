@@ -173,6 +173,8 @@ struct PlaybookQuestion: Equatable, Sendable {
         let items = inside.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
+            // "a, b, or c": the last item without its "or".
+            .map { item in ["or ", "and "].first { item.lowercased().hasPrefix($0) }.map { String(item.dropFirst($0.count)) } ?? item }
             .filter { !$0.isEmpty }
         guard items.count >= 2 else {
             label = trimmed

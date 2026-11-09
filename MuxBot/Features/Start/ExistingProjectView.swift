@@ -130,9 +130,8 @@ struct ExistingProjectView: View {
     private var detailsStep: some View {
         Form {
             Section {
-                TextField("What should the bot be called?", text: $name)
-                TextField("What is this project, in a sentence?", text: $purpose, axis: .vertical)
-                    .lineLimit(1...3)
+                QuestionField(question: PlaybookQuestion(String(localized: "What should the bot be called?")), text: $name, lines: 1...1)
+                QuestionField(question: PlaybookQuestion(String(localized: "What is this project, in a sentence?")), text: $purpose)
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text(projectPlaybook == nil

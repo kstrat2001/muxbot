@@ -128,8 +128,8 @@ struct TemplateRegistryTests {
         let cache = dir.appendingPathComponent("templates.json")
         let offline = TemplateRegistry(cacheURL: cache) { _ in throw Offline() }
         let builtIn = await offline.templates()
-        #expect(builtIn.map(\.id) == ["website"], "the copy built into the app")
-        #expect(builtIn.first.map { TemplateRegistry.isPinned($0.ref) } == true)
+        #expect(builtIn.map(\.id) == ["website", "book"], "the copy built into the app")
+        #expect(builtIn.allSatisfy { TemplateRegistry.isPinned($0.ref) })
 
         let online = TemplateRegistry(cacheURL: cache) { _ in
             Data(#"{"schema":1,"templates":[{"id":"docs","repo":"a/b","ref":"0123456789abcdef0123456789abcdef01234567","title":"Write docs","icon":"book"}]}"#.utf8)
@@ -301,7 +301,7 @@ struct TemplateSchemaTests {
     @Test func theBuiltInCopiesFollowSchemaOne() throws {
         let files = try #require(TemplateRegistry.bundledFiles(for: "website"))
         #expect(TemplateRegistry.check(playbook: files.playbook, preview: files.preview).playbook != nil)
-        #expect(TemplateRegistry.bundledTemplates().map(\.id) == ["website"])
+        #expect(TemplateRegistry.bundledTemplates().map(\.id) == ["website", "book"])
     }
 }
 
