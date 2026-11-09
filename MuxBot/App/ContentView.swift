@@ -59,7 +59,11 @@ struct ContentView: View {
             if let run = BotStore(context: context).run(id: id) { router.open(run) }
             return .handled
         })
+        #if os(iOS)
+        // On the Mac the menu bar item keeps the Dock badge (it lives while
+        // the window is closed).
         .onChange(of: waitingCount, initial: true) { notifications.setBadge(waitingCount) }
+        #endif
     }
 
     #if DEBUG

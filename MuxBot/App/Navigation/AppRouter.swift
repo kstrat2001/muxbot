@@ -12,11 +12,16 @@ enum SidebarItem: Hashable {
 @MainActor @Observable
 final class AppRouter {
     var tab: AppTab = .bots
-    var path: [Route] = []
+    var path: [Route] = [] {
+        // Another thread: the full-window preview was the bot before's.
+        didSet { if path != oldValue { previewFullScreen = false } }
+    }
     /// Sidebar layout (macOS, iPad): the selected row picks the thread
     /// directly, with no Home grid and no back button.
     var usesSidebar = false
-    var sidebar: SidebarItem? = .lead
+    var sidebar: SidebarItem? = .lead {
+        didSet { if sidebar != oldValue { previewFullScreen = false } }
+    }
     /// The Mac / iPad sidebar's own show-hide state (the toolbar toggle).
     var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
@@ -30,7 +35,10 @@ final class AppRouter {
     /// Text waiting in the bot bar, e.g. from Fleet's "Ask <bot> about this".
     var barDraft = ""
     /// The live preview panel beside (or above) the thread on screen.
-    var showPreview = false
+    var showPreview = false {
+        // Hiding the preview brings the sidebar and its toggle back.
+        didSet { if !showPreview { previewFullScreen = false } }
+    }
     /// iPhone: the preview fills the thread (handy for picking).
     var previewFullScreen = false
     /// A run to scroll to (and briefly highlight) in its bot's conversation.
@@ -79,6 +87,13 @@ final class AppRouter {
 
     /// Picking an element (or "Chat about this" on selected text) in the
     /// full-screen preview goes back to the chat, where the chip waits.
+    /// A reply or a card that needs you arrived in the thread on screen:
+    /// leave the full-window preview so it's seen (the preview stays open
+    /// beside the chat).
+    func attentionArrived() {
+        if previewFullScreen { previewFullScreen = false }
+    }
+
     func returnToChatAfterPick() {
         showPreview = false
         previewFullScreen = false
