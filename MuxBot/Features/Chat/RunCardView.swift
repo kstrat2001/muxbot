@@ -56,7 +56,7 @@ struct RunCardView: View {
                 if let model = brain.runs.profile(for: run) {
                     HStack {
                         Text("Model: \(model)\(brain.runs.runChoices[run.id].map { " (\($0.reason))" } ?? "")")
-                            .font(AppFont.footnote()).foregroundStyle(.secondary)
+                            .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                         Spacer()
                         if run.phase == .proposed, !brain.runs.lastListed.isEmpty {
                             Menu("Change") {
@@ -78,7 +78,7 @@ struct RunCardView: View {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
                 } else if let reason = brain.runs.whyRunCannotStart(run) {
-                    Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     HStack {
                         Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
                         Spacer()
@@ -118,14 +118,14 @@ struct RunCardView: View {
                 Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
                     .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
             }
-            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
+            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
         case .resultCard:
             if let line = RunCardState.collapsedLine(run) {
                 Label(line, systemImage: run.phase == .discarded ? "arrow.uturn.backward" : "checkmark.circle")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             } else if RunCardState.isReplaced(run) {
                 Label("Replaced by the next run", systemImage: "arrow.turn.down.right")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             } else if run.phase == .result && run.changedFiles.isEmpty {
                 questionCard(run)
             } else {
@@ -139,7 +139,7 @@ struct RunCardView: View {
             RefChips(refs: refs(run))
             switch run.phase {
             case .kept:
-                Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 HStack {
                     Button("Not now") { brain.runs.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
                     Spacer()
@@ -148,9 +148,9 @@ struct RunCardView: View {
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
                 Text("Not opened.")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             default:
-                Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text("No pull request.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case .text, .bugCard, .actionCard, .guideCard:
             EmptyView()
@@ -192,10 +192,10 @@ struct RunCardView: View {
             DisclosureGroup("Details") {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     if let model = brain.runs.profile(for: run) {
-                        Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(.secondary)
+                        Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     }
                     if let branch = run.keptBranch {
-                        Text("Committed to \(branch)\(run.keptCommit.map { " (\($0))" } ?? "")").font(AppFont.footnote()).foregroundStyle(.secondary)
+                        Text("Committed to \(branch)\(run.keptCommit.map { " (\($0))" } ?? "")").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     } else if let why = run.details {
                         Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
                     }
@@ -213,7 +213,7 @@ struct RunCardView: View {
             .font(AppFont.footnote())
             if isLatest && run.phase == .result {
                 HStack {
-                    Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(.secondary)
+                    Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     Spacer()
                     if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
                     Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
@@ -257,7 +257,7 @@ struct RunCardView: View {
                 .buttonStyle(.bordered)
             }
             Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
-                .font(AppFont.caption()).foregroundStyle(.secondary)
+                .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
             decisionError(run)
         }
     }
@@ -281,7 +281,7 @@ struct RunCardView: View {
                                                        set: { brain.runs.override(run, with: $0) })) {
                         ForEach(names, id: \.self) { Text($0).tag($0) }
                     }
-                    Text(choice.reason).font(AppFont.caption()).foregroundStyle(.secondary)
+                    Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
             }
         }
@@ -291,7 +291,7 @@ struct RunCardView: View {
     @ViewBuilder private func doneWhenCheck(_ run: BotRun) -> some View {
         if brain.runs.checking.contains(run.id) {
             Label("Checking the done-when in the preview…", systemImage: "ruler")
-                .font(AppFont.footnote()).foregroundStyle(.secondary)
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
         } else if let check = brain.runs.runChecks[run.id] {
             if check.met {
                 Label("Done when: met (measured in the preview)", systemImage: "checkmark.seal.fill")
@@ -344,14 +344,14 @@ struct RunCardView: View {
         case .settingUp?:
             HStack(spacing: Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case let .failed(why)?:
             Label("Couldn't set up \(what): \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
             buttonsForSetup(bot: bot, run: run, retry: true)
         case nil:
             Text("Set up \(what) on \(machine)? darkmux makes its own copy on a new branch, so your files aren't touched.")
-                .font(AppFont.footnote()).foregroundStyle(.secondary)
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             buttonsForSetup(bot: bot, run: run, retry: false)
         }
     }

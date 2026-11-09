@@ -124,6 +124,11 @@ struct BotAvatarView: View {
     /// in unison). Without one, the look picks the timing.
     var blinkId: UUID? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Dark mode's rim around the silhouette, so the face's dark parts (and a
+    /// dark body color) stand out from a dark background.
+    static let rim = Color.white.opacity(0.38)
 
     private var schedule: BlinkSchedule {
         blinkId.map(BlinkSchedule.init(id:)) ?? BlinkSchedule(seed: BlinkSchedule.stableHash("\(look.animal)\(look.bodyHex)\(look.eyeHex)"))
@@ -132,9 +137,19 @@ struct BotAvatarView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
             let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            Canvas { [schedule] ctx, canvas in
-                ctx.scaleBy(x: canvas.width / 100, y: canvas.height / 100)
-                AvatarPainter(look: look, mood: mood, t: t, still: reduceMotion, blink: schedule).paint(&ctx)
+            Canvas { [schedule, colorScheme] ctx, canvas in
+                let dark = colorScheme == .dark
+                let painter = AvatarPainter(look: look, mood: mood, t: t, still: reduceMotion, blink: schedule, dark: dark)
+                if dark {
+                    // The rim traces the whole silhouette: drawn as one layer,
+                    // so inner edges don't glow.
+                    ctx.addFilter(.shadow(color: Self.rim, radius: max(0.8, canvas.width / 70)))
+                }
+                ctx.drawLayer { layer in
+                    layer.scaleBy(x: canvas.width / 100, y: canvas.height / 100)
+                    var drawn = layer
+                    painter.paint(&drawn)
+                }
             }
         }
         .frame(width: size, height: size)
@@ -151,10 +166,17 @@ struct AvatarPainter {
     let t: Double
     var still = false
     var blink = BlinkSchedule(seed: 1)
+    /// Dark mode: the headset is drawn lighter so it doesn't vanish into a
+    /// dark background (the silhouette also gets a rim; see BotAvatarView).
+    var dark = false
 
     private static let muzzle = Color(hex: "fff4e8")
     private static let ink = Color(hex: "1d1f27")
-    private static let headset = Color(hex: "2b2f3a")
+    static let headsetHex = "2b2f3a"
+    /// The headset in dark mode: at least 3:1 against every dark background
+    /// the app draws avatars on (checked in ContrastTests).
+    static let headsetDarkHex = "70768a"
+    private var headset: Color { Color(hex: dark ? Self.headsetDarkHex : Self.headsetHex) }
     private static let pink = Color(hex: "ff9fb0")
     private static let nosePink = Color(hex: "ff8fa0")
     private static let beak = Color(hex: "f2b632")
@@ -384,7 +406,7 @@ struct AvatarPainter {
     // MARK: Headset
 
     private func drawHeadset(_ ctx: inout GraphicsContext) {
-        let y = headsetY, h = Self.headset
+        let y = headsetY, h = headset
         let micY = mouthY ?? eyeY + 20
         var band = Path()
         band.addRelativeArc(center: CGPoint(x: 50, y: y), radius: 37, startAngle: .degrees(180), delta: .degrees(180))
@@ -547,7 +569,7 @@ struct BotLookPicker: View {
                             BotAvatarView(look: BotLook(animal: animal, bodyHex: look.bodyHex, eyeHex: look.eyeHex), size: 44)
                             Text(animal.name)
                                 .font(AppFont.caption(picked ? .semibold : .regular))
-                                .foregroundStyle(picked ? .primary : .secondary)
+                                .foregroundStyle(picked ? Color.primary : Color.secondaryText)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
@@ -571,7 +593,7 @@ struct BotLookPicker: View {
     /// shows each state's still face.
     private var moods: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text("Preview a state").font(AppFont.caption(.semibold)).foregroundStyle(.secondary)
+            Text("Preview a state").font(AppFont.caption(.semibold)).foregroundStyle(Color.secondaryText)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: Spacing.xs)], alignment: .leading, spacing: Spacing.xs) {
                 ForEach(AvatarMood.allCases) { state in
                     let on = mood == state
@@ -594,7 +616,7 @@ struct BotLookPicker: View {
 
     private func swatches(_ title: String, _ hexes: [String], selected: String, pick: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(title).font(AppFont.caption(.semibold)).foregroundStyle(.secondary)
+            Text(title).font(AppFont.caption(.semibold)).foregroundStyle(Color.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             // A wrapping grid, not an HStack: 12 swatches are wider than a phone's form row.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 30, maximum: 34), spacing: Spacing.sm)], alignment: .leading, spacing: Spacing.sm) {

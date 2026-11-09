@@ -27,10 +27,10 @@ struct PreviewPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Spacing.sm) {
-                Image(systemName: "safari").foregroundStyle(.secondary).accessibilityHidden(true)
+                Image(systemName: "safari").foregroundStyle(Color.secondaryText).accessibilityHidden(true)
                 Text(url.host() ?? url.absoluteString)
                     .font(AppFont.caption())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(1)
                 Spacer()
                 Menu {

@@ -24,7 +24,7 @@ struct HomeView: View {
                                 StatusBadge(kind: state.kind)
                                 Text("\(group.count)")
                                     .font(AppFont.caption(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                                     .accessibilityLabel("\(group.count) bots")
                             }
                             .accessibilityElement(children: .combine)
@@ -93,7 +93,7 @@ struct RoleTile: View {
                 Text(role.name).font(AppFont.headline())
                 Text(detail)
                     .font(AppFont.footnote())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(2, reservesSpace: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -174,7 +174,7 @@ struct LeadBotCard: View {
                     Text(LeadBot.name).font(AppFont.headline())
                     Text(latest)
                         .font(AppFont.subheadline())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                         .lineLimit(3)
                 }
                 Spacer(minLength: 0)

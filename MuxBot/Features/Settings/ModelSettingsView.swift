@@ -19,7 +19,7 @@ struct ModelSettingsView: View {
                     Text("Always ask").tag(ModelMode.ask)
                     ForEach(names, id: \.self) { name in Text("Always \(row(name).title)").tag(ModelMode.model(name)) }
                 }
-                Text(explanation).font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text(explanation).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 listingNote
             } header: {
                 Text(brain.runs.machine.map { "On \($0.name)" } ?? "On this Mac")
@@ -66,7 +66,7 @@ struct ModelSettingsView: View {
         case .loading:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Looking at this Mac's models…").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text("Looking at this Mac's models…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case let .failed(reason):
             HStack(alignment: .firstTextBaseline) {
@@ -85,7 +85,7 @@ struct ModelSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.title).lineLimit(1)
                 if let id = r.subtitle {
-                    Text(id).font(AppFont.caption().monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    Text(id).font(AppFont.caption().monospaced()).foregroundStyle(Color.secondaryText).lineLimit(1)
                 }
             }
             .help(r.detail ?? r.name)

@@ -23,16 +23,16 @@ struct FleetPairingView: View {
                 Section {
                     Label("On iPhone and iPad, runs start from the Mac app for now.", systemImage: "laptopcomputer")
                     Text("Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 #else
                 Section {
                     Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 if case let .failed(message) = connection.state {
                     Section {
-                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(Color.secondaryText)
                         CommandBox(command: connection.serveCommand)
                     }
                 }
@@ -66,7 +66,7 @@ struct FleetPairingView: View {
                             if left > 0 { ProgressView().controlSize(.small) }
                             Text(left > 0 ? "Waiting for you to approve… code expires in \(left / 60):\(String(format: "%02d", left % 60))"
                                           : "The code expired. Cancel and pair again.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                 } header: {
@@ -85,7 +85,7 @@ struct FleetPairingView: View {
                         .font(AppFont.headline())
                         .foregroundStyle(Color.brandGreen)
                     Text("darkmux on this Mac decides which models apps may use.")
-                        .font(AppFont.footnote()).foregroundStyle(.secondary)
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
                 Section {
                     Button("Unpair this app", role: .destructive) { connection.unpair() }

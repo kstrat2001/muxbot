@@ -26,7 +26,7 @@ struct SettingsView: View {
                         Button("Allow notifications") { Task { _ = await notifications.requestAuthorization() } }
                     }
                     Text("The Dock icon shows how many runs are waiting on you.")
-                        .font(AppFont.footnote()).foregroundStyle(.secondary)
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
                 .formStyle(.grouped)
                 .task { await notifications.checkAuthorizationStatus() }
@@ -36,7 +36,7 @@ struct SettingsView: View {
                     if let reason = brain.onDeviceUnavailableReason {
                         Label("Not available: \(reason).", systemImage: "exclamationmark.triangle")
                         Text("Bots fall back to simple keyword matching until it's available.")
-                            .font(AppFont.footnote()).foregroundStyle(.secondary)
+                            .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     } else {
                         Label("Apple Intelligence is ready. Bots answer on this device.", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(Color.brandGreen)

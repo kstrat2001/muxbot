@@ -44,7 +44,7 @@ struct BotInfoView: View {
                 }
                 TextField("What this bot is about", text: aboutBinding, axis: .vertical)
                     .lineLimit(2...6)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Section("Look") {
                 BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }), mood: $previewMood)
@@ -83,7 +83,7 @@ struct BotInfoView: View {
                             if resource.kind == .previewURL {
                                 Text("Your preview link, until darkmux runs previews itself.")
                                     .font(AppFont.caption())
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                             }
                         }
                     } icon: {
@@ -96,7 +96,7 @@ struct BotInfoView: View {
                     offsets.map { bot.sortedResources[$0] }.forEach(store.remove)
                 }
                 if bot.sortedResources.isEmpty {
-                    Text("None yet.").foregroundStyle(.secondary)
+                    Text("None yet.").foregroundStyle(Color.secondaryText)
                 }
             }
             Section("Preview") {
@@ -115,7 +115,7 @@ struct BotInfoView: View {
                     recipeRow(repo)
                 }
                 if bot.repoSlugs.isEmpty {
-                    Text("Add a repo and I'll look for its preview recipe.").foregroundStyle(.secondary)
+                    Text("Add a repo and I'll look for its preview recipe.").foregroundStyle(Color.secondaryText)
                 }
             }
             Section("Add a resource") {
@@ -184,19 +184,19 @@ struct BotInfoView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Ready on \(bot.workspaceMachine ?? FleetConnection.machineName)")
                         if let branch, !branch.isEmpty {
-                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(.secondary)
+                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                         }
                     }
                 case (nil, nil):
-                    Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                    Image(systemName: "circle.dashed").foregroundStyle(Color.secondaryText)
                     Text(bot.folderBookmark == nil && bot.repoSlugs.isEmpty ? "No code yet" : "Not set up on this Mac yet")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 Spacer()
             }
             .accessibilityElement(children: .combine)
             if let folder = bot.folderName {
-                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
             if let folderProblem {
                 Label(folderProblem, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
@@ -232,14 +232,14 @@ struct BotInfoView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.brandGreen)
-                Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(.secondary)
-                Text(repo).font(AppFont.caption()).foregroundStyle(.secondary)
+                Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Text(repo).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
             }
         case .missing?:
             HStack {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("No preview recipe yet")
-                    Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(.secondary)
+                    Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 Spacer()
                 Button("Draft one") {}

@@ -39,13 +39,13 @@ struct BotSidebar: View {
                     plainRow("New bot", systemImage: "plus")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 if bots.isEmpty {
                     Button { BotStore(context: modelContext).addExample() } label: {
                         plainRow("Add an example bot", systemImage: "sparkles")
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 }
             } header: {
                 Text("Bots")

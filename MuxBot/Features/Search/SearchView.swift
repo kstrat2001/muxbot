@@ -21,7 +21,7 @@ struct SearchView: View {
                             Button { open(.bot(bot.id)) } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Label(bot.name, systemImage: bot.systemImage)
-                                    Text(bot.instructions).font(AppFont.caption()).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(bot.instructions).font(AppFont.caption()).foregroundStyle(Color.secondaryText).lineLimit(1)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -35,7 +35,7 @@ struct SearchView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(message.conversation?.title ?? LeadBot.name).font(AppFont.caption(.semibold))
                                     Text(message.content).lineLimit(2)
-                                    Text(message.timestamp, style: .date).font(AppFont.caption()).foregroundStyle(.secondary)
+                                    Text(message.timestamp, style: .date).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -43,7 +43,7 @@ struct SearchView: View {
                     }
                 }
                 if !query.trimmingCharacters(in: .whitespaces).isEmpty && results.isEmpty {
-                    Text("Nothing found.").foregroundStyle(.secondary)
+                    Text("Nothing found.").foregroundStyle(Color.secondaryText)
                 }
             }
             .safeAreaInset(edge: .top) {

@@ -115,7 +115,7 @@ struct StoreRecoveryView: View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: "externaldrive.badge.exclamationmark").font(.system(size: 44)).foregroundStyle(Color.brandOrange)
             Text("Mux Bot couldn't open its data").font(AppFont.title2())
-            Text(loader.error ?? "").font(AppFont.footnote()).foregroundStyle(.secondary)
+            Text(loader.error ?? "").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 .multilineTextAlignment(.center).textSelection(.enabled)
             HStack {
                 Button("Try again", systemImage: "arrow.clockwise") { loader.load() }
@@ -123,7 +123,7 @@ struct StoreRecoveryView: View {
                     .buttonStyle(.borderedProminent)
             }
             Text("Start fresh keeps your old data: the files are renamed, not deleted, next to the new store.")
-                .font(AppFont.caption()).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .font(AppFont.caption()).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
         }
         .padding(Spacing.xl)
         .frame(maxWidth: 520)

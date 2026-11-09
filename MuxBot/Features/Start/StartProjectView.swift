@@ -56,7 +56,7 @@ struct StartProjectView: View {
                     }
                 }
                 Text("Or make a bot for code you already have with New bot.")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
             .padding(Spacing.xl)
         }
@@ -75,7 +75,7 @@ struct StartProjectView: View {
                         .lineLimit(3, reservesSpace: true)
                 } else {
                     Text(playbooks[entry.id]?.pitch ?? entry.summary ?? "")
-                        .font(AppFont.footnote()).foregroundStyle(.secondary)
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                         .lineLimit(3, reservesSpace: true)
                 }
             }
@@ -90,7 +90,7 @@ struct StartProjectView: View {
             Section {
                 HStack(spacing: Spacing.md) {
                     BotAvatarView(look: look(playbook), size: 44)
-                    Text(playbook.pitch).font(AppFont.footnote()).foregroundStyle(.secondary)
+                    Text(playbook.pitch).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
             }
             Section {

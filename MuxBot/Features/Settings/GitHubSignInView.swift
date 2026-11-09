@@ -13,9 +13,9 @@ struct GitHubSignInView: View {
             case .signedOut, .failed:
                 Section {
                     Text("Sign in so bots can read your private repos and open pull requests. The sign-in stays on this device.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                     if case let .failed(why) = github.state {
-                        Label(why, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                        Label(why, systemImage: "exclamationmark.triangle").foregroundStyle(Color.secondaryText)
                     }
                     Button("Sign in with GitHub", systemImage: "person.badge.key") { start() }
                         .disabled(!github.isConfigured)
@@ -29,7 +29,7 @@ struct GitHubSignInView: View {
                         Button("Copy", systemImage: "doc.on.doc") { Clipboard.copy(code) }
                     }
                     Button("Open GitHub", systemImage: "safari") { openURL(url) }
-                    HStack { ProgressView().controlSize(.small); Text("Waiting for your approval…").foregroundStyle(.secondary) }
+                    HStack { ProgressView().controlSize(.small); Text("Waiting for your approval…").foregroundStyle(Color.secondaryText) }
                     Button("Cancel") { signing?.cancel(); github.signOut() }
                 }
             case let .signedIn(login):

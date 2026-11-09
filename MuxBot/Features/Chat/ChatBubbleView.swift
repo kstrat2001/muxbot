@@ -24,7 +24,7 @@ struct ChatBubbleView: View {
         if role == .system {
             Text(Linkify.attributed(content, repo: repo))
                 .font(AppFont.footnote())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Spacing.xs)

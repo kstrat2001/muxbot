@@ -43,12 +43,12 @@ struct NewBotView: View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
                 BotAvatarView(look: look, mood: mood, size: 150)
-                TextField("Name your bot", text: $name)
+                TextField("Name your bot", text: $name, prompt: Text("Name your bot").foregroundStyle(Color.secondaryText))
                     .multilineTextAlignment(.center)
                     .font(AppFont.headline())
                     .textFieldStyle(.plain)
                     .padding(Spacing.md)
-                    .background(RoundedRectangle(cornerRadius: CornerRadius.md).strokeBorder(.secondary.opacity(0.4)))
+                    .background(RoundedRectangle(cornerRadius: CornerRadius.md).strokeBorder(Color.fieldBorder))
                     .onSubmit { if canSave { onDetails = true } }
                 BotLookPicker(look: $look, mood: $mood, showsPreview: false)
             }
@@ -78,7 +78,7 @@ struct NewBotView: View {
                 #if os(macOS)
                 HStack {
                     Button(folder == nil ? "Add folder…" : "Change folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
-                    if let folder { Text(folder.lastPathComponent).foregroundStyle(.secondary) }
+                    if let folder { Text(folder.lastPathComponent).foregroundStyle(Color.secondaryText) }
                 }
                 #endif
                 TextField("GitHub URL or link (optional)", text: $resource)

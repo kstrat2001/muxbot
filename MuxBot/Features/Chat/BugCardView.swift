@@ -22,7 +22,7 @@ struct BugCardView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Label("Bug: \(draft.title)", systemImage: "ladybug").font(AppFont.headline())
                     Text("\(draft.page)\(draft.viewport.map { " · \($0)px wide" } ?? "")")
-                        .font(AppFont.caption()).foregroundStyle(.secondary)
+                        .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     ForEach(draft.facts, id: \.self) { Text($0).font(AppFont.footnote()) }
                     HStack {
                         Button("File on GitHub", systemImage: "arrow.up.forward.square") { file(draft) }
@@ -33,7 +33,7 @@ struct BugCardView: View {
                             .buttonStyle(.borderedProminent)
                     }
                     Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Pair with darkmux to run fixes.")
-                        .font(AppFont.caption()).foregroundStyle(.secondary)
+                        .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

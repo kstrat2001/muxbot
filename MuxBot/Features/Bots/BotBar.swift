@@ -31,7 +31,7 @@ struct BotBar: View {
             if let note = brain.fallbackNote {
                 Label(note, systemImage: "info.circle")
                     .font(AppFont.caption())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let run = tweakRun {
@@ -45,7 +45,7 @@ struct BotBar: View {
                         .keyboardShortcut(.cancelAction)
                         .help("Stop tweaking (Esc)")
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             }
             if let element = preview.picked, router.context.botId != nil {
                 HStack(spacing: Spacing.xs) {
@@ -81,7 +81,7 @@ struct BotBar: View {
                     .padding(.trailing, 2)
                     .padding(.bottom, 2)
             }
-            .background(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+            .background(Capsule().strokeBorder(Color.fieldBorder))
             #endif
         }
         .padding(.horizontal, Spacing.lg)
@@ -116,7 +116,8 @@ struct BotBar: View {
     }
 
     private var field: some View {
-        TextField(tweakRun != nil ? "What should change?" : preview.picked != nil ? "What about it?" : "Message \(listenerName)…", text: Bindable(router).barDraft, axis: .vertical)
+        let placeholder = tweakRun != nil ? String(localized: "What should change?") : preview.picked != nil ? String(localized: "What about it?") : String(localized: "Message \(listenerName)…")
+        return TextField(placeholder, text: Bindable(router).barDraft, prompt: Text(placeholder).foregroundStyle(Color.secondaryText), axis: .vertical)
             .lineLimit(1...4)
             .focused($barFocused)
             .onSubmit(send)

@@ -72,13 +72,13 @@ private struct ActivityTable: View {
                 Label(run.crew.name, systemImage: run.crew.systemImage)
             }
             .width(min: 90, ideal: 110)
-            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(.secondary) }
+            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(Color.secondaryText) }
                 .width(min: 80, ideal: 110)
             TableColumn("Started", value: \.createdAt) { run in
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text(ActivityTime.started(run.startedAt ?? run.createdAt, now: context.date))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .help((run.startedAt ?? run.createdAt).formatted(date: .complete, time: .standard))
             }
@@ -89,7 +89,7 @@ private struct ActivityTable: View {
                         Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit()
                     }
                 } else {
-                    Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit().foregroundStyle(.secondary)
+                    Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit().foregroundStyle(Color.secondaryText)
                 }
             }
             .width(min: 60, ideal: 70)
@@ -151,7 +151,7 @@ private struct ActivityRow: View {
                     }
                 }
                 .font(AppFont.caption())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             }
             Spacer(minLength: 0)
             StatusBadge(kind: kind)

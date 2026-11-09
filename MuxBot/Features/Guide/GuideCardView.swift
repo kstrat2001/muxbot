@@ -43,7 +43,7 @@ struct SetupChecklistView: View {
             HStack {
                 Label("Setup check", systemImage: "checklist").font(AppFont.headline())
                 Spacer()
-                if facts == nil { ProgressView().controlSize(.small) } else { Text(SetupCheck.summary(steps)).font(AppFont.footnote()).foregroundStyle(.secondary) }
+                if facts == nil { ProgressView().controlSize(.small) } else { Text(SetupCheck.summary(steps)).font(AppFont.footnote()).foregroundStyle(Color.secondaryText) }
             }
             ForEach(steps) { step in row(step) }
             #if os(iOS)
@@ -69,7 +69,7 @@ struct SetupChecklistView: View {
                 .accessibilityLabel(stateLabel(step.state))
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(step.title).font(AppFont.body(.semibold))
-                Text(step.detail).font(AppFont.footnote()).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(step.detail).font(AppFont.footnote()).foregroundStyle(Color.secondaryText).fixedSize(horizontal: false, vertical: true)
                 if let command = step.command { CommandBox(command: command) }
                 HStack(spacing: Spacing.md) {
                     if let action = step.action { button(action) }
@@ -149,7 +149,7 @@ struct FirstBotCardView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Label("Make your first bot", systemImage: "plus.bubble").font(AppFont.headline())
             Text("Start something new from a template, paste a GitHub link in the bar below, or make one for code you have.")
-                .font(AppFont.footnote()).foregroundStyle(.secondary)
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             HStack {
                 Button("Start a project…", systemImage: "sparkles") { router.showStartProject = true }.buttonStyle(.borderedProminent)
                 Button("New bot…", systemImage: "plus") { router.showNewBot = true }.buttonStyle(.bordered)
@@ -179,7 +179,7 @@ struct SettingCardView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Label(setting.title, systemImage: setting.isDarkmux ? "terminal" : "gearshape").font(AppFont.headline())
             control
-            if let changed { Label(changed, systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(.secondary) }
+            if let changed { Label(changed, systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText) }
         }
         .task { await load() }
     }
@@ -200,10 +200,10 @@ struct SettingCardView: View {
             }))
         case .sync:
             LabeledContent("iCloud sync", value: GuideSettings.syncIsOn ? String(localized: "On") : String(localized: "Off"))
-            Text("Set when the app is built.").font(AppFont.caption()).foregroundStyle(.secondary)
+            Text("Set when the app is built.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
         case .darkmuxModels:
             LabeledContent("Mux Bot may use", value: darkmuxValue ?? "…")
-            Text("Changed in darkmux on your Mac, not here.").font(AppFont.caption()).foregroundStyle(.secondary)
+            Text("Changed in darkmux on your Mac, not here.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
         }
     }
 
@@ -243,7 +243,7 @@ struct AnswerCardView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HelpText(text: text)
             HStack(spacing: Spacing.sm) {
-                Text(onDevice ? "From" : "From the help:").font(AppFont.caption()).foregroundStyle(.secondary)
+                Text(onDevice ? "From" : "From the help:").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 ForEach(articles, id: \.self) { id in
                     if let article = HelpLibrary.bundled.article(id) {
                         Button(article.title) { reading = article }.buttonStyle(.borderless).font(AppFont.caption())
