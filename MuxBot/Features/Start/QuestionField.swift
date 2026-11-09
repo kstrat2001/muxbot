@@ -22,6 +22,11 @@ struct QuestionField: View {
                     TextField(question.label, text: $text)
                 } else {
                     TextField(question.label, text: $text, axis: .vertical).lineLimit(lines)
+                        #if os(iOS)
+                        // An answer goes into the middle of a sentence ("The
+                        // book is about a lighthouse…"): no capital first letter.
+                        .textInputAutocapitalization(.never)
+                        #endif
                 }
             }
                 .labelsHidden()
