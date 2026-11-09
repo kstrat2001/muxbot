@@ -83,9 +83,9 @@ struct PreviewSetup: Codable, Equatable, Sendable {
         case failed(String)
         var errorDescription: String? {
             switch self {
-            case .exists: String(localized: "There's already a .darkmux/preview.json there; I never overwrite it.")
+            case .exists: String(localized: "That file is already there; I never overwrite it.")
             case let .notYourCheckout(name): String(localized: "That isn't this bot's checkout. Choose \(name).")
-            case .symlink: String(localized: "Its .darkmux folder is a link, so I won't write through it.")
+            case .symlink: String(localized: "A folder on the way is a link, so I won't write through it.")
             case let .failed(why): String(localized: "Couldn't write it: \(why)")
             }
         }
@@ -94,10 +94,21 @@ struct PreviewSetup: Codable, Equatable, Sendable {
     /// Writes `data` as `.darkmux/preview.json` in `folder` (your checkout),
     /// never over an existing file or through a symlinked `.darkmux`.
     static func write(_ data: Data, into folder: URL) throws(WriteError) {
+        try writeNew(data, at: path, into: folder)
+    }
+
+    /// Writes `data` at `relativePath` in `folder`, only as a new file: never
+    /// over one that exists, never through a symlinked folder on the way.
+    static func writeNew(_ data: Data, at relativePath: String, into folder: URL) throws(WriteError) {
         let fm = FileManager.default
-        let dir = folder.appendingPathComponent(".darkmux", isDirectory: true)
-        let file = dir.appendingPathComponent("preview.json")
-        if let kind = try? fm.attributesOfItem(atPath: dir.path)[.type] as? FileAttributeType, kind == .typeSymbolicLink { throw .symlink }
+        let parts = relativePath.split(separator: "/").map(String.init)
+        guard let last = parts.last, !parts.contains(".."), !relativePath.hasPrefix("/") else { throw .failed("not a plain relative path") }
+        var dir = folder
+        for part in parts.dropLast() {
+            dir = dir.appendingPathComponent(part, isDirectory: true)
+            if let kind = try? fm.attributesOfItem(atPath: dir.path)[.type] as? FileAttributeType, kind == .typeSymbolicLink { throw .symlink }
+        }
+        let file = dir.appendingPathComponent(last)
         if fm.fileExists(atPath: file.path) || (try? fm.destinationOfSymbolicLink(atPath: file.path)) != nil { throw .exists }
         do {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)

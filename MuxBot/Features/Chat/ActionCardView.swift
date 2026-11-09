@@ -29,10 +29,12 @@ struct ActionCardView: View {
                     Text(change).font(AppFont.body())
                 case let .setUpPreview(setup)?:
                     PreviewSetupCardView(message: message, setup: setup)
+                case let .setUpPlaybook(setup)?:
+                    PlaybookSetupCardView(message: message, setup: setup)
                 case nil:
                     Text(message.content).font(AppFont.body())
                 }
-                if case .setUpPreview? = message.action {
+                if message.action?.hasOwnButtons == true {
                     // Its own buttons: Approve needs your folder first.
                 } else {
                 switch message.actionState {
