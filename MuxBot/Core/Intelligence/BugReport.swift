@@ -44,9 +44,7 @@ struct PickedElement: Sendable, Equatable, Codable {
     var fontWeight: String? = nil
     var color: String? = nil
     var fontFamily: String? = nil
-    /// From the selection menu: "ask" or "bug".
-    var intent: String? = nil
-    /// From the selection menu: the text you selected.
+    /// From "Chat about this" on a selection: the text you selected.
     var selectedText: String? = nil
 
     /// "Start_a_Project · /pricing · 683px"
@@ -155,9 +153,10 @@ enum BugReport {
     static let handlerName = "muxbot"
 
     /// Installed by the app at the end of every page load (a user script):
-    /// `__muxDescribe` measures an element, and selecting text shows a small
-    /// menu, "Ask about this" / "Report a bug here". A pick or a menu choice
-    /// is posted to the app at once through `__muxSend`; nothing polls.
+    /// `__muxDescribe` measures an element, and selecting text shows one
+    /// button, "Chat about this": the selection becomes the bar's chip, and
+    /// what you type decides what happens (`Intent.infer`). A pick or the
+    /// button is posted to the app at once through `__muxSend`; nothing polls.
     static let pageScript = """
         if (!window.__muxDescribe) {
           window.__muxSend = json => {
@@ -187,7 +186,7 @@ enum BugReport {
           };
           const menu = document.createElement('div');
           menu.style.cssText = 'position:fixed;z-index:2147483647;display:none;padding:5px;border-radius:10px;background:#1c2622;box-shadow:0 4px 16px rgba(0,0,0,.45);font:13px -apple-system,system-ui,sans-serif';
-          const choose = intent => {
+          const choose = () => {
             const sel = getSelection();
             if (!sel || !sel.rangeCount) return;
             let el = sel.getRangeAt(0).commonAncestorContainer;
@@ -198,18 +197,16 @@ enum BugReport {
               if (parseFloat(st.borderLeftWidth) > 0 || parseFloat(st.borderTopWidth) > 0) { el = n; break; }
             }
             const quote = sel.toString().trim().slice(0, 200);
-            window.__muxSend(window.__muxDescribe(el, { intent: intent, selectedText: quote }));
+            window.__muxSend(window.__muxDescribe(el, { selectedText: quote }));
             menu.style.display = 'none';
             sel.removeAllRanges();
           };
-          for (const [title, intent] of [['Ask about this', 'ask'], ['Report a bug here', 'bug']]) {
-            const b = document.createElement('button');
-            b.textContent = title;
-            b.style.cssText = 'background:#22d3a6;color:#032;border:0;border-radius:6px;padding:5px 9px;margin:0 3px;font:inherit;cursor:pointer';
-            b.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); choose(intent); });
-            b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); choose(intent); }, { passive: false });
-            menu.append(b);
-          }
+          const chat = document.createElement('button');
+          chat.textContent = 'Chat about this';
+          chat.style.cssText = 'background:#22d3a6;color:#032;border:0;border-radius:6px;padding:5px 9px;margin:0 3px;font:inherit;cursor:pointer';
+          chat.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); choose(); });
+          chat.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); choose(); }, { passive: false });
+          menu.append(chat);
           document.body.appendChild(menu);
           document.addEventListener('selectionchange', () => {
             const sel = getSelection();

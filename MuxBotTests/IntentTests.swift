@@ -25,8 +25,16 @@ struct IntentParsingTests {
     @Test(arguments: [
         ("any open bug tickets?", false, Intent.issues),
         ("the border has no padding", false, .bug),
-        ("make it bigger", true, .bug),
+        ("make it bigger", true, .fix),
         ("what is this font?", true, .ask),
+        // One "Chat about this" in the preview: what you type decides.
+        ("replace the phone number with 555-0100", true, .fix),
+        ("please make this bigger", true, .fix),
+        ("can you make this bigger?", true, .fix),
+        ("why is this cut off", true, .bug),
+        ("why is this cut off?", true, .bug),
+        ("what font is this", true, .ask),
+        ("no gutter on the sides", true, .bug),
     ])
     func inference(text: String, hasElement: Bool, intent: Intent) {
         #expect(Intent.infer(text, hasElement: hasElement) == intent)
@@ -258,5 +266,70 @@ struct FixBriefFlowTests {
         #expect(run.task == "Fix #8: No padding (kstrat2001/hcr)")
         #expect(run.brief?.contains("Element: main > div") == true)
         #expect(run.brief?.contains("Likely file: inertia/pages/pricing.tsx") == true)
+    }
+}
+
+/// One preview action, "Chat about this": the pick is a chip, and what you
+/// type decides what happens (a change is work, a visual problem is measured
+/// into a bug card, a question is answered).
+@Suite(.serialized) @MainActor
+struct ChatAboutThisTests {
+    private func setUp() -> (BotStore, Bot, BotBrain) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "Website")
+        store.addResource(.repo, "https://github.com/kstrat2001/site", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.pageInspector = MockInspector(nil)
+        return (store, bot, brain)
+    }
+
+    private func messages(_ store: BotStore, _ bot: Bot) -> [ChatMessage] {
+        (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }
+    }
+
+    @Test func thePickerOffersExactlyOneAction() {
+        let script = BugReport.pageScript
+        #expect(script.contains("'Chat about this'"))
+        #expect(!script.contains("Ask about this"))
+        #expect(!script.contains("Report a bug here"))
+        #expect(script.components(separatedBy: "document.createElement('button')").count == 2, "one button in the menu")
+        #expect(!script.contains("intent"), "the page never decides the intent")
+    }
+
+    @Test func aChangeProposesWork() async throws {
+        let (store, bot, brain) = setUp()
+        await brain.send("make this bigger", in: .bot(bot.id), store: store, element: .fixture)
+        let run = try #require(bot.runs?.first)
+        #expect(run.crew == .coder)
+        #expect(run.phase == .proposed)
+        #expect(run.task.contains("`main > section.hero > h1`"))
+        #expect(!messages(store, bot).contains { $0.kind == .bugCard })
+    }
+
+    @Test func aChangeToSelectedTextNamesTheText() async throws {
+        let (store, bot, brain) = setUp()
+        var element = PickedElement.fixture
+        element.selectedText = "hello@example.com"
+        await brain.send("replace this with kain@example.com", in: .bot(bot.id), store: store, element: element)
+        let run = try #require(bot.runs?.first)
+        #expect(run.task.contains("“hello@example.com”"), "Coder knows which text: \(run.task)")
+    }
+
+    @Test func aVisualProblemIsMeasuredIntoABugCard() async throws {
+        let (store, bot, brain) = setUp()
+        await brain.send("why is this cut off", in: .bot(bot.id), store: store, element: .fixture)
+        #expect(messages(store, bot).contains { $0.kind == .bugCard })
+        #expect(bot.runs?.isEmpty ?? true)
+    }
+
+    @Test func aQuestionIsAnswered() async throws {
+        let (store, bot, brain) = setUp()
+        await brain.send("what font is this", in: .bot(bot.id), store: store, element: .fixture)
+        let all = messages(store, bot)
+        #expect(all.last?.role == .assistant)
+        #expect(!all.contains { $0.kind == .bugCard })
+        #expect(!all.contains { $0.kind == .actionCard })
+        #expect(bot.runs?.isEmpty ?? true)
     }
 }
