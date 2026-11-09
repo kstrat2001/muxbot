@@ -164,6 +164,13 @@ struct StartProjectView: View {
         for entry in entries where details[entry.id] == nil {
             details[entry.id] = await registry.template(for: entry)
         }
+        #if DEBUG
+        // `-startTemplate <id>` opens that template's questions (layout checks).
+        if let id = UserDefaults.standard.string(forKey: "startTemplate"), picked == nil {
+            picked = entries.first { $0.id == id }
+            answers.name = UserDefaults.standard.string(forKey: "startName") ?? ""
+        }
+        #endif
     }
 
     private func start(_ entry: TemplateEntry, _ playbook: Playbook) async {

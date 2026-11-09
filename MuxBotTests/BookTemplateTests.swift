@@ -94,3 +94,20 @@ struct WrappingStackTests {
         #expect(WrappingStack.rows(sizes: [], width: 300, spacing: 8).isEmpty)
     }
 }
+
+/// The bot look picker's colors split into even rows, never one alone.
+struct EvenGridTests {
+    @Test(arguments: [(CGFloat(500), 12), (300, 6), (200, 4), (140, 3), (90, 2), (20, 1)])
+    func twelveColorsSplitEvenly(width: CGFloat, columns: Int) {
+        #expect(EvenGrid.columns(count: 12, itemWidth: 30, width: width, spacing: 8) == columns)
+    }
+
+    @Test func sixEyeColorsTooAndNeverAnOrphan() {
+        #expect(EvenGrid.columns(count: 6, itemWidth: 30, width: 500, spacing: 8) == 6)
+        #expect(EvenGrid.columns(count: 6, itemWidth: 30, width: 180, spacing: 8) == 3)
+        for width in stride(from: CGFloat(30), through: 600, by: 7) {
+            let c = EvenGrid.columns(count: 12, itemWidth: 30, width: width, spacing: 8)
+            #expect(12 % c == 0)
+        }
+    }
+}

@@ -38,6 +38,10 @@ struct ContentView: View {
         #endif
         .sheet(isPresented: $router.showNewBot) {
             NavigationStack { NewBotView() }
+                #if os(macOS)
+                // Wide enough for the five state pills and a row of colors.
+                .frame(minWidth: 560, idealWidth: 600, minHeight: 640, idealHeight: 720)
+                #endif
         }
         .sheet(isPresented: $router.showStartProject) {
             NavigationStack { StartProjectView() }
@@ -66,6 +70,10 @@ struct ContentView: View {
         if UserDefaults.standard.bool(forKey: "snapshot") { Task { await snapshotWindow() } }
         #endif
         if UserDefaults.standard.bool(forKey: "showPreview") { router.showPreview = true }
+        // `-showNewBot YES`, `-startTemplate <id>`: open those sheets, for
+        // layout checks.
+        if UserDefaults.standard.bool(forKey: "showNewBot") { router.showNewBot = true }
+        if UserDefaults.standard.string(forKey: "startTemplate") != nil { router.showStartProject = true }
         guard let name = UserDefaults.standard.string(forKey: "openBot") else { return }
         router.usesSidebar = wantsSidebar
         if name == LeadBot.name { router.navigate(to: .lead); return }
@@ -80,11 +88,14 @@ struct ContentView: View {
     /// moment, for layout checks without screen-recording permission.
     private func snapshotWindow() async {
         try? await Task.sleep(for: .seconds(3))
-        guard let view = NSApp.windows.first(where: \.isVisible)?.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-snapshot.png")
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        // Every visible window, sheets included: muxbot-snapshot-<n>.png.
+        for (n, window) in NSApp.windows.filter(\.isVisible).enumerated() {
+            guard let view = window.contentView?.superview ?? window.contentView,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-snapshot-\(n).png")
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        }
     }
     #endif
     #endif
