@@ -548,7 +548,10 @@ final class BotBrain {
             bot.resources.compactMap(GitHubIssue.repoSlug(from:)).map { BotRepo(bot: bot.name, repo: $0) }
         }
         let bot = context.botId.flatMap(store.bot(id:))
-        let target = element.map { " (`\($0.selector)` on \($0.url))" } ?? ""
+        let target = element.map { element in
+            let quoted = element.selectedText.flatMap { $0.isEmpty ? nil : ", the text “\($0)”" } ?? ""
+            return " (`\(element.selector)` on \(element.url)\(quoted))"
+        } ?? ""
         // A skill by its name (its chip): one question for the specifics; the
         // answer becomes the run, with the skill's notes in its brief.
         if let bot, explicit == nil, let skill = bot.skills.first(where: { $0.name.caseInsensitiveCompare(text) == .orderedSame }) {

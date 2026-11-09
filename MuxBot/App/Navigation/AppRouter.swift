@@ -77,7 +77,7 @@ final class AppRouter {
         }
     }
 
-    /// Picking an element (or "Ask about this" / "Report a bug here") in the
+    /// Picking an element (or "Chat about this" on selected text) in the
     /// full-screen preview goes back to the chat, where the chip waits.
     func returnToChatAfterPick() {
         showPreview = false
