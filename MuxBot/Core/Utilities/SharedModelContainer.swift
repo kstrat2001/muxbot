@@ -71,8 +71,12 @@ enum SharedModelContainer {
         return moved
     }
 
-    /// In-memory container for tests and previews.
+    /// In-memory container for tests and previews. Never CloudKit: a
+    /// configuration's default (`.automatic`) mirrors to the user's private
+    /// database whenever the app has the iCloud entitlement, so a test that
+    /// clears its store would delete the user's real bots everywhere.
     static func inMemory() throws -> ModelContainer {
-        try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true,
+                                                                            cloudKitDatabase: .none)])
     }
 }

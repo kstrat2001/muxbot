@@ -66,7 +66,7 @@ struct SchemaMigrationTests {
     /// Writes a store as the app wrote it before versioning (SchemaV1).
     private func writeV1Store(at url: URL) throws -> (botId: UUID, otherId: UUID) {
         let schema = Schema(versionedSchema: SchemaV1.self)
-        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         let context = ModelContext(container)
         let hcr = SchemaV1.Bot(name: "humancodereader", instructions: "Site")
         hcr.workspaceName = "hcr-humancodereader"
@@ -127,7 +127,7 @@ struct SchemaMigrationTests {
         let dir = tempDir()
         let url = dir.appendingPathComponent("MuxBot.store")
         let schema = Schema(versionedSchema: SchemaV2.self)
-        let v2 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let v2 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         let writer = ModelContext(v2)
         let old = SchemaV2.Bot(name: "darkmux", instructions: "CLI")
         writer.insert(old)
@@ -145,7 +145,7 @@ struct SchemaMigrationTests {
         let dir = tempDir()
         let url = dir.appendingPathComponent("MuxBot.store")
         let schema = Schema(versionedSchema: SchemaV3.self)
-        let v3 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let v3 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         let writer = ModelContext(v3)
         let old = SchemaV3.Bot(name: "hcr", instructions: "Site")
         old.avatarAnimal = "owl"
@@ -200,6 +200,26 @@ struct SchemaMigrationTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
         #expect(FileManager.default.fileExists(atPath: url.path + ".moved-20261107-1200"))
         #expect(FileManager.default.fileExists(atPath: url.path + "-wal.moved-20261107-1200"))
+    }
+
+    /// Tests run inside the app, which has the iCloud entitlement in a sync
+    /// build: no test store may ever mirror to CloudKit (it did, and test
+    /// fixtures replaced a user's bots).
+    @Test func testStoresNeverTouchICloud() throws {
+        let memory = try SharedModelContainer.inMemory()
+        #expect(memory.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        #expect(TestStore.container.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        let url = dirs.make().appendingPathComponent("MuxBot.store")
+        let opened = try SharedModelContainer.open(storeURL: url, local: LocalBotState(fileURL: nil), cloudSync: false)
+        #expect(opened.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        // Every store a test makes says so explicitly.
+        let tests = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for file in try FileManager.default.contentsOfDirectory(at: tests, includingPropertiesForKeys: nil) where file.pathExtension == "swift" {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            for line in text.components(separatedBy: "\n") where line.contains("ModelConfiguration(") && !line.contains("cloudKitDatabase: .none") && !line.contains("contains(\"ModelConfiguration(\")") {
+                Issue.record("\(file.lastPathComponent): a ModelConfiguration without cloudKitDatabase: .none: \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
     }
 
     @Test func cloudSyncIsOffUnlessTheBuildTurnsItOn() {
