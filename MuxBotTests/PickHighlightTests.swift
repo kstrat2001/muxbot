@@ -58,7 +58,17 @@ struct PickHighlightTests {
     private func pick(_ preview: PreviewController, _ selector: String) async throws {
         _ = try await preview.page.callJavaScript("window.__muxSend(window.__muxDescribe(document.querySelector('\(selector)'))); return true;")
         for _ in 0..<40 where preview.picked == nil { try await Task.sleep(for: .milliseconds(50)) }
-        try await Task.sleep(for: .milliseconds(200))
+        // The outline is drawn after the pick's crop is taken (so the crop
+        // has none), which takes longer on a busy machine: wait for it.
+        try await waitForMark(preview)
+    }
+
+    private func waitForMark(_ preview: PreviewController) async throws {
+        for _ in 0..<60 {
+            let shown = try await preview.page.callJavaScript("const m = document.querySelector('[data-muxbot-mark]'); return !!(m && m.isConnected && m.style.display !== 'none');") as? Bool
+            if shown == true { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     @Test func thePickedElementStaysOutlinedWhileItsChipIsAttached() async throws {
@@ -87,7 +97,7 @@ struct PickHighlightTests {
         let selector = try #require(preview.picked?.selector)
         preview.reload()
         try await settle(preview)
-        try await Task.sleep(for: .milliseconds(400))
+        try await waitForMark(preview)
         let now = try await markAndElement(preview, selector)
         #expect(now.mark != "none" && now.mark == now.element, "redrawn after the reload: \(now)")
     }

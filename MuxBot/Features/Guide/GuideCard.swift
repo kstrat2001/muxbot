@@ -14,6 +14,9 @@ enum GuideCard: Codable, Equatable, Sendable {
     /// An answer from the help, citing its articles. `onDevice`: written by
     /// the on-device model from them; otherwise the article's own words.
     case answer(text: String, articles: [String], onDevice: Bool)
+    /// In a bot's thread: you reported something cut off, and the page fits
+    /// at every width measured; the note offers to reload the preview.
+    case pageFits(text: String)
 }
 
 extension ChatMessage {

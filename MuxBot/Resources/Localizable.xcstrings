@@ -1164,6 +1164,12 @@
     "Ready when this page answers" : {
 
     },
+    "Reinstalls the project's packages, then starts the preview again. Your files aren't touched." : {
+
+    },
+    "Reload the preview" : {
+
+    },
     "Remove" : {
 
     },
@@ -1360,6 +1366,9 @@
 
     },
     "Start it in Terminal and leave it running. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one." : {
+
+    },
+    "Start over" : {
 
     },
     "Start something new from a template, paste a GitHub link in the bar below, or make one for code you have." : {
