@@ -19,11 +19,13 @@ final class FleetConnection {
     private static let nameKey = "darkmux.client.name"
     private var pairing: Task<Void, Never>?
 
-    init(keychain: any KeychainProviding = KeychainHelper()) {
+    /// `defaults` holds the paired name (tests pass their own, never the
+    /// app's).
+    init(keychain: any KeychainProviding = KeychainHelper(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
         let stored = keychain.get(key: Self.tokenKey)
         cachedToken = .some(stored)
-        if stored != nil, let name = UserDefaults.standard.string(forKey: Self.nameKey) {
+        if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
             state = .paired(name: name)
         }
     }
@@ -67,10 +69,8 @@ final class FleetConnection {
                     switch status.status {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
-                        keychain.save(key: Self.tokenKey, value: token)
-                        cachedToken = .some(token)
                         UserDefaults.standard.set(name, forKey: Self.nameKey)
-                        state = .paired(name: name)
+                        completePairing(token: token, name: name)
                         return
                     case "denied": state = .failed("The request was denied."); return
                     case "expired": state = .failed("The request expired. Try again."); return
@@ -82,6 +82,17 @@ final class FleetConnection {
                 state = .failed(Self.plainError(error))
             }
         }
+    }
+
+    /// Called when pairing completes (the app starts what waited for it).
+    var onPaired: (() -> Void)?
+
+    /// Keeps the token and tells the app it's paired.
+    func completePairing(token: String, name: String) {
+        keychain.save(key: Self.tokenKey, value: token)
+        cachedToken = .some(token)
+        state = .paired(name: name)
+        onPaired?()
     }
 
     func cancelPairing() {

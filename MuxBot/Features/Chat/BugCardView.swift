@@ -7,6 +7,7 @@ import SwiftData
 struct BugCardView: View {
     let message: ChatMessage
 
+    @Environment(BotBrain.self) private var brain
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @Environment(PreviewController.self) private var preview
@@ -58,8 +59,10 @@ struct BugCardView: View {
 
     private func fix(_ draft: BugDraft) {
         guard let bot else { return }
-        store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
-                         brief: "Fix this bug:\n\n" + draft.body)
+        let run = store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
+                                   brief: "Fix this bug:\n\n" + draft.body)
+        // The model is chosen like any other dispatch (mode, Auto order).
+        Task { await brain.runs.chooseProfile(for: run) }
     }
 
     private func copySnapshot() async -> Bool {

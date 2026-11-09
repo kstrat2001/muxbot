@@ -124,7 +124,7 @@ private struct StopButton: View {
 }
 #endif
 
-private struct ActivityRow: View {
+struct ActivityRow: View {
     let run: BotRun
 
     @Environment(\.modelContext) private var context
@@ -170,13 +170,14 @@ private struct ActivityRow: View {
 
     private var kind: StatusKind { Self.kind(of: run) }
 
+    /// The badge: Needs you only for what waits on you here (a hidden one
+    /// doesn't); a committed result is done.
     static func kind(of run: BotRun) -> StatusKind {
+        if NeedsYou.isWaiting(run) { return .needsYou }
         switch run.phase {
-        case .running: .running
-        case .proposed, .result, .kept: .needsYou
-        case .failed, .discarded: .failed
-        case .canceled: .failed
-        default: .done
+        case .running: return .running
+        case .failed, .discarded, .canceled: return .failed
+        default: return .done
         }
     }
 

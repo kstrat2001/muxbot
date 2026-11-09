@@ -125,6 +125,13 @@ struct BotStore {
         guard let next = run.phase.next(on: event), let bot = run.bot else { return false }
         let thread = conversation(for: .bot(bot.id))
         if next == .running { run.startedAt = run.startedAt ?? .now; run.finishedAt = nil }
+        // Approving or continuing a run you'd hidden: when it next needs you,
+        // it shows again.
+        if event == .approve || event == .tweak {
+            LocalBotState.shared.update(bot.id) { entry in
+                entry.dismissedRuns = entry.dismissedRuns?.filter { $0 != run.id.uuidString }
+            }
+        }
         if run.phase == .running && next != .running { run.finishedAt = .now }
         run.phase = next
         switch event {
@@ -145,7 +152,7 @@ struct BotStore {
             run.details = details
             run.summary = reason
             append(.assistant, reason, kind: .resultCard, runId: run.id, to: thread)
-        case .cancel, .discard, .openPR, .skipPR:
+        case .cancel, .discard, .openPR, .skipPR, .close:
             save()
         }
         refreshState(of: bot)
@@ -154,11 +161,21 @@ struct BotStore {
 
     /// Needs you while a run waits on a decision, Working while one runs,
     /// otherwise Ready.
+    /// Runs an earlier build left in Keep, from before every finished run
+    /// was committed: one with a commit is a committed result again (Open
+    /// PR includes it); one without has nothing to open a PR from.
+    func migrateKeptRuns() {
+        for run in ((try? context.fetch(FetchDescriptor<BotRun>())) ?? []) where run.phase == .kept {
+            run.phase = run.keptCommit == nil ? .done : .result
+        }
+        save()
+    }
+
     func refreshState(of bot: Bot) {
         let phases = (bot.runs ?? []).map(\.phase)
         bot.state = (bot.runs ?? []).contains(where: \.needsYou) ? .needsYou
             : phases.contains(where: \.isActive) ? .working
-            : (bot.tasks ?? []).isEmpty ? .ready : bot.state
+            : (bot.tasks ?? []).isEmpty ? .ready : .working
         save()
     }
 

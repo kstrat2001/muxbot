@@ -30,6 +30,8 @@ struct NoChangeResultTests {
         store.apply(.approve, to: run)
         run.darkmuxWorkId = "w-477d9594ce0b5bb4"
         run.changedFiles = changed
+        // darkmux commits every finished run that changed files.
+        if !changed.isEmpty { run.keptCommit = "c0ffee1"; run.keptBranch = "mux/hcr" }
         store.apply(.finish(summary: "I have a question."), to: run)
         let brain = BotBrain()
         brain.runs.deviceRuns = true

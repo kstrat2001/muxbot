@@ -17,6 +17,8 @@ struct AutoCommitFlowTests {
         store.apply(.approve, to: run)
         run.darkmuxWorkId = "w-\(UUID().uuidString.prefix(8))"
         run.changedFiles = changed
+        // darkmux commits every finished run that changed files.
+        if !changed.isEmpty { run.keptCommit = "c0ffee1"; run.keptBranch = "mux/hcr" }
         store.apply(.finish(summary: "Done."), to: run)
         return run
     }

@@ -20,6 +20,10 @@ enum CrewRole: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Whether this crew role edits files. The others report; a result with
+    /// no changes is their normal finish.
+    var changesFiles: Bool { self == .coder }
+
     var systemImage: String {
         switch self {
         case .coder: "hammer"

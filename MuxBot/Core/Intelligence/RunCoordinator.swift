@@ -13,7 +13,12 @@ import FoundationModels
 final class RunCoordinator {
     /// The pairing with darkmux on this Mac; when paired, approved runs go to darkmux.
     var connection: FleetConnection? {
-        didSet { if connection != nil { connectionAttached() } }
+        didSet {
+            // Pairing completes inside the connection (no new connection), so
+            // it says so here too.
+            connection?.onPaired = { [weak self] in self?.connectionAttached() }
+            if connection != nil { connectionAttached() }
+        }
     }
     /// Posts "result ready" / "didn't finish" notifications.
     var notifier: NotificationService?
@@ -34,6 +39,19 @@ final class RunCoordinator {
         // Nothing fake ever runs: a run that can't go to darkmux isn't started.
         if event == .approve, let reason = whyRunCannotStart(run) {
             if let bot = run.bot { store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id))) }
+            return
+        }
+        // Close: a result with nothing to undo (a question, or changes
+        // darkmux couldn't commit) is done, here only.
+        if event == .close {
+            decisionErrors[run.id] = nil
+            store.apply(.close, to: run)
+            return
+        }
+        // No commit, nothing to revert: Undo would ask darkmux to undo a
+        // commit that doesn't exist.
+        if event == .discard, run.phase == .result, !run.changedFiles.isEmpty, run.keptCommit == nil {
+            decisionErrors[run.id] = "There's no commit to undo: \(RunCardState.checkpointProblem(run) ?? "darkmux didn't commit these changes.")"
             return
         }
         // A run that changed nothing: there's nothing to keep, and closing it
@@ -77,10 +95,17 @@ final class RunCoordinator {
         deciding.insert(run.id)
         defer { deciding.remove(run.id) }
         do {
-            let undone = try await connection.client.undoWork(token: token, workId: workId)
+            let undone: DarkmuxClient.UndoResult
+            if let workUndoer { undone = try await workUndoer(workId) } else { undone = try await connection.client.undoWork(token: token, workId: workId) }
             store.append(.system, RunResultText.discarded(restored: undone.files, removed: []).replacingOccurrences(of: "Put back", with: "Undone: put back"), to: thread)
             decisionErrors[run.id] = nil
-            store.apply(.discard, to: run)
+            if run.phase == .result {
+                store.apply(.discard, to: run)
+            } else {
+                // The run moved on while darkmux undid it: say so, never drop
+                // the discard silently.
+                store.append(.system, "The undo and your reply overlapped: darkmux undid “\(run.task)”, and the run went on from there. Check its changes before you continue.", to: thread)
+            }
         } catch let error as DarkmuxClient.ClientError where error.status == 404 {
             // darkmux restarted and no longer tracks the run; its commit is
             // still in the work copy's history.
@@ -156,23 +181,7 @@ final class RunCoordinator {
             case "running", "cancelling": continue
             case "cancelled": store.apply(.stop, to: run); return
             case "done":
-                let report = status.finalAssistant ?? ""
-                run.notes = report.isEmpty ? nil : report
-                run.changedFiles = (status.changes?.files ?? []).map { f in
-                    "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
-                }
-                run.diff = status.changes?.diff
-                // darkmux committed the changes to the work copy's branch.
-                run.keptCommit = status.commit
-                run.keptBranch = status.branch
-                if let why = status.commitError { run.details = why }
-                let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
-                store.apply(.finish(summary: summary), to: run)
-                if !run.changedFiles.isEmpty, checkSpecs[run.id] != nil {
-                    // Give the preview's hot reload a moment, then check.
-                    Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
-                }
-                if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
+                await finishRun(run, status: status, store: store)
                 return
             default:
                 switch RunResultText.classify(error: status.error ?? "", reason: status.reason) {
@@ -184,6 +193,32 @@ final class RunCoordinator {
                 return
             }
         }
+    }
+
+    /// A darkmux run that finished: its report, changes and commit go on the
+    /// run, and it becomes the bot's result.
+    func finishRun(_ run: BotRun, status: DarkmuxClient.WorkStatus, store: BotStore) async {
+        let report = status.finalAssistant ?? ""
+        run.notes = report.isEmpty ? nil : report
+        run.changedFiles = (status.changes?.files ?? []).map { f in
+            "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
+        }
+        run.diff = status.changes?.diff
+        // darkmux committed the changes to the work copy's branch. A tweak
+        // that ended with nothing new to commit keeps the commit it was built
+        // on (Open PR needs it); a commit error replaces any older one.
+        if let commit = status.commit {
+            run.keptCommit = commit
+            run.keptBranch = status.branch
+        }
+        run.details = status.commitError
+        let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
+        store.apply(.finish(summary: summary), to: run)
+        if !run.changedFiles.isEmpty, checkSpecs[run.id] != nil {
+            // Give the preview's hot reload a moment, then check.
+            Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
+        }
+        if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
     }
 
     /// Only a run that changed files gets the model's summary: asked "what
@@ -312,16 +347,29 @@ final class RunCoordinator {
         }
         Self.previewLog.info("preview \(name, privacy: .public): asking darkmux to start it")
         livePreviews[bot.id] = LivePreview(status: .starting)
+        let fetch: (Bool) async throws -> LivePreview = previewFetcher ?? { start in
+            start ? try await connection.client.startPreview(token: token, workspace: name).live
+                  : try await connection.client.previewStatus(token: token, workspace: name).live
+        }
         do {
-            var p = try await connection.client.startPreview(token: token, workspace: name).live
+            var p = try await fetch(true)
             livePreviews[bot.id] = p
-            let deadline = Date().addingTimeInterval(15 * 60)
+            let deadline = Date().addingTimeInterval(previewDeadline)
             while [.starting, .installing].contains(p.status), Date() < deadline {
-                try await Task.sleep(for: .seconds(1))
-                p = try await connection.client.previewStatus(token: token, workspace: name).live
+                try await Task.sleep(for: .seconds(min(1, previewDeadline / 4)))
+                p = try await fetch(false)
                 livePreviews[bot.id] = p
             }
+            if [.starting, .installing].contains(p.status) {
+                // Out of time: failed, so opening the preview again retries.
+                livePreviews[bot.id] = LivePreview(status: .failed(String(localized: "it didn't start within \(Int(previewDeadline / 60)) minutes")))
+            }
             Self.previewLog.info("preview \(name, privacy: .public): \(String(describing: p.status), privacy: .public)")
+        } catch is CancellationError {
+            // Left the thread while it started: not a failure; it starts again next time.
+            livePreviews[bot.id] = LivePreview(status: .stopped)
+        } catch let error as URLError where error.code == .cancelled {
+            livePreviews[bot.id] = LivePreview(status: .stopped)
         } catch let error as DarkmuxClient.ClientError where error.status == 404 {
             Self.previewLog.info("preview \(name, privacy: .public): the repo has no preview recipe")
             livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
@@ -332,6 +380,10 @@ final class RunCoordinator {
     }
 
     private static let previewLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "preview")
+    /// How long a preview may take to start (first installs are slow).
+    var previewDeadline: TimeInterval = 15 * 60
+    /// Tests answer preview start (true) and status (false) here.
+    var previewFetcher: ((Bool) async throws -> LivePreview)?
     /// Previews asked for before the connection was there.
     private var waitingPreviews: [UUID: Bot] = [:]
     /// Tests watch retries here; nil starts them for real.
@@ -403,6 +455,11 @@ final class RunCoordinator {
         }
     }
 
+    /// Tests stand in for darkmux's work API here; nil uses the client.
+    var workSubmitter: ((_ role: String, _ message: String, _ profile: String?, _ workspace: String, _ continues: String?) async throws -> (String, String?))?
+    var workCanceller: ((String) async throws -> Void)?
+    var workUndoer: ((String) async throws -> DarkmuxClient.UndoResult)?
+
     /// Tests answer workspace requests here; nil asks darkmux.
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
 
@@ -464,6 +521,10 @@ final class RunCoordinator {
         guard let connection, let token = connection.token,
               let role = run.crew.darkmuxRole, let bot = run.bot,
               let workspace = bot.workspaceName else { return false }
+        let submit = workSubmitter ?? { role, message, profile, workspace, continues in
+            try await connection.client.submitWork(token: token, role: role, message: message, profile: profile,
+                                                   workspace: workspace, continues: continues)
+        }
         let thread = store.conversation(for: .bot(bot.id))
         Task { @MainActor in
             do {
@@ -471,10 +532,17 @@ final class RunCoordinator {
                 // the default) and checks it against what the owner granted.
                 // The app's choice of model (`runProfiles`), else darkmux's default.
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
-                let (workId, profile) = try await connection.client.submitWork(token: token, role: role,
-                                                                               message: Self.workBrief(message, recipe: recipes.recipe(for: bot),
-                                                                                                        skills: BotSkill.relevant(bot.skills, to: run.task)),
-                                                                               profile: runProfiles[run.id], workspace: workspace, continues: continues)
+                // Stopped while the model was chosen: it never reaches darkmux.
+                guard run.phase == .running else { return }
+                let (workId, profile) = try await submit(role, Self.workBrief(message, recipe: recipes.recipe(for: bot),
+                                                                              skills: BotSkill.relevant(bot.skills, to: run.task)),
+                                                         runProfiles[run.id], workspace, continues)
+                // Stopped while it was being submitted: darkmux just started it,
+                // so stop it there too.
+                guard run.phase == .running else {
+                    if let workCanceller { try? await workCanceller(workId) } else { try? await connection.client.cancelWork(token: token, workId: workId) }
+                    return
+                }
                 run.darkmuxWorkId = workId
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, token: token, client: connection.client, store: store)
@@ -605,6 +673,11 @@ final class RunCoordinator {
     func tweak(_ request: String, run: BotRun, store: BotStore, echo: Bool = true, message: String? = nil) {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let bot = run.bot else { return }
+        // Undo in flight: a reply would continue a run that's being reverted.
+        if deciding.contains(run.id) {
+            store.append(.system, "Undo is still going; wait for it to finish, then reply.", to: store.conversation(for: .bot(bot.id)))
+            return
+        }
         let composed = message ?? Self.tweakMessage(for: run, change: text)
         lastTweakMessage = composed
         if echo { store.append(.user, text, to: store.conversation(for: .bot(bot.id))) }
@@ -614,6 +687,7 @@ final class RunCoordinator {
             return
         }
         guard store.apply(.tweak, to: run) else { return }
+        runChecks[run.id] = nil   // the last done-when result was about the earlier version
         // darkmux keeps a Tweak's changes together with the run it continues.
         let continues = run.darkmuxWorkId
         _ = startRealRun(run, message: composed, store: store, continues: continues)

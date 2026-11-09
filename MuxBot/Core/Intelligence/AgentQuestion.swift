@@ -19,6 +19,16 @@ enum AgentQuestion {
 
 /// How a run's card shows itself.
 enum RunCardState {
+    /// Undo reverts a run's commit: only a result that has one.
+    @MainActor static func canUndo(_ run: BotRun) -> Bool { run.phase == .result && run.keptCommit != nil }
+
+    /// A result whose changes darkmux couldn't commit: why (or a plain
+    /// line when it didn't say). nil when it was committed or changed nothing.
+    @MainActor static func checkpointProblem(_ run: BotRun) -> String? {
+        guard run.phase == .result, !run.changedFiles.isEmpty, run.keptCommit == nil else { return nil }
+        return run.details ?? "darkmux didn't commit these changes."
+    }
+
     /// A result a later run in the same thread replaced: shown as a quiet line.
     /// After an Undo: "Undone". (Older builds' kept runs: "Committed to …".)
     @MainActor

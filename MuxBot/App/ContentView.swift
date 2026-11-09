@@ -27,6 +27,8 @@ struct ContentView: View {
         }
         .onAppear { router.usesSidebar = wantsSidebar }
         .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
+        // Runs an earlier build kept become committed results (Open PR).
+        .task { BotStore(context: context).migrateKeptRuns() }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif

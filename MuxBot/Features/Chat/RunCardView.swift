@@ -126,7 +126,7 @@ struct RunCardView: View {
             } else if RunCardState.isReplaced(run) {
                 Label("Replaced by the next run", systemImage: "arrow.turn.down.right")
                     .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-            } else if run.phase == .result && run.changedFiles.isEmpty {
+            } else if run.phase == .result && run.changedFiles.isEmpty && run.crew.changesFiles {
                 questionCard(run)
             } else {
                 resultCard(run)
@@ -139,12 +139,9 @@ struct RunCardView: View {
             RefChips(refs: refs(run))
             switch run.phase {
             case .kept:
-                Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-                HStack {
-                    Button("Not now") { brain.runs.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
-                    Spacer()
-                    Button("Pass to \(LeadBot.name)") { brain.runs.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
-                }
+                // Earlier builds' Keep: moved to a committed result at launch
+                // (BotStore.migrateKeptRuns), so Open PR includes it.
+                Text("Committed. Open a pull request from the thread's Open PR.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
                 Text("Not opened.")
@@ -194,9 +191,11 @@ struct RunCardView: View {
                     if let model = brain.runs.profile(for: run) {
                         Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     }
-                    if let branch = run.keptBranch {
-                        Text("Committed to \(branch)\(run.keptCommit.map { " (\($0))" } ?? "")").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-                    } else if let why = run.details {
+                    if let branch = run.keptBranch, let commit = run.keptCommit {
+                        Text("Committed to \(branch) (\(commit))").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    }
+                    // A commit error always shows, even with an older commit's branch.
+                    if let why = run.details {
                         Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
                     }
                     Label(run.changedFiles.joined(separator: "\n"), systemImage: "doc.text").font(AppFont.footnote())
@@ -211,15 +210,26 @@ struct RunCardView: View {
                 }
             }
             .font(AppFont.footnote())
+            if let problem = RunCardState.checkpointProblem(run) {
+                // darkmux couldn't commit the changes: they're in the work copy,
+                // but there's no checkpoint to undo.
+                Label("The checkpoint didn't happen: \(problem) The changes are in the work copy, uncommitted.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+            }
             if isLatest && run.phase == .result {
                 HStack {
                     Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     Spacer()
                     if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
-                    Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
-                        .buttonStyle(.bordered)
-                        .disabled(brain.runs.deciding.contains(run.id))
-                        .help("Revert this run's commit")
+                    if RunCardState.canUndo(run) {
+                        Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
+                            .buttonStyle(.bordered)
+                            .disabled(brain.runs.deciding.contains(run.id))
+                            .help("Revert this run's commit")
+                    } else if run.needsYou {
+                        Button("Close") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
+                    }
                 }
             }
         }
@@ -256,8 +266,12 @@ struct RunCardView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
-                .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+            HStack {
+                Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
+                    .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                Spacer()
+                Button("Close") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
+            }
             decisionError(run)
         }
     }

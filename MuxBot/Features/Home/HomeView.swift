@@ -17,7 +17,7 @@ struct HomeView: View {
                 Button { router.navigate(to: .lead) } label: { LeadBotTile() }
                     .buttonStyle(.plain)
                 ForEach(BotState.allCases, id: \.self) { state in
-                    let group = roles.filter { $0.state == state }
+                    let group = roles.filter { NeedsYou.shownState($0) == state }
                     if !group.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.md) {
                             if state != .ready { HStack(spacing: Spacing.sm) {

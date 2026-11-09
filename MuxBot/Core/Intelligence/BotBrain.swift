@@ -569,10 +569,14 @@ final class BotBrain {
         }
         // Right after a run finishes, a remark about it continues that run (a
         // Tweak), never a new dispatch picked from older history.
-        if let bot, intent != .issues, intent != .review, Intent.issueNumber(in: text) == nil,
+        // Only a change request: never a question, an ask, a bug report, a
+        // pick from the preview, or "thanks".
+        if let bot, Self.isChangeRequest(text, intent: intent, element: element), Intent.issueNumber(in: text) == nil,
            !WorkStatus.isWorkQuestion(text.lowercased()),
            let last = (bot.runs ?? []).max(by: { $0.createdAt < $1.createdAt }),
            [.result, .failed, .canceled].contains(last.phase),
+           // A proposal canceled before it ever ran has nothing to follow up.
+           last.startedAt != nil,
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
             if last.phase == .result {
                 // Your reply after a result changes that same run (a Tweak).
@@ -830,8 +834,9 @@ final class BotBrain {
     private func proposePRFollowUp(_ pr: PullRequestInfo, repo: String, whatsWrong: String, bot: Bot,
                                    store: BotStore, conversation: ChatConversation) {
         store.append(.assistant, "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", to: conversation)
-        store.proposeRun(task: Self.prFollowUpTask(pr, repo: repo), crew: .coder, on: bot,
-                         brief: Self.prFollowUpBrief(pr, repo: repo, whatsWrong: whatsWrong))
+        let run = store.proposeRun(task: Self.prFollowUpTask(pr, repo: repo), crew: .coder, on: bot,
+                                   brief: Self.prFollowUpBrief(pr, repo: repo, whatsWrong: whatsWrong))
+        Task { await runs.chooseProfile(for: run) }
     }
 
     nonisolated static func prFollowUpTask(_ pr: PullRequestInfo, repo: String) -> String {
@@ -857,6 +862,13 @@ final class BotBrain {
     }
 
     /// "thanks", "never mind": not an answer to "What's still wrong?".
+    /// A message that asks for a change: no intent or Fix, not a question,
+    /// not about a picked element, not a dismissal.
+    nonisolated static func isChangeRequest(_ text: String, intent: Intent?, element: PickedElement?) -> Bool {
+        guard intent == nil || intent == .fix, element == nil, !isDismissal(text) else { return false }
+        return !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     nonisolated static func isDismissal(_ text: String) -> Bool {
         let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         return ["thanks", "thank you", "ok", "okay", "never mind", "nevermind", "cancel", "no", "nope", "forget it"].contains(lower)
@@ -975,7 +987,8 @@ final class BotBrain {
             note = "Added bot \(draft.name)."
         case let .dispatch(crew, task):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
-            store.proposeRun(task: task, crew: crew, on: bot)
+            let run = store.proposeRun(task: task, crew: crew, on: bot)
+            Task { await runs.chooseProfile(for: run) }
             return
         case let .addResource(kind, value):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
