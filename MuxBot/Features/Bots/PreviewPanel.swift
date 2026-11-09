@@ -81,6 +81,7 @@ struct PreviewPanel: View {
                 // isn't re-laid out on every frame (that flickered).
                 let layout = settled ?? currentViewport.layout(in: geometry.size)
                 WebView(preview.page)
+                    .webViewBackForwardNavigationGestures(.disabled)
                     .task(id: displayScale) { preview.displayScale = displayScale }
                     .modifier(DeviceFrame(layout: layout, panel: geometry.size))
                     .onChange(of: geometry.size) { settle(for: geometry.size) }
@@ -99,7 +100,7 @@ struct PreviewPanel: View {
                     }
                 }
         }
-        .task(id: url) { preview.show(url) }
+        .task(id: url) { preview.show(url, for: botId) }
         // A run changed files (or Undo): show what the server serves now.
         .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { preview.reload() }
     }

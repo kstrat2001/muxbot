@@ -18,6 +18,7 @@ struct PhonePreviewScreen: View {
 
     var body: some View {
         WebView(preview.page)
+            .webViewBackForwardNavigationGestures(.disabled)
             .task(id: displayScale) { preview.displayScale = displayScale }
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .bottomTrailing) { controls }

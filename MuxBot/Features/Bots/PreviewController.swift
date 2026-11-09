@@ -5,19 +5,43 @@ import WebKit
 /// snapshot, while the panel shows it.
 @MainActor @Observable
 final class PreviewController: PageInspecting {
-    let page: WebPage
+    /// The page the panel shows. Each bot gets a fresh one (`show(_:for:)`),
+    /// so its history never holds another bot's preview.
+    private(set) var page: WebPage
     private let relay = PickRelay()
+    /// The bot whose preview `page` shows.
+    private(set) var botId: UUID?
 
     init() {
-        // The page posts picks to the app the moment they happen; the
-        // selection menu script is installed on every load.
+        page = Self.makePage(relay: relay)
+        relay.onPick = { [weak self] element in self?.received(element) }
+    }
+
+    /// A page with the app's scripts: picks are posted to the app the moment
+    /// they happen, and the selection menu is installed on every load. Back
+    /// and forward are refused (a key or swipe must never bring back an
+    /// older page, or a stopped preview's cached one).
+    private static func makePage(relay: PickRelay) -> WebPage {
         var config = WebPage.Configuration()
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: BugReport.pageScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         scripts.add(relay, name: BugReport.handlerName)
         config.userContentController = scripts
-        page = WebPage(configuration: config)
-        relay.onPick = { [weak self] element in self?.received(element) }
+        return WebPage(configuration: config, navigationDecider: NoBackForward())
+    }
+
+    /// Shows `url` as `bot`'s preview. Another bot's preview gets a fresh
+    /// page: no history, no pick and no page from the bot before.
+    func show(_ url: URL, for bot: UUID?) {
+        if bot != botId {
+            botId = bot
+            isPicking = false
+            picked = nil
+            pickedCrop = nil
+            loadedURL = nil
+            page = Self.makePage(relay: relay)
+        }
+        show(url)
     }
     private(set) var loadedURL: URL?
     /// Pick mode: hover highlights, a click picks an element.
@@ -133,6 +157,16 @@ final class PreviewController: PageInspecting {
         CGRect(x: Double(element.x) - scrollX - 12, y: Double(element.y) - scrollY - 12,
                width: Double(element.width) + 24, height: Double(element.height) + 24)
     }
+}
+
+/// Refuses back and forward navigations in the preview (Delete, a swipe,
+/// a menu): the preview always shows the bot's current page.
+struct NoBackForward: WebPage.NavigationDeciding {
+    func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
+        action.navigationType == .backForward ? .cancel : .allow
+    }
+
+    func decidePolicy(for response: WebPage.NavigationResponse) async -> WKNavigationResponsePolicy { .allow }
 }
 
 /// Receives the page's posted picks (WebKit calls it on the main thread).

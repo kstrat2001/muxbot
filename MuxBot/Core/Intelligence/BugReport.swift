@@ -184,6 +184,14 @@ enum BugReport {
               marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
               fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
           };
+          // Delete outside a text field would make WebKit go back a page:
+          // swallow it there; the page's own fields still get it.
+          document.addEventListener('keydown', e => {
+            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+            const t = e.target;
+            const editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+            if (!editable) e.preventDefault();
+          }, true);
           const menu = document.createElement('div');
           menu.style.cssText = 'position:fixed;z-index:2147483647;display:none;padding:5px;border-radius:10px;background:#1c2622;box-shadow:0 4px 16px rgba(0,0,0,.45);font:13px -apple-system,system-ui,sans-serif';
           const choose = () => {
