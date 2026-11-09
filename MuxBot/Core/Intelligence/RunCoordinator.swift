@@ -341,6 +341,7 @@ final class RunCoordinator {
             return
         }
         waitingPreviews[bot.id] = nil
+        previewWorkspaces[bot.id] = name
         if let status = livePreviews[bot.id]?.status, status != .stopped, status != .waiting, !(status.isFailed) {
             Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
             return
@@ -400,10 +401,72 @@ final class RunCoordinator {
     }
 
     func stopPreview(for bot: Bot) async {
-        guard let name = bot.workspaceName, let connection, let token = connection.token else { return }
-        try? await connection.client.stopPreview(token: token, workspace: name)
-        livePreviews[bot.id] = LivePreview(status: .stopped)
+        guard let name = bot.workspaceName else { return }
+        await stopPreview(bot.id, workspace: name)
     }
+
+    private func stopPreview(_ id: UUID, workspace name: String) async {
+        // One that was waiting for the connection must not start later, unseen.
+        if waitingPreviews.removeValue(forKey: id) != nil { livePreviews[id] = LivePreview(status: .stopped) }
+        guard let status = livePreviews[id]?.status, status != .stopped, !status.isFailed else { return }
+        livePreviews[id] = LivePreview(status: .stopped)
+        if let previewStopper { await previewStopper(name); return }
+        guard let connection, let token = connection.token else { return }
+        try? await connection.client.stopPreview(token: token, workspace: name)
+    }
+
+    /// Stops every preview this app started: when the app quits. Gives up
+    /// after `limit` so quitting never hangs; darkmux stops any preview
+    /// still running once it has been idle.
+    func stopAllPreviews(limit: Duration = .seconds(6)) async {
+        let running = previewWorkspaces.filter { id, _ in
+            guard let status = livePreviews[id]?.status else { return false }
+            return status != .stopped && !status.isFailed
+        }
+        guard !running.isEmpty else { return }
+        // Each stop marks its preview stopped at once, then asks darkmux; the
+        // wait below ends when they're all answered or at `limit`, whichever
+        // comes first (an unanswered stop is left to darkmux's idle timeout).
+        stopsLeft = running.count
+        for (id, name) in running {
+            Task { await self.stopPreview(id, workspace: name); self.stopsLeft -= 1 }
+        }
+        let deadline = ContinuousClock.now + limit
+        while stopsLeft > 0, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// While a preview is on screen, asks darkmux its status every
+    /// `previewHeartbeat`: darkmux stops a preview nobody has asked about
+    /// for a while (`clients.preview.idle_minutes`), so this keeps the one
+    /// you're looking at running. Returns when the task is cancelled.
+    func keepPreviewAlive(for bot: Bot) async {
+        guard let name = bot.workspaceName else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: previewHeartbeat)
+            if Task.isCancelled { return }
+            guard livePreviews[bot.id]?.status == .ready else { continue }
+            let p: LivePreview?
+            if let previewFetcher {
+                p = try? await previewFetcher(false)
+            } else if let connection, let token = connection.token {
+                p = try? await connection.client.previewStatus(token: token, workspace: name).live
+            } else {
+                p = nil
+            }
+            if let p, !Task.isCancelled { livePreviews[bot.id] = p }
+        }
+    }
+
+    /// How often a preview on screen tells darkmux it's still wanted.
+    var previewHeartbeat: Duration = .seconds(60)
+    /// Quit's stops still waiting on darkmux.
+    private var stopsLeft = 0
+    /// Workspace names of the previews this app asked for, by bot.
+    private var previewWorkspaces: [UUID: String] = [:]
+    /// Tests watch stops here; nil asks darkmux.
+    var previewStopper: ((String) async -> Void)?
 
     // MARK: Work copies
 
