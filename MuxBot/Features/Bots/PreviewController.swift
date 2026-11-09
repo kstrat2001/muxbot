@@ -15,6 +15,7 @@ final class PreviewController: PageInspecting {
     init() {
         page = Self.makePage(relay: relay)
         relay.onPick = { [weak self] element in self?.received(element) }
+        watchForMarks()
     }
 
     /// A page with the app's scripts: picks are posted to the app the moment
@@ -40,8 +41,32 @@ final class PreviewController: PageInspecting {
             pickedCrop = nil
             loadedURL = nil
             page = Self.makePage(relay: relay)
+            watchForMarks()
         }
         show(url)
+    }
+
+    /// A reload or a new page while a chip is attached: outline its element
+    /// again once the page is there (gone: no outline). Restarted for each
+    /// bot's fresh page, so it always watches the page on screen.
+    private func watchForMarks() {
+        markWatch?.cancel()
+        let page = page
+        markWatch = Task { [weak self] in
+            do {
+                for try await event in page.navigations where event == .finished {
+                    guard !Task.isCancelled else { return }
+                    guard let self, self.page === page, let picked = self.picked else { continue }
+                    await self.mark(picked)
+                }
+            } catch {}
+        }
+    }
+    private var markWatch: Task<Void, Never>?
+
+    /// Outlines the picked element in the page while its chip is attached.
+    private func mark(_ element: PickedElement) async {
+        _ = try? await page.callJavaScript("return window.__muxMark ? window.__muxMark(sel) : false", arguments: ["sel": element.selector])
     }
     private(set) var loadedURL: URL?
     /// Pick mode: hover highlights, a click picks an element.
@@ -68,7 +93,10 @@ final class PreviewController: PageInspecting {
             try? element.selector.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-pick.txt"), atomically: true, encoding: .utf8)
         }
         #endif
-        Task { pickedCrop = await crop(element) }
+        Task {
+            pickedCrop = await crop(element)
+            await mark(element)
+        }
     }
 
     /// The crop of the element in the last message sent, for its bug card.
@@ -76,6 +104,7 @@ final class PreviewController: PageInspecting {
 
     func clearPick() {
         if picked != nil { lastSentCrop = pickedCrop }
+        if picked != nil { Task { _ = try? await page.callJavaScript("if (window.__muxUnmark) window.__muxUnmark(); return true;") } }
         picked = nil
         pickedCrop = nil
     }

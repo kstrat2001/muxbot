@@ -100,6 +100,48 @@ struct PreviewPerBotTests {
         #expect(inField == false, "typing in the page's own fields still works")
     }
 
+    /// The pick outline's reload watch follows each bot's fresh page: on the
+    /// second bot's page, a reload still redraws the outline.
+    @Test func thePickOutlineIsRedrawnAfterAReloadOnTheSecondBotsPage() async throws {
+        let preview = PreviewController()
+        let window = host(preview)
+        defer { window.close() }
+        preview.show(page("Site"), for: UUID())
+        try await settle(preview)
+        let second = URL(string: "data:text/html;base64," + Data(PickHighlightTests.html.utf8).base64EncodedString())!
+        preview.show(second, for: UUID())
+        try await settle(preview)
+        _ = try await preview.page.callJavaScript("window.__muxSend(window.__muxDescribe(document.querySelector('#c'))); return true;")
+        for _ in 0..<40 where preview.picked == nil { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(preview.picked != nil)
+        // The first outline (drawn after the pick's crop) is up before the
+        // reload, so only the reload watch can draw the next one.
+        for _ in 0..<60 {
+            let up = try await preview.page.callJavaScript("const m = document.querySelector('[data-muxbot-mark]'); return !!(m && m.isConnected && m.style.display !== 'none');") as? Bool
+            if up == true { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // A marker only the old document has: gone once the reload really happened.
+        _ = try await preview.page.callJavaScript("window.__beforeReload = 1; return true;")
+        preview.reload()
+        try await settle(preview)
+        var reloaded = false
+        for _ in 0..<60 {
+            reloaded = (try await preview.page.callJavaScript("return typeof window.__beforeReload === 'undefined'") as? Bool) == true
+            if reloaded { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(reloaded, "the page really reloaded")
+        let check = "const m = document.querySelector('[data-muxbot-mark]'); const e = document.querySelector('#c'); if (!m || m.style.display === 'none' || !m.isConnected || !e) return 'none'; const a = m.getBoundingClientRect(), b = e.getBoundingClientRect(); return (Math.round(a.top) === Math.round(b.top) && Math.round(a.height) === Math.round(b.height)) ? 'on' : 'off';"
+        var state = "none"
+        for _ in 0..<60 {
+            state = try await preview.page.callJavaScript(check) as? String ?? "none"
+            if state == "on" { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(state == "on", "redrawn on the element after the reload")
+    }
+
     @Test func switchingBotsDropsTheOtherBotsPick() async throws {
         let preview = PreviewController()
         let window = host(preview)

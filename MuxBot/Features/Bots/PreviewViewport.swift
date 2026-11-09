@@ -83,6 +83,19 @@ enum PreviewViewport: String, CaseIterable, Sendable {
         return Layout(width: width, height: size.height / scale, scale: scale)
     }
 
+    /// What the panel draws for a panel of `size`. A device or Fit is
+    /// always the panel's current fit: a device's page keeps its own CSS
+    /// width, so a resize only changes the scale and never re-lays out the
+    /// page. Desktop keeps its settled page height while a resize settles
+    /// (no re-layout on every frame), but scales down at once when the
+    /// panel gets narrower, so the page never runs past the panel's edge.
+    func shown(settled: Layout?, in size: CGSize) -> Layout {
+        let live = layout(in: size)
+        guard width != nil, height == nil, var kept = settled, kept.width == live.width else { return live }
+        kept.scale = min(kept.scale, live.scale)
+        return kept
+    }
+
     /// The size this bot was last shown at on this Mac, else the first one
     /// its preview recipe lists, else Fit.
     static func resolve(stored: String?, recipe: [String]?) -> PreviewViewport {
