@@ -5,10 +5,11 @@ struct TemplateEntry: Codable, Equatable, Identifiable, Sendable {
     var id: String
     /// `owner/name` on GitHub.
     var repo: String
-    /// A tag or commit; never a branch.
+    /// A full commit SHA: the template is used only as of this commit.
     var ref: String
     var title: String
     var icon: String
+    var summary: String? = nil
 
     var repoURL: String { "https://github.com/\(repo)" }
 }
@@ -61,28 +62,62 @@ final class TemplateRegistry: Sendable {
         return Self.bundledTemplates()
     }
 
-    /// A template's playbook at its pinned ref; the copy built into the app
-    /// when it can't be fetched or doesn't parse.
-    func playbook(for entry: TemplateEntry) async -> Playbook? {
-        let url = URL(string: "https://raw.githubusercontent.com/\(entry.repo)/\(entry.ref)/PLAYBOOK.md")!
-        if let data = try? await fetch(url), let text = String(data: data, encoding: .utf8),
-           let playbook = try? Playbook.parse(text) {
-            return playbook
+    /// A template at its pinned commit: its playbook, once its PLAYBOOK.md
+    /// and .darkmux/preview.json pass the schema, or why it can't be used.
+    /// Offline, the copies built into the app.
+    func template(for entry: TemplateEntry) async -> TemplateDetails {
+        let base = "https://raw.githubusercontent.com/\(entry.repo)/\(entry.ref)/"
+        if let playbook = try? await fetch(URL(string: base + "PLAYBOOK.md")!),
+           let preview = try? await fetch(URL(string: base + ".darkmux/preview.json")!) {
+            return Self.check(playbook: playbook, preview: preview)
         }
-        return Self.bundledPlaybook(for: entry.id)
+        guard let bundled = Self.bundledFiles(for: entry.id) else {
+            return .refused(String(localized: "Mux Bot can't reach GitHub to read this template."))
+        }
+        return Self.check(playbook: bundled.playbook, preview: bundled.preview)
+    }
+
+    static func check(playbook: Data, preview: Data) -> TemplateDetails {
+        do {
+            try TemplateSchema.checkPreview(preview)
+            return .ready(try Playbook.parse(String(decoding: playbook, as: UTF8.self)))
+        } catch let error as Playbook.ParseError {
+            return .refused(error.message)
+        } catch let error as TemplateSchema.Problem {
+            return .refused(error.message)
+        } catch {
+            return .refused(error.localizedDescription)
+        }
     }
 
     // MARK: The list's format
 
-    private struct List: Decodable {
-        var version: Int
-        var templates: [TemplateEntry]
-    }
+    static let listKeys = ["schema", "templates"]
+    static let entryKeys = ["id", "repo", "ref", "title", "icon", "summary"]
 
-    /// Entries that are usable: an `owner/name` repo and a pinned ref (a
-    /// tag or a commit, never a branch name like main).
+    /// The usable entries of a schema-1 list: an `owner/name` repo pinned
+    /// to a full commit SHA, and no key the schema doesn't name. A list
+    /// with no schema, or a newer one, is refused.
     static func decode(_ data: Data) throws -> [TemplateEntry] {
-        try JSONDecoder().decode(List.self, from: data).templates.filter { isRepo($0.repo) && isPinned($0.ref) }
+        let file = "templates.json"
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TemplateSchema.Problem.invalid(file: file, key: "(file)", why: String(localized: "it isn't a JSON object."))
+        }
+        for key in object.keys.sorted() where !listKeys.contains(key) {
+            throw TemplateSchema.Problem.unknownKey(file: file, key: key, closest: TemplateSchema.closest(to: key, in: listKeys))
+        }
+        let schema = (object["schema"] as? Int).map(String.init) ?? (object["schema"] as? String)
+        try TemplateSchema.check(schema, missing: TemplateSchema.Problem.missingSchema(file: file),
+                                 newer: { TemplateSchema.Problem.newerSchema(file: file, $0) },
+                                 notANumber: { TemplateSchema.Problem.notASchema(file: file, $0) })
+        let raw = object["templates"] as? [[String: Any]] ?? []
+        return raw.compactMap { item -> TemplateEntry? in
+            guard item.keys.allSatisfy(entryKeys.contains),
+                  let entryData = try? JSONSerialization.data(withJSONObject: item),
+                  let entry = try? JSONDecoder().decode(TemplateEntry.self, from: entryData),
+                  isRepo(entry.repo), isPinned(entry.ref) else { return nil }
+            return entry
+        }
     }
 
     static func isRepo(_ repo: String) -> Bool {
@@ -91,9 +126,9 @@ final class TemplateRegistry: Sendable {
         return parts.count == 2 && parts.allSatisfy { !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains) }
     }
 
+    /// A full commit SHA: never a branch or a tag, which can move.
     static func isPinned(_ ref: String) -> Bool {
-        let branches: Set<String> = ["", "main", "master", "develop", "dev", "HEAD", "trunk"]
-        return !branches.contains(ref) && !ref.contains("..") && !ref.contains(" ")
+        ref.count == 40 && ref.allSatisfy { $0.isHexDigit && !$0.isUppercase }
     }
 
     // MARK: Built into the app (Start/Templates)
@@ -104,9 +139,25 @@ final class TemplateRegistry: Sendable {
         return (try? decode(data)) ?? []
     }
 
-    static func bundledPlaybook(for id: String) -> Playbook? {
-        guard let url = Bundle.main.url(forResource: "\(id).PLAYBOOK", withExtension: "md", subdirectory: "Templates"),
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        return try? Playbook.parse(text)
+    static func bundledFiles(for id: String) -> (playbook: Data, preview: Data)? {
+        guard let playbook = Bundle.main.url(forResource: "\(id).PLAYBOOK", withExtension: "md", subdirectory: "Templates"),
+              let preview = Bundle.main.url(forResource: "\(id).preview", withExtension: "json", subdirectory: "Templates"),
+              let p = try? Data(contentsOf: playbook), let r = try? Data(contentsOf: preview) else { return nil }
+        return (p, r)
     }
+
+    static func bundledPlaybook(for id: String) -> Playbook? {
+        guard let files = bundledFiles(for: id), case let .ready(playbook) = check(playbook: files.playbook, preview: files.preview) else { return nil }
+        return playbook
+    }
+}
+
+/// A template as the start screen can use it.
+enum TemplateDetails: Equatable, Sendable {
+    case ready(Playbook)
+    /// Why it can't be used, in plain words ("This template needs a newer
+    /// Mux Bot ...").
+    case refused(String)
+
+    var playbook: Playbook? { if case let .ready(p) = self { p } else { nil } }
 }

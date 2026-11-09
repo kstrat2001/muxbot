@@ -12,7 +12,8 @@ struct StartProjectView: View {
     @Environment(AppRouter.self) private var router
 
     @State private var entries: [TemplateEntry] = []
-    @State private var playbooks: [String: Playbook] = [:]
+    @State private var details: [String: TemplateDetails] = [:]
+    private var playbooks: [String: Playbook] { details.compactMapValues(\.playbook) }
     @State private var picked: TemplateEntry?
     @State private var answers = StartProject.Answers(name: "")
     @State private var starting = false
@@ -68,9 +69,15 @@ struct StartProjectView: View {
                     .font(.title)
                     .foregroundStyle(Color.brandBlue)
                 Text(entry.title).font(AppFont.headline())
-                Text(playbooks[entry.id]?.pitch ?? "")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
-                    .lineLimit(3, reservesSpace: true)
+                if case let .refused(why)? = details[entry.id] {
+                    Label(why, systemImage: "exclamationmark.triangle")
+                        .font(AppFont.footnote()).foregroundStyle(.orange)
+                        .lineLimit(3, reservesSpace: true)
+                } else {
+                    Text(playbooks[entry.id]?.pitch ?? entry.summary ?? "")
+                        .font(AppFont.footnote()).foregroundStyle(.secondary)
+                        .lineLimit(3, reservesSpace: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -120,8 +127,8 @@ struct StartProjectView: View {
     private func load() async {
         let registry = TemplateRegistry.shared
         entries = await registry.templates()
-        for entry in entries where playbooks[entry.id] == nil {
-            playbooks[entry.id] = await registry.playbook(for: entry)
+        for entry in entries where details[entry.id] == nil {
+            details[entry.id] = await registry.template(for: entry)
         }
     }
 

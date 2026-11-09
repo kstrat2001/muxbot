@@ -1,5 +1,6 @@
 # Playbook: a website
 
+schema: 1
 title: Build a website
 icon: globe
 pitch: A one-page site you can grow: say what it should look like and what it needs, and see it change in the preview.
@@ -7,7 +8,7 @@ animal: fox
 colors: 0e9f8e, ffffff
 crew: coder
 
-This file is the recipe Mux Bot reads when someone starts a website from this template. The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
+This file is the recipe Mux Bot reads when someone starts a website from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 1). The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
 
 ## Questions
 

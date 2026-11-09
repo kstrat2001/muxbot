@@ -2,9 +2,12 @@ import Foundation
 
 /// A template's PLAYBOOK.md: the recipe Mux Bot follows to make a bot for a
 /// project. Plain Markdown, readable on GitHub: a header of `key: value`
-/// lines (title, icon, pitch, animal, colors, crew), then `## Questions`
-/// (what Mux Bot asks first), `## Persona`, and one `## Skill: <name>`
-/// section per skill. Parsed by hand; an unknown key or section is skipped.
+/// lines (schema, title, icon, pitch, animal, colors, crew), then
+/// `## Questions` (what Mux Bot asks first), `## Persona`, and one
+/// `## Skill: <name>` section per skill, in the template schema
+/// (kstrat2001/muxbot-templates SCHEMA.md). Parsed by hand. A missing or
+/// newer schema, a missing required key or section, or an unknown header
+/// key is refused by name; an unknown `##` section is skipped.
 struct Playbook: Equatable, Sendable {
     var title: String
     var icon: String
@@ -21,6 +24,30 @@ struct Playbook: Equatable, Sendable {
     enum ParseError: Error, Equatable {
         case missing(String)
         case tooLarge
+        case newerSchema(Int)
+        case notASchema(String)
+        case unknownKey(String, closest: String)
+        case missingSection(String)
+
+        /// What the start screen says about a template it can't use.
+        var message: String {
+            switch self {
+            case .newerSchema(let n):
+                String(localized: "This template needs a newer Mux Bot (its PLAYBOOK.md is schema \(n); this Mux Bot reads schema \(TemplateSchema.supported)).")
+            case .missing("schema"):
+                String(localized: "This template's PLAYBOOK.md doesn't say which schema it follows.")
+            case .notASchema(let v):
+                String(localized: "This template's PLAYBOOK.md has schema “\(v)”, which isn't a schema number.")
+            case .missing(let key):
+                String(localized: "This template's PLAYBOOK.md is missing “\(key)”.")
+            case .unknownKey(let key, let closest):
+                String(localized: "This template's PLAYBOOK.md has an unknown key “\(key)” (did you mean “\(closest)”?).")
+            case .missingSection(let section):
+                String(localized: "This template's PLAYBOOK.md is missing its “\(section)” section.")
+            case .tooLarge:
+                String(localized: "This template's PLAYBOOK.md is too large.")
+            }
+        }
     }
 
     static let maxBytes = 64 * 1024
@@ -31,13 +58,16 @@ struct Playbook: Equatable, Sendable {
 
     static func parse(_ text: String) throws -> Playbook {
         guard text.utf8.count <= maxBytes else { throw ParseError.tooLarge }
-        let (header, sections) = split(text)
-        guard let title = header["title"], !title.isEmpty else { throw ParseError.missing("title") }
+        let (header, sections) = try split(text)
+        try TemplateSchema.check(header["schema"], missing: ParseError.missing("schema"),
+                                 newer: ParseError.newerSchema, notANumber: ParseError.notASchema)
+        for key in ["title", "icon", "pitch"] where (header[key] ?? "").isEmpty { throw ParseError.missing(key) }
+        let title = header["title"] ?? ""
         let colors = (header["colors"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
         let hex = colors.map { isHex($0) ? $0 : nil }
         let crew = (header["crew"] ?? "").split(separator: ",")
             .compactMap { CrewRole(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
-        var playbook = Playbook(title: title, icon: header["icon"] ?? "sparkles", pitch: header["pitch"] ?? "",
+        var playbook = Playbook(title: title, icon: header["icon"] ?? "", pitch: header["pitch"] ?? "",
                                 animal: header["animal"].flatMap(BotAnimal.init(rawValue:)),
                                 bodyHex: hex.first ?? nil, eyeHex: hex.dropFirst().first ?? nil,
                                 crew: crew.isEmpty ? [.coder] : crew, questions: [], persona: "", skills: [])
@@ -54,19 +84,23 @@ struct Playbook: Equatable, Sendable {
                 if !name.isEmpty, !body.isEmpty { playbook.skills.append(BotSkill(name: name, body: body)) }
             }
         }
+        let headings = sections.map(\.0)
+        if !headings.contains("Questions") || playbook.questions.isEmpty { throw ParseError.missingSection("Questions") }
+        if playbook.persona.isEmpty { throw ParseError.missingSection("Persona") }
+        if playbook.skills.isEmpty { throw ParseError.missingSection("Skill") }
         return playbook
     }
 
     /// The `key: value` lines before the first `##` section, and each
     /// section's heading and trimmed text.
-    private static func split(_ text: String) -> ([String: String], [(String, String)]) {
+    private static func split(_ text: String) throws -> ([String: String], [(String, String)]) {
         var header: [String: String] = [:]
         var sections: [(String, [String])] = []
         for line in text.components(separatedBy: "\n") {
             if line.hasPrefix("## ") {
                 sections.append((String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces), []))
             } else if sections.isEmpty {
-                if let (key, value) = keyValue(line), header[key] == nil { header[key] = value }
+                if let (key, value) = try keyValue(line), header[key] == nil { header[key] = value }
             } else {
                 sections[sections.count - 1].1.append(line)
             }
@@ -74,12 +108,15 @@ struct Playbook: Equatable, Sendable {
         return (header, sections.map { ($0.0, $0.1.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)) })
     }
 
-    private static let keys: Set<String> = ["title", "icon", "pitch", "animal", "colors", "crew"]
+    private static let keys = ["schema", "title", "icon", "pitch", "animal", "colors", "crew"]
 
-    private static func keyValue(_ line: String) -> (String, String)? {
+    /// A header key is a lowercase word at the start of the line, a colon,
+    /// then the value; other prose is ignored. An unknown key is refused.
+    private static func keyValue(_ line: String) throws -> (String, String)? {
         guard let colon = line.firstIndex(of: ":") else { return nil }
-        let key = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
-        guard keys.contains(key) else { return nil }
+        let key = String(line[..<colon])
+        guard !key.isEmpty, key.allSatisfy({ $0.isLowercase || $0 == "_" }) else { return nil }
+        guard keys.contains(key) else { throw ParseError.unknownKey(key, closest: TemplateSchema.closest(to: key, in: keys)) }
         return (key, line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces))
     }
 

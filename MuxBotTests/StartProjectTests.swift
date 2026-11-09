@@ -11,6 +11,7 @@ struct PlaybookParserTests {
     static let website = """
         # Playbook: a website
 
+        schema: 1
         title: Build a website
         icon: globe
         pitch: A one-page site you can grow.
@@ -67,26 +68,32 @@ struct PlaybookParserTests {
         #expect(try Playbook.parse(Self.website).persona(for: "Bakery") == "You look after Bakery, a website built with Vite.\nYou make the change that was asked for.")
     }
 
+    /// A minimal schema-1 playbook with `header` lines and `sections`.
+    static func minimal(_ header: String = "", sections: String? = nil) -> String {
+        "schema: 1\ntitle: X\nicon: star\npitch: P\n\(header)\n"
+            + (sections ?? "## Questions\n\n- Name?\n\n## Persona\n\nYou are {name}.\n\n## Skill: Real\n\nWhen: always.\n")
+    }
+
     @Test func aPlaybookWithoutATitleIsRefused() {
-        #expect(throws: Playbook.ParseError.missing("title")) { try Playbook.parse("icon: globe\n\n## Persona\n\nHi") }
+        let text = Self.minimal().replacingOccurrences(of: "title: X\n", with: "")
+        #expect(throws: Playbook.ParseError.missing("title")) { try Playbook.parse(text) }
     }
 
     @Test func unknownValuesFallBackInsteadOfBreaking() throws {
-        let p = try Playbook.parse("title: X\nanimal: dragon\ncolors: red, 12345g\ncrew: wizard, reviewer\n")
+        let p = try Playbook.parse(Self.minimal("animal: dragon\ncolors: red, 12345g\ncrew: wizard, reviewer"))
         #expect(p.animal == nil, "not one of the app's animals")
         #expect(p.bodyHex == nil && p.eyeHex == nil, "not hex colors")
         #expect(p.crew == [.reviewer], "unknown crew dropped")
-        #expect(p.skills.isEmpty && p.questions.isEmpty)
-        #expect(try Playbook.parse("title: X\n").crew == [.coder], "Coder by default")
+        #expect(try Playbook.parse(Self.minimal()).crew == [.coder], "Coder by default")
     }
 
     @Test func aSkillWithNoNameOrBodyIsSkipped() throws {
-        let p = try Playbook.parse("title: X\n\n## Skill:\n\nbody\n\n## Skill: Empty\n\n## Skill: Real\n\nWhen: always.\n")
+        let p = try Playbook.parse(Self.minimal(sections: "## Questions\n\n- Name?\n\n## Persona\n\nHi\n\n## Skill:\n\nbody\n\n## Skill: Empty\n\n## Skill: Real\n\nWhen: always.\n"))
         #expect(p.skills.map(\.name) == ["Real"])
     }
 
     @Test func anOversizedFileIsRefused() {
-        let big = "title: X\n" + String(repeating: "a", count: Playbook.maxBytes)
+        let big = Self.minimal() + String(repeating: "a", count: Playbook.maxBytes)
         #expect(throws: Playbook.ParseError.tooLarge) { try Playbook.parse(big) }
     }
 
@@ -102,14 +109,17 @@ struct TemplateRegistryTests {
 
     @Test func theListDecodesAndSkipsUnpinnedEntries() throws {
         let json = #"""
-        {"version":1,"templates":[
-          {"id":"website","repo":"kstrat2001/muxbot-template-vite-react","ref":"v1.0.0","title":"Build a website","icon":"globe"},
+        {"schema":1,"templates":[
+          {"id":"website","repo":"kstrat2001/muxbot-template-vite-react","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Build a website","icon":"globe","summary":"A site."},
+          {"id":"tagged","repo":"someone/thing","ref":"v1.0.0","title":"Tagged","icon":"star"},
           {"id":"loose","repo":"someone/thing","ref":"main","title":"Loose","icon":"star"},
-          {"id":"bad","repo":"not a repo","ref":"v1","title":"Bad","icon":"star"}
+          {"id":"bad","repo":"not a repo","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Bad","icon":"star"},
+          {"id":"extra","repo":"a/b","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Extra","icon":"star","colour":"red"}
         ]}
         """#
         let entries = try TemplateRegistry.decode(Data(json.utf8))
-        #expect(entries.map(\.id) == ["website"], "a branch isn't pinned; a repo must be owner/name")
+        #expect(entries.map(\.id) == ["website"], "pinned to a commit SHA, owner/name, and only the schema's keys")
+        #expect(entries.first?.summary == "A site.")
     }
 
     @Test func offlineItUsesTheCacheThenTheBuiltInCopy() async throws {
@@ -119,34 +129,44 @@ struct TemplateRegistryTests {
         let offline = TemplateRegistry(cacheURL: cache) { _ in throw Offline() }
         let builtIn = await offline.templates()
         #expect(builtIn.map(\.id) == ["website"], "the copy built into the app")
-        #expect(builtIn.first?.ref == "v1.0.0")
+        #expect(builtIn.first.map { TemplateRegistry.isPinned($0.ref) } == true)
 
         let online = TemplateRegistry(cacheURL: cache) { _ in
-            Data(#"{"version":1,"templates":[{"id":"docs","repo":"a/b","ref":"v2.0.0","title":"Write docs","icon":"book"}]}"#.utf8)
+            Data(#"{"schema":1,"templates":[{"id":"docs","repo":"a/b","ref":"0123456789abcdef0123456789abcdef01234567","title":"Write docs","icon":"book"}]}"#.utf8)
         }
         #expect(await online.templates().map(\.id) == ["docs"])
         let laterOffline = TemplateRegistry(cacheURL: cache) { _ in throw Offline() }
         #expect(await laterOffline.templates().map(\.id) == ["docs"], "the last list fetched")
     }
 
-    @Test func playbooksAreFetchedAtTheirPinnedRef() async throws {
+    static let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-vite-react",
+                                     ref: "1f1a5b5678e53642f702b0d176aaf2bbc8117f12", title: "Build a website", icon: "globe")
+    static let preview = Data(#"{"schema":1,"command":"npm run dev"}"#.utf8)
+
+    @Test func templatesAreFetchedAtTheirPinnedCommit() async throws {
         let seen = URLRecorder()
         let registry = TemplateRegistry(cacheURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)) { url in
             seen.add(url)
-            return Data("title: Fetched\n".utf8)
+            return url.lastPathComponent == "preview.json" ? Self.preview : Data(PlaybookParserTests.minimal().utf8)
         }
-        let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-vite-react", ref: "v1.0.0", title: "Build a website", icon: "globe")
-        let p = try #require(await registry.playbook(for: entry))
-        #expect(p.title == "Fetched")
-        #expect(seen.urls.last?.absoluteString == "https://raw.githubusercontent.com/kstrat2001/muxbot-template-vite-react/v1.0.0/PLAYBOOK.md")
+        let details = await registry.template(for: Self.entry)
+        #expect(details.playbook?.title == "X")
+        #expect(seen.urls.map(\.absoluteString) == [
+            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-vite-react/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/PLAYBOOK.md",
+            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-vite-react/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/.darkmux/preview.json",
+        ])
     }
 
-    @Test func aPlaybookThatWontParseFallsBackToTheBuiltInOne() async throws {
-        let registry = TemplateRegistry(cacheURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)) { _ in
-            Data("no title here".utf8)
+    @Test func aTemplateThatFailsTheSchemaIsRefusedNotGuessed() async {
+        let registry = TemplateRegistry(cacheURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)) { url in
+            url.lastPathComponent == "preview.json" ? Self.preview : Data("title: no schema here\n".utf8)
         }
-        let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-vite-react", ref: "v1.0.0", title: "Build a website", icon: "globe")
-        #expect(await registry.playbook(for: entry)?.title == "Build a website")
+        #expect(await registry.template(for: Self.entry) == .refused("This template's PLAYBOOK.md doesn't say which schema it follows."))
+    }
+
+    @Test func offlineTheBuiltInCopiesAreChecked() async {
+        let registry = TemplateRegistry(cacheURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)) { _ in throw Offline() }
+        #expect(await registry.template(for: Self.entry).playbook?.title == "Build a website")
     }
 }
 
@@ -191,7 +211,7 @@ struct StartProjectFlowTests {
         let store = TestStore.fresh()
         let brain = BotBrain()
         let playbook = try Playbook.parse(PlaybookParserTests.website)
-        let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-vite-react", ref: "v1.0.0", title: "Build a website", icon: "globe")
+        let entry = TemplateRegistryTests.entry
         var asked: DarkmuxClient.WorkspaceBody?
         brain.runs.workspaceMaker = { body in
             asked = body
@@ -210,15 +230,15 @@ struct StartProjectFlowTests {
         #expect(bot.repoSlugs.isEmpty, "local only until GitHub")
         #expect(asked?.template == true)
         #expect(asked?.repoURL == "https://github.com/kstrat2001/muxbot-template-vite-react")
-        #expect(asked?.ref == "v1.0.0")
+        #expect(asked?.ref == "1f1a5b5678e53642f702b0d176aaf2bbc8117f12")
         #expect(bot.workspaceName == "bakery-1a2b")
     }
 
     @Test func theFlowReadsOnlyTheEntryAndItsPlaybook() async throws {
         let store = TestStore.fresh()
         let brain = BotBrain()
-        let playbook = try Playbook.parse("title: Write docs\nicon: book\nanimal: owl\ncrew: researcher\n\n## Persona\n\nYou write {name}.\n")
-        let entry = TemplateEntry(id: "docs", repo: "a/docs-template", ref: "v2.0.0", title: "Write docs", icon: "book")
+        let playbook = try Playbook.parse("schema: 1\ntitle: Write docs\nicon: book\npitch: Docs.\nanimal: owl\ncrew: researcher\n\n## Questions\n\n- Name?\n\n## Persona\n\nYou write {name}.\n\n## Skill: Add a chapter\n\nWhen: a new chapter.\n")
+        let entry = TemplateEntry(id: "docs", repo: "a/docs-template", ref: "0123456789abcdef0123456789abcdef01234567", title: "Write docs", icon: "book")
         brain.runs.workspaceMaker = { _ in DarkmuxClient.Workspace(workspace: "manual-1", branch: "main", created: true) }
         let bot = await StartProject.start(entry, playbook: playbook, answers: StartProject.Answers(name: "Manual"),
                                            store: store, runs: brain.runs)
@@ -226,4 +246,66 @@ struct StartProjectFlowTests {
         #expect(bot.look.animal == .owl)
         #expect(bot.instructions == "You write Manual.")
     }
+}
+
+/// One versioned schema for templates.json, PLAYBOOK.md and preview.json:
+/// schema 1 is read; a newer or missing one is refused by name, never
+/// guessed at.
+struct TemplateSchemaTests {
+    @Test func schemaOneIsRead() throws {
+        #expect(try Playbook.parse(PlaybookParserTests.minimal()).title == "X")
+        try TemplateSchema.checkPreview(Data(#"{"schema":1,"command":"npm run dev","env":{"PORT":"{port}"},"ready":{"http":"/"}}"#.utf8))
+        #expect(try TemplateRegistry.decode(Data(#"{"schema":1,"templates":[]}"#.utf8)).isEmpty)
+    }
+
+    @Test func aNewerSchemaIsRefusedByName() {
+        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 2")
+        #expect(throws: Playbook.ParseError.newerSchema(2)) { try Playbook.parse(playbook) }
+        #expect(Playbook.ParseError.newerSchema(2).message.hasPrefix("This template needs a newer Mux Bot"))
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 2)) {
+            try TemplateSchema.checkPreview(Data(#"{"schema":2,"command":"x"}"#.utf8))
+        }
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: "templates.json", 2)) {
+            try TemplateRegistry.decode(Data(#"{"schema":2,"templates":[]}"#.utf8))
+        }
+    }
+
+    @Test func aMissingSchemaIsRefused() {
+        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1\n", with: "")
+        #expect(throws: Playbook.ParseError.missing("schema")) { try Playbook.parse(playbook) }
+        #expect(throws: TemplateSchema.Problem.missingSchema(file: ".darkmux/preview.json")) {
+            try TemplateSchema.checkPreview(Data(#"{"command":"x"}"#.utf8))
+        }
+        #expect(throws: TemplateSchema.Problem.missingSchema(file: "templates.json")) {
+            try TemplateRegistry.decode(Data(#"{"version":1,"templates":[]}"#.utf8).replacingVersion())
+        }
+    }
+
+    @Test func anUnknownPreviewKeyIsRefusedWithTheClosestKey() {
+        #expect(throws: TemplateSchema.Problem.unknownKey(file: ".darkmux/preview.json", key: "comand", closest: "command")) {
+            try TemplateSchema.checkPreview(Data(#"{"schema":1,"comand":"npm run dev"}"#.utf8))
+        }
+        #expect(throws: Playbook.ParseError.unknownKey("pich", closest: "pitch")) {
+            try Playbook.parse(PlaybookParserTests.minimal("pich: oops"))
+        }
+    }
+
+    @Test func aPlaybookNeedsQuestionsAPersonaAndASkill() {
+        for (section, missing) in [("Questions", "## Persona\n\nHi\n\n## Skill: S\n\nWhen: x.\n"),
+                                   ("Persona", "## Questions\n\n- Q?\n\n## Skill: S\n\nWhen: x.\n"),
+                                   ("Skill", "## Questions\n\n- Q?\n\n## Persona\n\nHi\n")] {
+            #expect(throws: Playbook.ParseError.missingSection(section)) { try Playbook.parse(PlaybookParserTests.minimal(sections: missing)) }
+        }
+    }
+
+    @Test func theBuiltInCopiesFollowSchemaOne() throws {
+        let files = try #require(TemplateRegistry.bundledFiles(for: "website"))
+        #expect(TemplateRegistry.check(playbook: files.playbook, preview: files.preview).playbook != nil)
+        #expect(TemplateRegistry.bundledTemplates().map(\.id) == ["website"])
+    }
+}
+
+private extension Data {
+    /// The list with its "version" key dropped (an old list with no schema).
+    func replacingVersion() -> Data { Data(#"{"templates":[]}"#.utf8) }
 }

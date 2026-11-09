@@ -611,6 +611,9 @@
     "Move up" : {
 
     },
+    "Mux Bot can't reach GitHub to read this template." : {
+
+    },
     "Mux Bot couldn't open its data" : {
 
     },
@@ -1040,6 +1043,84 @@
     "This one is changed in darkmux on your Mac; here's its value." : {
 
     },
+    "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template needs a newer Mux Bot (its %1$@ is schema %2$lld; this Mux Bot reads schema %3$lld)."
+          }
+        }
+      }
+    },
+    "This template needs a newer Mux Bot (its PLAYBOOK.md is schema %lld; this Mux Bot reads schema %lld)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template needs a newer Mux Bot (its PLAYBOOK.md is schema %1$lld; this Mux Bot reads schema %2$lld)."
+          }
+        }
+      }
+    },
+    "This template's %@ doesn't say which schema it follows." : {
+
+    },
+    "This template's %@ has a problem at “%@”: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template's %1$@ has a problem at “%2$@”: %3$@"
+          }
+        }
+      }
+    },
+    "This template's %@ has an unknown key “%@” (did you mean “%@”?)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template's %1$@ has an unknown key “%2$@” (did you mean “%3$@”?)."
+          }
+        }
+      }
+    },
+    "This template's %@ has schema “%@”, which isn't a schema number." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template's %1$@ has schema “%2$@”, which isn't a schema number."
+          }
+        }
+      }
+    },
+    "This template's PLAYBOOK.md doesn't say which schema it follows." : {
+
+    },
+    "This template's PLAYBOOK.md has an unknown key “%@” (did you mean “%@”?)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This template's PLAYBOOK.md has an unknown key “%1$@” (did you mean “%2$@”?)."
+          }
+        }
+      }
+    },
+    "This template's PLAYBOOK.md has schema “%@”, which isn't a schema number." : {
+
+    },
+    "This template's PLAYBOOK.md is missing its “%@” section." : {
+
+    },
+    "This template's PLAYBOOK.md is missing “%@”." : {
+
+    },
+    "This template's PLAYBOOK.md is too large." : {
+
+    },
     "To do" : {
 
     },
@@ -1171,6 +1252,12 @@
 
     },
     "iCloud sync" : {
+
+    },
+    "it isn't a JSON object." : {
+
+    },
+    "it needs the command that starts the preview." : {
 
     },
     "this Mac" : {
