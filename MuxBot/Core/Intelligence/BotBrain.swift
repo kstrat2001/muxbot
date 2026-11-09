@@ -54,6 +54,21 @@ enum BotAction: Sendable, Equatable, Codable {
     case addResource(kind: ResourceKind, value: String)
     /// Continue a run that just finished with a follow-up (a Tweak).
     case tweak(runId: UUID, change: String)
+    /// Write a preview recipe into your own checkout and the next PR.
+    case setUpPreview(PreviewSetup)
+    /// Write a PLAYBOOK.md into your own checkout and the next PR.
+    case setUpPlaybook(PlaybookSetup)
+}
+
+extension BotAction {
+    /// Cards that write into your checkout bring their own Approve (it
+    /// needs your folder first).
+    var hasOwnButtons: Bool {
+        switch self {
+        case .setUpPreview, .setUpPlaybook: true
+        default: false
+        }
+    }
 }
 
 /// One bot turn: what it says, and what it proposes to do.
@@ -262,6 +277,14 @@ struct GeneratedTurn {
     var newBotName: String
 }
 
+@Generable(description: "Two short parts of a project's playbook")
+struct DraftedPlaybook {
+    @Guide(description: "Two or three sentences to the assistant, starting \"You look after\" and the project's name: what the project is and how to work on it (make only the change asked for, follow the project's conventions, say in plain words what changed)")
+    var persona: String
+    @Guide(description: "One short paragraph: the project's stack and where things live (folders, main files, how styles and pages are organized), only as the README states them; empty if the README doesn't say")
+    var conventions: String
+}
+
 @Generable
 enum GeneratedAction {
     case none
@@ -307,6 +330,14 @@ final class BotBrain {
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
     /// Runs, work copies and previews.
     let runs = RunCoordinator()
+    /// Your checkout of a bot's repo (tests); else its bookmark.
+    @ObservationIgnored var checkoutFolder: ((Bot) -> URL?)?
+    /// Reads a checkout's README (tests); else the disk.
+    @ObservationIgnored var readmeReader: ((URL) -> String?)?
+    /// Drafts a playbook's persona and conventions (tests); else the on-device model.
+    @ObservationIgnored var playbookDrafter: ((String, String, String?) async -> (persona: String, conventions: String)?)?
+    /// Reads a checkout's package.json and root names (tests); else the disk.
+    @ObservationIgnored var checkoutReader: ((URL) -> (packageJSON: String?, files: Set<String>))?
     /// Mux Bot as a guide, in its own thread.
     let guide = LeadGuide()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
@@ -994,6 +1025,24 @@ final class BotBrain {
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             store.addResource(kind, value, to: bot)
             note = "Added \(kind.label.lowercased()): \(value)"
+        case let .setUpPreview(setup):
+            // The card wrote the file into your checkout before approving
+            // (it needed your OK on the folder); here it's kept for the PR
+            // and the preview starts from it once, to check it.
+            guard let bot = chat.botId.flatMap(store.bot(id:)), let data = setup.recipeData else { return }
+            LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PreviewSetup.path: data]) { $1 } }
+            store.append(.system, String(localized: "Wrote \(PreviewSetup.path) into \(setup.folderName), uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…"),
+                         to: store.conversation(for: chat))
+            Task { await checkPreview(bot, store: store) }
+            return
+        case let .setUpPlaybook(setup):
+            // Written into your checkout by the card; kept for the PR, and
+            // the bot's skills and persona become the approved ones.
+            guard let bot = chat.botId.flatMap(store.bot(id:)), let playbook = setup.parsed else { return }
+            LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PlaybookSetup.path: setup.data]) { $1 } }
+            bot.skills = playbook.skills
+            bot.instructions = StartProject.instructions(playbook, answers: .init(name: bot.name, purpose: setup.purpose), name: bot.name)
+            note = String(localized: "Wrote \(PlaybookSetup.path) into \(setup.folderName), uncommitted, and I now use its skills. It goes into this bot's next pull request too.")
         case let .tweak(runId, change):
             guard let run = store.run(id: runId) else { return }
             // A finished run continues as a Tweak; one that was stopped or
@@ -1003,6 +1052,94 @@ final class BotBrain {
             return
         }
         store.append(.system, note, to: store.conversation(for: chat))
+    }
+
+    /// After a recipe is written: start the preview once and say how it went.
+    func checkPreview(_ bot: Bot, store: BotStore) async {
+        runs.livePreviews[bot.id] = nil
+        runs.noRecipe.remove(bot.id)
+        await runs.ensurePreview(for: bot)
+        let thread = store.conversation(for: .bot(bot.id))
+        switch runs.livePreviews[bot.id]?.status {
+        case .ready?: store.append(.system, String(localized: "The preview started from the new recipe."), to: thread)
+        case let .failed(why)?: store.append(.system, String(localized: "The preview didn't start from the new recipe: \(why). Fix the file in your checkout and open the preview again."), to: thread)
+        default: store.append(.system, String(localized: "darkmux didn't start the preview from it: \(runs.noRecipe.contains(bot.id) ? String(localized: "it still finds no recipe in your checkout") : String(localized: "it isn't ready yet")). Open the preview to try again."), to: thread)
+        }
+    }
+
+    /// A project with no PLAYBOOK.md of its own: offer one (general skills,
+    /// with the on-device model's draft of the persona and conventions from
+    /// the README when it's available) on an Approve card. Once per thread;
+    /// only for your own checkout, which is where it's written.
+    func offerPlaybookSetup(for bot: Bot, purpose: String, store: BotStore) async {
+        let thread = store.conversation(for: .bot(bot.id))
+        if (thread.messages ?? []).contains(where: { if case .setUpPlaybook? = $0.action { true } else { false } }) { return }
+        let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
+        guard let folder else { return }
+        let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
+        guard !files.files.contains(PlaybookSetup.path) else { return }
+        var setup = PlaybookSetup.general(name: bot.name, purpose: purpose, folderName: bot.folderName ?? folder.lastPathComponent)
+        let readme = readmeReader.map { $0(folder) } ?? Self.readme(in: folder)
+        let draft = if let playbookDrafter { await playbookDrafter(bot.name, purpose, readme) }
+            else { await defaultPlaybookDraft(bot.name, purpose, readme) }
+        if let draft {
+            setup = setup.withDraft(persona: draft.persona, conventions: draft.conventions)
+        }
+        store.append(.assistant, setup.drafted
+            ? String(localized: "This project has no PLAYBOOK.md, so I'm using general skills. Here's one for it; the persona and conventions are drafted on this device from your README, so check them, then Approve to write it into your checkout.")
+            : String(localized: "This project has no PLAYBOOK.md, so I'm using general skills. Here's one for it to edit; Approve writes it into your checkout."), to: thread)
+        store.proposeAction(.setUpPlaybook(setup), in: .bot(bot.id))
+    }
+
+    /// The checkout's README, read through its bookmark (up to 64 KB).
+    nonisolated static func readme(in folder: URL) -> String? {
+        let accessing = folder.startAccessingSecurityScopedResource()
+        defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
+        for name in ["README.md", "Readme.md", "readme.md", "README"] {
+            let file = folder.appendingPathComponent(name)
+            guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 64 * 1024 else { continue }
+            if let text = try? String(contentsOf: file, encoding: .utf8) { return text }
+        }
+        return nil
+    }
+
+    /// The on-device model's draft of a persona and the project's
+    /// conventions, from its README; nil when the model isn't available or
+    /// there's no README. Prose only: the file's structure is fixed in code.
+    private func defaultPlaybookDraft(_ name: String, _ purpose: String, _ readme: String?) async -> (persona: String, conventions: String)? {
+        #if canImport(FoundationModels)
+        guard useOnDeviceModel, onDeviceUnavailableReason == nil, let readme, !readme.isEmpty else { return nil }
+        let session = LanguageModelSession(instructions: "You write two short parts of a playbook for a coding assistant that looks after one software project, using only facts in the project's README. Never invent a framework, folder or command the README doesn't name.")
+        let prompt = "Project name: \(name)\nWhat it is: \(purpose)\n\nREADME:\n\(readme.prefix(6000))"
+        guard let draft = try? await session.respond(to: prompt, generating: DraftedPlaybook.self).content else { return nil }
+        return (draft.persona, draft.conventions)
+        #else
+        return nil
+        #endif
+    }
+
+    /// The project has no preview recipe: offer one worked out from its own
+    /// files (an Approve card), or say a clone needs your checkout. Once per
+    /// thread.
+    func offerPreviewSetup(for bot: Bot, store: BotStore) {
+        let thread = store.conversation(for: .bot(bot.id))
+        let messages = thread.messages ?? []
+        if messages.contains(where: { if case .setUpPreview? = $0.action { true } else { false } }) { return }
+        let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
+        guard let folder else {
+            let note = String(localized: "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info.")
+            if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
+            return
+        }
+        let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
+        let draft = ProjectSetupDetector.detect(packageJSON: files.packageJSON, files: files.files)
+        guard !draft.isEmpty else {
+            let note = String(localized: "There's no preview yet, and I couldn't work out how to run this project from its files (no package.json with a dev, start or serve script). Add .darkmux/preview.json to your checkout to get one.")
+            if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
+            return
+        }
+        store.append(.assistant, String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
+        store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
     }
 
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],

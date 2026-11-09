@@ -92,7 +92,9 @@ targets:
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
         # Add folder: read a project folder you pick (its git remote), and
         # keep access to it with a security-scoped bookmark.
-        ENABLE_USER_SELECTED_FILES: readonly
+        # Read-write only for a folder you choose in a panel to write into
+        # (the preview recipe); kept bookmarks stay read-only.
+        ENABLE_USER_SELECTED_FILES: readwrite
         # Entitlements per platform; the iCloud variants are chosen in
         # Config/Local.xcconfig once the iCloud container exists.
         "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": MuxBot/$(MUXBOT_ENTITLEMENTS_MAC)

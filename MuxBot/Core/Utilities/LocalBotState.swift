@@ -22,10 +22,14 @@ final class LocalBotState: @unchecked Sendable {
         /// branches, by branch name: Open PR moves a branch only from there,
         /// never past a commit someone else pushed (`GitHubPR`).
         var pushedHeads: [String: String]?
+        /// Files you approved for the bot's pull requests (path → the exact
+        /// bytes), added to each PR's commit until the base branch has them
+        /// (`PreviewSetup`).
+        var prFiles: [String: Data]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
-                && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty
+                && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty
         }
     }
 

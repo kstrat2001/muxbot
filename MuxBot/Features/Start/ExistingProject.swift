@@ -10,7 +10,7 @@ import Foundation
 enum ExistingProject {
     static let id = "existing"
     static let title = String(localized: "Work on a project I already have")
-    static let icon = "folder.badge.gearshape"
+    nonisolated static let icon = "folder.badge.gearshape"
     static let summary = String(localized: "Point Mux Bot at your code, on this Mac or on GitHub, and keep improving it.")
 
     /// Where the code is.

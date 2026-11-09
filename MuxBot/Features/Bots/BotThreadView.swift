@@ -184,6 +184,10 @@ struct BotThreadView: View {
             if let url = previewURL { PhonePreviewScreen(url: url, bot: bot) }
         }
         #endif
+        // No recipe darkmux will run: offer one from the project's files.
+        .onChange(of: bot.map { brain.runs.noRecipe.contains($0.id) } ?? false, initial: true) { _, missing in
+            if missing, let bot { brain.offerPreviewSetup(for: bot, store: BotStore(context: modelContext)) }
+        }
         .sheet(isPresented: $showInfo) {
             if let bot { NavigationStack { BotInfoView(bot: bot) } }
         }

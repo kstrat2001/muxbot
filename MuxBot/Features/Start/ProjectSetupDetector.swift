@@ -128,21 +128,4 @@ enum ProjectSetupDetector {
         case .bun: "bun install --frozen-lockfile"
         }
     }
-
-    /// The draft as darkmux's preview recipe (`schema_version` "1.0", the
-    /// fields darkmux reads), once each value is confirmed. nil without a
-    /// command.
-    static func recipe(_ draft: Draft) -> [String: Any]? {
-        guard let command = draft.command?.value, !command.isEmpty else { return nil }
-        var recipe: [String: Any] = ["schema_version": "1.0", "command": command]
-        switch draft.port?.value {
-        case let .env(env)?: recipe["env"] = env
-        case .flags?: recipe["env"] = ["PORT": "{port}"]
-        case nil: break
-        }
-        if let ready = draft.ready?.value { recipe["ready"] = ["http": ready] }
-        if let install = draft.install?.value { recipe["install"] = ["command": install, "unless_exists": "node_modules"] }
-        if let files = draft.envFromSource?.value, !files.isEmpty { recipe["env_from_source"] = files }
-        return recipe
-    }
 }
