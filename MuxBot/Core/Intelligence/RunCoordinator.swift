@@ -219,6 +219,42 @@ final class RunCoordinator {
             Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
         }
         if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
+        // A project the app made on GitHub: its committed work is backed up
+        // to the bot's branch there (no PR until you open one).
+        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { await backUp(bot, store: store) }
+    }
+
+    /// A use case's template, from the registry (or the test seam).
+    func template(for id: String) async -> TemplateEntry? {
+        await (templateSource ?? Self.registryTemplate)(id)
+    }
+
+    struct NotPaired: LocalizedError {
+        var errorDescription: String? { RunBlocker.unpaired.message }
+    }
+
+    /// darkmux's changes on a workspace's branch against its base.
+    func changes(for workspace: String) async throws -> DarkmuxClient.Changes {
+        if let changesFetcher { return try await changesFetcher(workspace) }
+        guard let connection, let darkmux = connection.token else { throw NotPaired() }
+        return try await connection.client.changes(token: darkmux, workspace: workspace)
+    }
+
+    /// Pushes a GitHub-started project's committed work to its `mux/<bot>`
+    /// branch on your repo, through the same path as Open PR. Says so only
+    /// when it fails.
+    func backUp(_ bot: Bot, store: BotStore) async {
+        guard let start = bot.githubStart, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
+              let token = githubToken?(), changesFetcher != nil || connection?.token != nil else { return }
+        do {
+            let changes = try await changes(for: workspace)
+            guard !changes.files.isEmpty else { return }
+            _ = try await (prPusher ?? { try await GitHubPR(token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) })(
+                changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, start)
+        } catch {
+            store.append(.system, String(localized: "Couldn't back up this work to \(start.head) on GitHub: \(error.localizedDescription)"),
+                         to: store.conversation(for: .bot(bot.id)))
+        }
     }
 
     /// Only a run that changed files gets the model's summary: asked "what
@@ -547,6 +583,12 @@ final class RunCoordinator {
     /// Tests answer workspace requests here; nil asks darkmux.
     /// Bots whose project has no preview recipe darkmux will run (its 404).
     var noRecipe: Set<UUID> = []
+    /// Your GitHub sign-in's token, for backups (set by the app).
+    var githubToken: (@MainActor () -> String?)?
+    /// darkmux's branch changes for a workspace (tests); else darkmux.
+    var changesFetcher: ((String) async throws -> DarkmuxClient.Changes)?
+    /// Pushes a backup (tests); else `GitHubPR.push`.
+    var prPusher: ((DarkmuxClient.Changes, String, String, UUID, GitHubPR.Start?) async throws -> GitHubPR.Pushed)?
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
     /// Finds a use case's template by id (tests); else the template registry.
     var templateSource: ((String) async -> TemplateEntry?)?
@@ -830,7 +872,7 @@ final class RunCoordinator {
             let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
             let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
             let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
-                                                           extraFiles: approved)
+                                                           extraFiles: approved, start: bot.githubStart)
             store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
             for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
             for (path, why) in pr.skipped.sorted(by: { $0.key < $1.key }) {

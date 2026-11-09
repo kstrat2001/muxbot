@@ -11,6 +11,10 @@ struct BotInfoView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(BotBrain.self) private var brain
+    @Environment(GitHubAuth.self) private var github
+    @State private var putPublic = false
+    @State private var putting = false
+    @State private var putProblem: String?
     @State private var newValue = ""
     @State private var newKind = ResourceKind.repo
     @State private var pickingFolder = false
@@ -50,6 +54,7 @@ struct BotInfoView: View {
                 BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }), mood: $previewMood)
             }
             workCopySection
+            if PutOnGitHub.canPut(bot) { putOnGitHubSection }
             Section {
                 Picker("For this bot", selection: modelModeBinding) {
                     Text("Same as Settings").tag(String?.none)
@@ -172,6 +177,42 @@ struct BotInfoView: View {
         let store = brain.runs.settingsStore
         return Binding(get: { store.botMode(bot: bot.id, machine: machine)?.stored },
                        set: { store.setBotMode(ModelMode(stored: $0), bot: bot.id, machine: machine) })
+    }
+
+    /// A project that's on this Mac only: make its GitHub repo now.
+    private var putOnGitHubSection: some View {
+        Section {
+            if github.token == nil {
+                Text("This project is only on this Mac. Sign in with GitHub (Settings › GitHub) to put it there.")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            } else {
+                Toggle("Public", isOn: $putPublic)
+                Text(putPublic ? "Anyone can see a public repo." : "Private: only you can see it.")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Button(putting ? "Putting it on GitHub…" : "Put it on GitHub", systemImage: "arrow.up.circle") {
+                    Task { await putOnGitHub() }
+                }
+                .disabled(putting)
+            }
+            if let putProblem { Label(putProblem, systemImage: "exclamationmark.triangle").font(AppFont.footnote()) }
+        } header: {
+            Text("GitHub")
+        } footer: {
+            Text("Makes a repo in your account with the template's files and this project's committed work, then backs up new work to it.")
+        }
+    }
+
+    private func putOnGitHub() async {
+        guard let token = github.token else { return }
+        putting = true
+        putProblem = nil
+        defer { putting = false }
+        do {
+            _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), pr: GitHubPR(token: token),
+                                          store: BotStore(context: context), runs: brain.runs)
+        } catch {
+            putProblem = error.localizedDescription
+        }
     }
 
     private var workCopySection: some View {

@@ -41,9 +41,52 @@ struct GitHubPR: Sendable {
     /// Where this Mac keeps the commit it last wrote to each bot branch.
     var local: LocalBotState = .shared
 
+    /// Where a project that started on GitHub begins there: darkmux's own
+    /// first commit isn't on GitHub, but its files are the same as this
+    /// commit's, so the branch is built on this one, and PRs go to `branch`.
+    struct Start: Codable, Equatable, Sendable {
+        var commit: String
+        var branch: String
+        /// The branch on GitHub the bot's work goes to (`mux/<bot>`): the
+        /// local project works on its own `main`.
+        var head: String
+    }
+
+    /// The pushed branch: its new commit and the approved files it holds.
+    struct Pushed: Equatable, Sendable {
+        var commit: String
+        var added: [String] = []
+        var skipped: [String: Skip] = [:]
+    }
+
+    /// Pushes the bot's branch, then opens a PR from it (or finds the one
+    /// already open).
     func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String, bot: UUID,
-              extraFiles: [String: Data] = [:]) async throws -> PR {
+              extraFiles: [String: Data] = [:], start: Start? = nil) async throws -> PR {
+        let pushed = try await push(changes, repo: repo, message: title, bot: bot, extraFiles: extraFiles, start: start)
         let api = "https://api.github.com/repos/\(repo)"
+        let added = pushed.added, skipped = pushed.skipped
+        struct Pull: Decodable { var number: Int; var html_url: String }
+        do {
+            let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": start?.head ?? changes.branch, "base": start?.branch ?? changes.baseBranch, "body": body], repo: repo)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
+        } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
+            // The PR is already open for this branch; it now shows the new commit.
+            let owner = repo.split(separator: "/").first.map(String.init) ?? ""
+            let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(start?.head ?? changes.branch)&state=open", nil, repo: repo)
+            guard let pull = open.first else { throw Failure.github(why) }
+            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
+        }
+    }
+
+    /// Writes the bot's branch on GitHub: the base plus every change (and
+    /// the approved files), one commit, moved forward without force. Also
+    /// the backup of committed runs, with no PR.
+    func push(_ changes: DarkmuxClient.Changes, repo: String, message: String, bot: UUID,
+              extraFiles: [String: Data] = [:], start: Start? = nil) async throws -> Pushed {
+        let api = "https://api.github.com/repos/\(repo)"
+        let baseCommit = start?.commit ?? changes.base
+        let head = start?.head ?? changes.branch
         struct SHA: Decodable { var sha: String }
         struct Commit: Decodable { struct Tree: Decodable { var sha: String }; var tree: Tree }
 
@@ -53,9 +96,9 @@ struct GitHubPR: Sendable {
         // else's work our tree would drop: stop before writing anything.
         // Never a force push.
         struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
-        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(changes.branch)", repo: repo)
-        if let remote, remote.object.sha != local[bot]?.pushedHeads?[changes.branch] {
-            throw Failure.branchMoved(changes.branch)
+        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(head)", repo: repo)
+        if let remote, remote.object.sha != local[bot]?.pushedHeads?[head] {
+            throw Failure.branchMoved(head)
         }
 
         var entries: [[String: Any]] = []
@@ -74,40 +117,30 @@ struct GitHubPR: Sendable {
         for (path, data) in extraFiles.sorted(by: { $0.key < $1.key }) {
             if changes.files.contains(where: { $0.path == path }) { skipped[path] = .inChanges; continue }
             let encoded = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
-            let existing: [String: AnyCodable]? = try await sendOptional("GET", "\(api)/contents/\(encoded)?ref=\(changes.base)", repo: repo)
+            let existing: [String: AnyCodable]? = try await sendOptional("GET", "\(api)/contents/\(encoded)?ref=\(baseCommit)", repo: repo)
             if existing != nil { skipped[path] = .inBase; continue }
             let blob: SHA = try await send("POST", "\(api)/git/blobs", ["content": data.base64EncodedString(), "encoding": "base64"], repo: repo)
             entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blob.sha])
             added.append(path)
         }
-        let base: Commit = try await send("GET", "\(api)/git/commits/\(changes.base)", nil, repo: repo)
+        let base: Commit = try await send("GET", "\(api)/git/commits/\(baseCommit)", nil, repo: repo)
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
-        let parent = remote?.object.sha ?? changes.base
-        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": title, "tree": tree.sha, "parents": [parent]], repo: repo)
+        let parent = remote?.object.sha ?? baseCommit
+        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": message, "tree": tree.sha, "parents": [parent]], repo: repo)
         if remote == nil {
-            let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(changes.branch)", "sha": commit.sha], repo: repo)
+            let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(head)", "sha": commit.sha], repo: repo)
         } else {
             do {
-                let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(changes.branch)", ["sha": commit.sha, "force": false], repo: repo)
+                let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(head)", ["sha": commit.sha, "force": false], repo: repo)
             } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("not a fast forward") {
                 // Someone pushed between our look and the move.
-                throw Failure.branchMoved(changes.branch)
+                throw Failure.branchMoved(head)
             }
         }
         // Remembered before the PR, which can still fail: the branch is ours
         // at this commit either way.
-        local.update(bot) { $0.pushedHeads = ($0.pushedHeads ?? [:]).merging([changes.branch: commit.sha]) { $1 } }
-        struct Pull: Decodable { var number: Int; var html_url: String }
-        do {
-            let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": changes.branch, "base": changes.baseBranch, "body": body], repo: repo)
-            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
-        } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
-            // The PR is already open for this branch; it now shows the new commit.
-            let owner = repo.split(separator: "/").first.map(String.init) ?? ""
-            let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(changes.branch)&state=open", nil, repo: repo)
-            guard let pull = open.first else { throw Failure.github(why) }
-            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
-        }
+        local.update(bot) { $0.pushedHeads = ($0.pushedHeads ?? [:]).merging([head: commit.sha]) { $1 } }
+        return Pushed(commit: commit.sha, added: added, skipped: skipped)
     }
 
     /// A GET whose 404 means "not there yet" (nil), not "can't write".

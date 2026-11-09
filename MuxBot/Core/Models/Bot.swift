@@ -98,6 +98,13 @@ final class Bot {
     }
     /// A local checkout you picked (security-scoped bookmark) and its
     /// folder name for display. darkmux makes a worktree of it.
+    /// Where this project starts on GitHub, when the app made its repo
+    /// (this Mac only).
+    var githubStart: GitHubPR.Start? {
+        get { LocalBotState.shared[id]?.githubStart }
+        set { LocalBotState.shared.update(id) { $0.githubStart = newValue } }
+    }
+
     var folderBookmark: Data? {
         get { LocalBotState.shared[id]?.folderBookmark }
         set { LocalBotState.shared.update(id) { $0.folderBookmark = newValue } }
