@@ -332,16 +332,10 @@
     "Copy" : {
 
     },
-    "Copy a screenshot of the preview to the clipboard" : {
-
-    },
-    "Copy picked element" : {
-
-    },
     "Copy screenshot" : {
 
     },
-    "Copy visible preview" : {
+    "Copy the visible preview" : {
 
     },
     "Couldn't check %@: %@" : {

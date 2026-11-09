@@ -158,12 +158,7 @@ struct CommandBox: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                #if os(iOS)
-                UIPasteboard.general.string = command
-                #else
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(command, forType: .string)
-                #endif
+                Clipboard.copy(command)
                 copied = true
             }
             .buttonStyle(.bordered)

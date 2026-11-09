@@ -71,5 +71,5 @@ struct BugCardView: View {
         return copy(png)
     }
 
-    private func copy(_ png: Data) -> Bool { Clipboard.copyPNG(png) }
+    private func copy(_ png: Data) -> Bool { Clipboard.copyImage(png) }
 }

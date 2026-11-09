@@ -34,7 +34,7 @@ struct PhonePreviewScreen: View {
             }
             Button(copied ? "Copied" : "Copy screenshot", systemImage: copied ? "checkmark" : "camera") {
                 Task {
-                    if let png = await preview.visiblePNG() { copied = Clipboard.copyPNG(png) }
+                    if let png = await preview.visiblePNG() { copied = Clipboard.copyImage(png) }
                     try? await Task.sleep(for: .seconds(1.5))
                     copied = false
                 }
