@@ -135,6 +135,13 @@ final class TemplateRegistry: Sendable {
 
     // MARK: Built into the app (Start/Templates)
 
+    /// The list without waiting on the network: the cached copy, else the
+    /// one built into the app (for naming templates in chat).
+    static func knownTemplates(cacheURL: URL = TemplateRegistry.defaultCacheURL) -> [TemplateEntry] {
+        if let data = try? Data(contentsOf: cacheURL), let entries = try? decode(data), !entries.isEmpty { return entries }
+        return bundledTemplates()
+    }
+
     static func bundledTemplates() -> [TemplateEntry] {
         guard let url = Bundle.main.url(forResource: "templates", withExtension: "json", subdirectory: "Templates"),
               let data = try? Data(contentsOf: url) else { return [] }

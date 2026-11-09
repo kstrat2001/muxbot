@@ -260,7 +260,7 @@ struct BotThreadView: View {
         let hello = bot.map { BotGreeting.text(name: $0.name, about: $0.useCaseId.isEmpty ? $0.instructions : "",
                                                hasPreview: $0.previewURL != nil || $0.workspaceName != nil) }
             ?? (Guide.isEnabled
-                ? String(localized: "Hi, I'm \(LeadBot.name). I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”.")
+                ? LeadGuide.intro
                 : "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it.")
         store.append(.assistant, hello, to: conversation)
     }
