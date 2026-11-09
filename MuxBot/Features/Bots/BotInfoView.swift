@@ -47,7 +47,7 @@ struct BotInfoView: View {
                 BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
             }
             workCopySection
-            Section("Model") {
+            Section {
                 Picker("For this bot", selection: modelModeBinding) {
                     Text("Same as Settings").tag(String?.none)
                     Text("Auto").tag(Optional(ModelMode.auto.stored))
@@ -56,6 +56,8 @@ struct BotInfoView: View {
                         Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
                     }
                 }
+            } header: {
+                Text("Model on this Mac")
             }
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
@@ -142,8 +144,13 @@ struct BotInfoView: View {
     /// darkmux owns the copy; the app knows its name, never a path.
     /// This bot's model mode, kept on this Mac (`LocalBotState`).
     private var modelModeBinding: Binding<String?> {
-        Binding(get: { LocalBotState.shared[bot.id]?.modelMode },
-                set: { mode in LocalBotState.shared.update(bot.id) { $0.modelMode = mode } })
+        let machine = brain.runs.machineKey
+        return Binding(get: { LocalBotState.shared[bot.id]?.modelModes?[machine] },
+                       set: { mode in LocalBotState.shared.update(bot.id) { entry in
+                           var modes = entry.modelModes ?? [:]
+                           modes[machine] = mode
+                           entry.modelModes = modes.isEmpty ? nil : modes
+                       } })
     }
 
     private var workCopySection: some View {

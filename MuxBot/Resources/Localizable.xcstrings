@@ -316,6 +316,9 @@
     "Each dispatch card asks, with Auto's pick ready." : {
 
     },
+    "Each machine has its own models, so this is set per machine." : {
+
+    },
     "Enter this code at %@%@:" : {
       "localizations" : {
         "en" : {
@@ -411,6 +414,9 @@
 
     },
     "Model" : {
+
+    },
+    "Model on this Mac" : {
 
     },
     "Model: %@%@" : {
@@ -720,6 +726,9 @@
 
     },
     "The messages go; runs stay in Activity." : {
+
+    },
+    "This Mac" : {
 
     },
     "Try again" : {

@@ -484,8 +484,17 @@ final class RunCoordinator {
         return (try? await connection.client.profiles(token: token)) ?? []
     }
 
-    /// Settings › Models (tests set their own).
-    var modelSettings: () -> ModelSettings = { ModelSettings.load() }
+    /// The darkmux machine runs go to: its endpoint address until darkmux
+    /// names machines (one machine today).
+    var machineKey: String {
+        let url = connection?.client.baseURL ?? DarkmuxClient().baseURL
+        return "\(url.host() ?? "localhost"):\(url.port ?? 8767)"
+    }
+    /// Settings › Models for this machine (tests set their own).
+    var modelSettings: (() -> ModelSettings)?
+
+    /// Settings › Models as they apply to runs here.
+    func currentModelSettings() -> ModelSettings { modelSettings?() ?? ModelSettings.load(machine: machineKey) }
     /// Why each run has its model, for the dispatch card.
     var runChoices: [UUID: ModelChoice] = [:]
     /// What darkmux listed last, for pickers.
@@ -497,8 +506,8 @@ final class RunCoordinator {
     func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
         let listed = await listedProfiles()
         lastListed = listed
-        let settings = modelSettings()
-        let mode = settings.mode(forBot: run.bot.flatMap { LocalBotState.shared[$0.id]?.modelMode })
+        let settings = currentModelSettings()
+        let mode = settings.mode(forBot: run.bot.flatMap { LocalBotState.shared[$0.id]?.modelModes }, machine: machineKey)
         let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
                                          previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next)
         runChoices[run.id] = choice
@@ -538,7 +547,7 @@ final class RunCoordinator {
         runChecks[run.id] = result
         // A default model doesn't switch by itself: offer the next one.
         if !result.met, var choice = runChoices[run.id], choice.stays, let name = choice.profile {
-            let settings = modelSettings()
+            let settings = currentModelSettings()
             choice.offerNext = ModelChoice.resolve(mode: .model(name), order: settings.order, listed: lastListed,
                                                    previous: name, rerunAfterNotMet: true).offerNext
             runChoices[run.id] = choice

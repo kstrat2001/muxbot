@@ -84,23 +84,27 @@ struct ModelModeStorageTests {
         #expect(ModelMode(stored: mode.stored) == mode)
     }
 
-    @Test func settingsPersistInTheirDefaults() throws {
+    @Test func theModeIsPerMachineAndTheOrderIsShared() throws {
         let defaults = try #require(UserDefaults(suiteName: "muxbot-model-tests-\(UUID().uuidString)"))
-        var s = ModelSettings.load(from: defaults)
-        #expect(s.mode == .auto)
-        #expect(s.order == ModelSettings.defaultOrder)
-        s.mode = .model("q38-27b-tensorfold")
-        s.order = ["q38-27b-tensorfold", "flint-rec"]
-        s.save(to: defaults)
-        let again = ModelSettings.load(from: defaults)
+        var here = ModelSettings.load(from: defaults, machine: "127.0.0.1:8767")
+        #expect(here.mode == .auto)
+        #expect(here.order == ModelSettings.defaultOrder)
+        here.mode = .model("q38-27b-tensorfold")
+        here.order = ["q38-27b-tensorfold", "flint-rec"]
+        here.save(to: defaults, machine: "127.0.0.1:8767")
+        let again = ModelSettings.load(from: defaults, machine: "127.0.0.1:8767")
         #expect(again.mode == .model("q38-27b-tensorfold"))
-        #expect(again.order == ["q38-27b-tensorfold", "flint-rec"])
+        let other = ModelSettings.load(from: defaults, machine: "studio.local:8767")
+        #expect(other.mode == .auto, "another machine has its own models")
+        #expect(other.order == ["q38-27b-tensorfold", "flint-rec"], "the Auto order is names, shared")
     }
 
-    @Test func aBotsOverrideWinsOverTheAppSetting() {
+    @Test func aBotsOverrideWinsOverTheAppSettingOnItsMachine() {
         let app = ModelSettings(mode: .auto, order: ModelSettings.defaultOrder)
-        #expect(app.mode(forBot: ModelMode.ask.stored) == .ask)
-        #expect(app.mode(forBot: nil) == .auto)
+        let stored = ["127.0.0.1:8767": ModelMode.ask.stored]
+        #expect(app.mode(forBot: stored, machine: "127.0.0.1:8767") == .ask)
+        #expect(app.mode(forBot: stored, machine: "studio.local:8767") == .auto)
+        #expect(app.mode(forBot: nil, machine: "127.0.0.1:8767") == .auto)
     }
 }
 
@@ -138,8 +142,8 @@ struct ModelModeFlowTests {
 
     @Test func aBotsOverrideAppliesToItsRuns() async throws {
         let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: ModelSettings.defaultOrder))
-        LocalBotState.shared.update(bot.id) { $0.modelMode = ModelMode.ask.stored }
-        defer { LocalBotState.shared.update(bot.id) { $0.modelMode = nil } }
+        LocalBotState.shared.update(bot.id) { $0.modelModes = [brain.runs.machineKey: ModelMode.ask.stored] }
+        defer { LocalBotState.shared.update(bot.id) { $0.modelModes = nil } }
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         #expect(brain.runs.runChoices[run.id]?.ask == true)

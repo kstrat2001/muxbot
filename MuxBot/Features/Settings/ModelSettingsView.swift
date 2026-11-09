@@ -5,7 +5,7 @@ import SwiftUI
 /// can override it in its info.
 struct ModelSettingsView: View {
     @Environment(BotBrain.self) private var brain
-    @State private var settings = ModelSettings.load()
+    @State private var settings = ModelSettings()
     @State private var listed: [DarkmuxClient.ProfileInfo] = []
 
     var body: some View {
@@ -17,6 +17,10 @@ struct ModelSettingsView: View {
                     ForEach(names, id: \.self) { name in Text("Always \(name)").tag(ModelMode.model(name)) }
                 }
                 Text(explanation).font(AppFont.footnote()).foregroundStyle(.secondary)
+            } header: {
+                Text("This Mac")
+            } footer: {
+                Text("Each machine has its own models, so this is set per machine.").font(AppFont.caption())
             }
             Section("Auto order") {
                 List {
@@ -31,13 +35,13 @@ struct ModelSettingsView: View {
                             }
                         }
                     }
-                    .onMove { settings.order.move(fromOffsets: $0, toOffset: $1); settings.save() }
-                    .onDelete { settings.order.remove(atOffsets: $0); settings.save() }
+                    .onMove { settings.order.move(fromOffsets: $0, toOffset: $1); save() }
+                    .onDelete { settings.order.remove(atOffsets: $0); save() }
                 }
                 let more = names.filter { !settings.order.contains($0) }
                 if !more.isEmpty {
                     Menu("Add a model") {
-                        ForEach(more, id: \.self) { name in Button(name) { settings.order.append(name); settings.save() } }
+                        ForEach(more, id: \.self) { name in Button(name) { settings.order.append(name); save() } }
                     }
                 }
                 Text("Fastest first. A run whose done-when wasn't met moves to the next one.")
@@ -45,13 +49,18 @@ struct ModelSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .task { listed = await brain.runs.listedProfiles() }
+        .task {
+            settings = brain.runs.currentModelSettings()
+            listed = await brain.runs.listedProfiles()
+        }
     }
 
     private var names: [String] { listed.map(\.name) }
 
+    private func save() { settings.save(machine: brain.runs.machineKey) }
+
     private var modeBinding: Binding<ModelMode> {
-        Binding(get: { settings.mode }, set: { settings.mode = $0; settings.save() })
+        Binding(get: { settings.mode }, set: { settings.mode = $0; save() })
     }
 
     private var explanation: String {

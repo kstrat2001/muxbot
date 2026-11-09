@@ -32,7 +32,9 @@ enum ModelMode: Equatable, Hashable, Sendable {
     }
 }
 
-/// Settings › Models: the app-wide mode and the Auto order.
+/// Settings › Models: the mode for one darkmux machine (its models differ
+/// from another's) and the Auto order, shared (names; one a machine doesn't
+/// list is skipped).
 struct ModelSettings: Equatable, Sendable {
     var mode: ModelMode = .auto
     /// Coder's models by profile name, fastest first, then the stronger one
@@ -42,18 +44,21 @@ struct ModelSettings: Equatable, Sendable {
     static let defaultOrder = ["flint-rec", "q38-27b-tensorfold"]
     private static let modeKey = "models.mode", orderKey = "models.order"
 
-    static func load(from defaults: UserDefaults = .standard) -> ModelSettings {
-        ModelSettings(mode: ModelMode(stored: defaults.string(forKey: modeKey)) ?? .auto,
+    /// `machine`: the darkmux machine's identity (today its endpoint address).
+    static func load(from defaults: UserDefaults = .standard, machine: String) -> ModelSettings {
+        ModelSettings(mode: ModelMode(stored: defaults.string(forKey: "\(modeKey).\(machine)")) ?? .auto,
                       order: defaults.stringArray(forKey: orderKey) ?? defaultOrder)
     }
 
-    func save(to defaults: UserDefaults = .standard) {
-        defaults.set(mode.stored, forKey: Self.modeKey)
+    func save(to defaults: UserDefaults = .standard, machine: String) {
+        defaults.set(mode.stored, forKey: "\(Self.modeKey).\(machine)")
         defaults.set(order, forKey: Self.orderKey)
     }
 
-    /// A bot's own mode when it has one, else the app's.
-    func mode(forBot stored: String?) -> ModelMode { ModelMode(stored: stored) ?? mode }
+    /// A bot's own mode on this machine when it has one, else the app's.
+    func mode(forBot stored: [String: String]?, machine: String) -> ModelMode {
+        ModelMode(stored: stored?[machine]) ?? mode
+    }
 }
 
 /// The model a run goes with, and why; what the dispatch card shows.
