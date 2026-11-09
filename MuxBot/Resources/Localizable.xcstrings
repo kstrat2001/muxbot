@@ -307,6 +307,9 @@
     "Clear Conversation…" : {
 
     },
+    "Close" : {
+
+    },
     "Close preview" : {
 
     },
@@ -319,6 +322,16 @@
     "Coming soon: a bot drafts the recipe for you to approve." : {
 
     },
+    "Committed to %@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Committed to %1$@ (%2$@)"
+          }
+        }
+      }
+    },
     "Committed to %@%@" : {
       "localizations" : {
         "en" : {
@@ -328,6 +341,9 @@
           }
         }
       }
+    },
+    "Committed. Open a pull request from the thread's Open PR." : {
+
     },
     "Copied" : {
 
@@ -1079,6 +1095,9 @@
     "The Dock icon shows how many runs are waiting on you." : {
 
     },
+    "The checkpoint didn't happen: %@ The changes are in the work copy, uncommitted." : {
+
+    },
     "The code expired. Cancel and pair again." : {
 
     },
@@ -1306,6 +1325,9 @@
 
     },
     "iCloud sync" : {
+
+    },
+    "it didn't start within %lld minutes" : {
 
     },
     "it isn't a JSON object." : {
