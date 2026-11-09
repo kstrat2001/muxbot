@@ -184,6 +184,37 @@ enum BugReport {
               marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
               fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
           };
+          // While a pick's chip is in the bar, its element stays outlined
+          // (`__muxMark`): redrawn when the page re-renders or resizes,
+          // hidden when the element is gone, removed with `__muxUnmark`.
+          const mark = document.createElement('div');
+          mark.dataset.muxbotMark = '1';
+          mark.style.cssText = 'position:absolute;pointer-events:none;z-index:2147483646;border:2px solid #22d3a6;background:rgba(34,211,166,.12);border-radius:3px;display:none;box-sizing:border-box';
+          let markSelector = null, markWatch = null;
+          const drawMark = () => {
+            const el = markSelector && document.querySelector(markSelector);
+            if (!el) { mark.style.display = 'none'; return; }
+            const r = el.getBoundingClientRect();
+            Object.assign(mark.style, { display: 'block', left: (r.left + scrollX) + 'px', top: (r.top + scrollY) + 'px', width: r.width + 'px', height: r.height + 'px' });
+            if (!mark.isConnected) document.body.appendChild(mark);
+          };
+          window.__muxMark = sel => {
+            markSelector = sel;
+            drawMark();
+            if (!markWatch) {
+              // A microtask, not a frame: it runs even when the preview isn't drawing.
+              markWatch = new MutationObserver(records => { if (records.some(r => r.target !== mark)) queueMicrotask(drawMark); });
+              markWatch.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
+              window.addEventListener('resize', drawMark);
+            }
+            return !!document.querySelector(sel);
+          };
+          window.__muxUnmark = () => {
+            markSelector = null;
+            mark.style.display = 'none';
+            if (markWatch) { markWatch.disconnect(); markWatch = null; window.removeEventListener('resize', drawMark); }
+            return true;
+          };
           const menu = document.createElement('div');
           menu.style.cssText = 'position:fixed;z-index:2147483647;display:none;padding:5px;border-radius:10px;background:#1c2622;box-shadow:0 4px 16px rgba(0,0,0,.45);font:13px -apple-system,system-ui,sans-serif';
           const choose = () => {
@@ -199,7 +230,7 @@ enum BugReport {
             const quote = sel.toString().trim().slice(0, 200);
             window.__muxSend(window.__muxDescribe(el, { selectedText: quote }));
             menu.style.display = 'none';
-            sel.removeAllRanges();
+            // The selection stays, so you keep your place while you write.
           };
           const chat = document.createElement('button');
           chat.textContent = 'Chat about this';
