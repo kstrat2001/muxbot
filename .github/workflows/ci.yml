@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# No signing, no team, no iCloud. Config/Local.xcconfig is never present here,
+# and sync is forced off on every xcodebuild line below; the test host also
+# uses an in-memory store (MuxBotApp.isTestHost). UI tests (MuxBotUITests) are
+# not run: they need a booted iPad simulator and are slow.
+env:
+  NO_ICLOUD: >-
+    MUXBOT_CLOUD_SYNC=NO
+    MUXBOT_ENTITLEMENTS_MAC=MuxBot.entitlements
+    MUXBOT_ENTITLEMENTS_IOS=MuxBot.entitlements
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse a local signing/iCloud config
+        run: test ! -e Config/Local.xcconfig
+
+      - name: Generate the Xcode project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+
+      - name: Build for the iOS Simulator
+        run: |
+          xcodebuild build -project MuxBot.xcodeproj -scheme MuxBot \
+            -destination 'generic/platform=iOS Simulator' \
+            -quiet CODE_SIGNING_ALLOWED=NO $NO_ICLOUD
+
+      - name: Unit tests on macOS
+        run: |
+          xcodebuild test -project MuxBot.xcodeproj -scheme MuxBot \
+            -destination 'platform=macOS' -only-testing:MuxBotTests \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            ENABLE_HARDENED_RUNTIME=NO -quiet $NO_ICLOUD
