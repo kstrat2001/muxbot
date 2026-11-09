@@ -27,8 +27,7 @@ struct PreviewStatusView: View {
                 Text(failure.headline).font(.headline).multilineTextAlignment(.center)
                 Text(failure.explanation).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
                     .frame(maxWidth: 440)
-                Button("Try again", systemImage: "arrow.clockwise", action: retry)
-                    .buttonStyle(.borderedProminent)
+                startOverOrRetry(failure)
                 // What darkmux and the project's server said, only when asked.
                 TechnicalDetails(text: failure.details)
             case let .unavailable(why):
@@ -40,6 +39,8 @@ struct PreviewStatusView: View {
         }
         .padding(Spacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Whether darkmux can start the preview over (#45).
+        .task(id: preview.status) { await brain.runs.checkStartOver() }
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case let .success(url) = result else { return }
             Task {
@@ -48,6 +49,30 @@ struct PreviewStatusView: View {
             }
         }
     }
+
+    /// Try again restarts the preview; Start over (where darkmux can) also
+    /// reinstalls the project's packages, and leads for install problems.
+    @ViewBuilder
+    private func startOverOrRetry(_ failure: PreviewFailure) -> some View {
+        let canStartOver = brain.runs.canStartOver
+        HStack {
+            if canStartOver, failure.startOverFirst {
+                Button("Start over", systemImage: "arrow.counterclockwise", action: startOver)
+                    .buttonStyle(.borderedProminent)
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            } else {
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.borderedProminent)
+                if canStartOver { Button("Start over", systemImage: "arrow.counterclockwise", action: startOver) }
+            }
+        }
+        if canStartOver {
+            Text(PreviewFailure.startOverNote).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                .multilineTextAlignment(.center).frame(maxWidth: 440)
+        }
+    }
+
+    private func startOver() { Task { await brain.runs.startOver(for: bot) } }
 
     @ViewBuilder
     private func unavailable(_ why: LivePreview.Unavailable) -> some View {
