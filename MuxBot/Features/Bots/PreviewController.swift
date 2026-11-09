@@ -26,6 +26,9 @@ final class PreviewController: PageInspecting {
     var picked: PickedElement?
     /// A snapshot cropped to the picked element.
     var pickedCrop: Data?
+    /// Pixels per point of the screen the preview is on, set by the views
+    /// that show it; every copy is made at this scale.
+    var displayScale: CGFloat = 2
 
     func togglePicking() {
         isPicking.toggle()
@@ -41,8 +44,7 @@ final class PreviewController: PageInspecting {
             try? element.selector.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-pick.txt"), atomically: true, encoding: .utf8)
         }
         #endif
-        let rect = CGRect(x: element.x - 12, y: element.y - 12, width: element.width + 24, height: element.height + 24)
-        Task { pickedCrop = try? await page.exported(as: .image(region: .rect(rect))) }
+        Task { pickedCrop = await crop(element) }
     }
 
     /// The crop of the element in the last message sent, for its bug card.
@@ -85,17 +87,51 @@ final class PreviewController: PageInspecting {
         return json.flatMap { try? JSONDecoder().decode(PageFacts.self, from: Data($0.utf8)) }
     }
 
-    /// What's on screen in the preview right now (not the whole page).
-    func visiblePNG() async -> Data? {
+    /// What's on screen in the preview right now (not the whole page), at
+    /// the display's scale. The camera, the phone's Copy screenshot and a
+    /// bug card all copy this.
+    func visiblePNG(scale: CGFloat? = nil) async -> Data? {
+        guard let view = await viewport() else { return nil }
+        return await image(of: CGRect(x: 0, y: 0, width: view.width, height: view.height), scale: scale)
+    }
+
+    /// For a bug card without a pick: what the preview shows.
+    func snapshotPNG() async -> Data? { await visiblePNG() }
+
+    /// The picked element and a 12 pt margin, at the display's scale.
+    func crop(_ element: PickedElement, scale: CGFloat? = nil) async -> Data? {
+        guard let view = await viewport() else { return nil }
+        return await image(of: Self.cropRect(element, scrollX: view.scrollX, scrollY: view.scrollY), scale: scale)
+    }
+
+    /// The page's scroll offset and visible size, in CSS pixels.
+    private func viewport() async -> (scrollX: Double, scrollY: Double, width: Double, height: Double)? {
         guard loadedURL != nil,
               let json = try? await page.callJavaScript("return JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])") as? String,
               let v = try? JSONDecoder().decode([Double].self, from: Data(json.utf8)), v.count == 4 else { return nil }
-        return try? await page.exported(as: .image(region: .rect(CGRect(x: v[0], y: v[1], width: v[2], height: v[3]))))
+        return (v[0], v[1], v[2], v[3])
     }
 
-    func snapshotPNG() async -> Data? {
-        guard loadedURL != nil else { return nil }
-        return try? await page.exported(as: .image())
+    /// One snapshot path for every copy. `rect` is in the web view's own
+    /// coordinates (the visible area starts at the origin whatever the
+    /// scroll offset), and the export makes one pixel per point of
+    /// `snapshotWidth`, so asking for the width times the display's scale
+    /// gives a sharp copy.
+    private func image(of rect: CGRect, scale: CGFloat?) async -> Data? {
+        guard rect.width > 0, rect.height > 0 else { return nil }
+        let width = Self.snapshotWidth(rect.width, scale: scale ?? displayScale)
+        return try? await page.exported(as: .image(region: .rect(rect), snapshotWidth: width))
+    }
+
+    nonisolated static func snapshotWidth(_ width: CGFloat, scale: CGFloat) -> CGFloat {
+        width * max(scale, 1)
+    }
+
+    /// A picked element's box in the web view's coordinates: its page
+    /// position minus the scroll offset, with a 12 pt margin.
+    nonisolated static func cropRect(_ element: PickedElement, scrollX: Double, scrollY: Double) -> CGRect {
+        CGRect(x: Double(element.x) - scrollX - 12, y: Double(element.y) - scrollY - 12,
+               width: Double(element.width) + 24, height: Double(element.height) + 24)
     }
 }
 

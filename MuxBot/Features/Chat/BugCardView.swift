@@ -66,7 +66,8 @@ struct BugCardView: View {
     }
 
     private func copySnapshot() async -> Bool {
-        // The picked element's crop if this bug came from a pick, else the page.
+        // The picked element's crop if this bug came from a pick, else what
+        // the preview shows.
         let crop = draft?.selector != nil ? preview.lastSentCrop : nil
         var png = crop
         if png == nil { png = await preview.snapshotPNG() }

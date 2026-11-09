@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct NewBotView: View {
@@ -10,7 +11,10 @@ struct NewBotView: View {
     @State private var resource = ""
     @State private var folder: URL?
     @State private var pickingFolder = false
-    @State private var look = BotLook.suggested(for: "")
+    /// A fresh look, unlike the bots you have (set when the form appears).
+    @State private var look = BotLook.fresh(avoiding: [])
+    @State private var lookIsFresh = false
+    @Query private var bots: [Bot]
     /// The state the face previews while you pick (not saved).
     @State private var mood = AvatarMood.idle
 
@@ -24,6 +28,11 @@ struct NewBotView: View {
             if onDetails { details } else { face }
         }
         .navigationTitle(onDetails ? name : "New bot")
+        .onAppear {
+            guard !lookIsFresh else { return }
+            look = BotLook.fresh(avoiding: bots.map(\.look))
+            lookIsFresh = true
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 if onDetails { Button("Back") { onDetails = false } } else { Button("Cancel") { dismiss() } }

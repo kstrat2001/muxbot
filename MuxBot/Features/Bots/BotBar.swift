@@ -49,7 +49,7 @@ struct BotBar: View {
             }
             if let element = preview.picked, router.context.botId != nil {
                 HStack(spacing: Spacing.xs) {
-                    Image(systemName: element.intent == "bug" ? "ladybug" : "scope").accessibilityHidden(true)
+                    Image(systemName: "scope").accessibilityHidden(true)
                     Text(element.chip).lineLimit(1)
                     Button("Remove", systemImage: "xmark.circle.fill") { preview.clearPick() }
                         .labelStyle(.iconOnly)
@@ -87,10 +87,6 @@ struct BotBar: View {
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
         .background(.bar)
-        .onChange(of: preview.picked) {
-            // "Report a bug here" from the preview starts a bug report.
-            if preview.picked?.intent == "bug", router.barDraft.isEmpty { router.barDraft = "bug: " }
-        }
     }
 
     /// The shortcuts for the thread on screen.

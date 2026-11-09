@@ -120,9 +120,44 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         let lower = text.lowercased()
         if issueNumber(in: text) != nil, lower.contains("fix") { return .fix }
         if FallbackBrain.isIssueQuestion(lower) { return .issues }
+        if hasElement { return aboutElement(lower) }
         if FallbackBrain.isVisualReport(lower) { return .bug }
-        if hasElement && !lower.hasSuffix("?") && !lower.isEmpty { return .bug }
         if lower.hasSuffix("?") { return .ask }
         return nil
     }
+
+    /// About something picked in the preview ("Chat about this"): a change
+    /// ("make this bigger", "can you replace…") is work, a question is
+    /// answered unless it names a problem ("why is this cut off?"), and any
+    /// other remark ("no gutter on the sides") is a problem to measure.
+    private static func aboutElement(_ lower: String) -> Intent? {
+        let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        var request = text
+        for polite in ["please ", "can you ", "could you ", "would you ", "will you ", "pls "] where request.hasPrefix(polite) {
+            request = String(request.dropFirst(polite.count))
+        }
+        if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }  // "can you please…"
+        let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        if changeVerbs.contains(verb) { return .fix }
+        if GuideRoute.isQuestion(text) { return problemWords.contains { text.contains($0) } ? .bug : .ask }
+        return .bug
+    }
+
+    /// A message about a picked element that starts with one of these asks
+    /// for a change.
+    private static let changeVerbs: Set<String> = [
+        "make", "change", "replace", "swap", "set", "use", "add", "remove", "delete", "drop", "hide", "show",
+        "move", "put", "rename", "rewrite", "reword", "update", "edit", "fix", "turn", "increase", "decrease",
+        "shrink", "grow", "enlarge", "center", "align", "bold", "italicize", "underline", "shorten",
+        "lengthen", "translate", "link", "unlink", "insert", "wrap", "space", "pad", "tighten", "loosen", "say",
+    ]
+
+    /// A question about a picked element that names one of these is a
+    /// visual problem, measured into a bug card.
+    private static let problemWords = [
+        "cut off", "clipped", "overlap", "misaligned", "not aligned", "off-center", "off center", "broken",
+        "cramped", "squished", "overflow", "too big", "too small", "too wide", "too narrow", "wrong", "missing",
+        "hidden", "doesn't fit", "does not fit", "not showing", "pushed",
+    ]
 }
