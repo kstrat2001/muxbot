@@ -30,18 +30,24 @@ final class LocalBotState: @unchecked Sendable {
     }
 
     @ObservationIgnored private let fileURL: URL?
-    @ObservationIgnored private let lock = Mutex(())
-    /// By bot id (`uuidString`): a plain JSON object on disk.
-    private var entries: [String: Entry] = [:]
+    /// By bot id (`uuidString`): a plain JSON object on disk. Behind a lock,
+    /// since the schema migration writes off the main actor; observers are
+    /// told around a change (`withMutation`), never while it's held.
+    @ObservationIgnored private let entries: Mutex<[String: Entry]>
 
     /// `nil` keeps it in memory only (tests).
     init(fileURL: URL?) {
         self.fileURL = fileURL
+        var saved: [String: Entry] = [:]
         if let fileURL, let data = try? Data(contentsOf: fileURL),
-           let saved = try? JSONDecoder().decode([String: Entry].self, from: data) {
-            entries = saved
+           let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) {
+            saved = decoded
         }
+        entries = Mutex(saved)
     }
+
+    /// What views observe: any entry changing.
+    private var allEntries: [String: Entry] { entries.withLock { $0 } }
 
     /// The app's own: Application Support/MuxBot/local-bots.json, or in
     /// memory under tests so they never touch the real file.
@@ -54,24 +60,29 @@ final class LocalBotState: @unchecked Sendable {
     }()
 
     subscript(id: UUID) -> Entry? {
-        get { lock.withLock { _ in entries[id.uuidString] } }
-        set {
-            lock.withLock { _ in
-                if let newValue, !newValue.isEmpty { entries[id.uuidString] = newValue } else { entries[id.uuidString] = nil }
-                save()
+        get {
+            access(keyPath: \.allEntries)
+            return entries.withLock { $0[id.uuidString] }
+        }
+        set { update(id) { $0 = newValue ?? Entry() } }
+    }
+
+    /// Changes one bot's entry in place: read, change and save under one
+    /// lock, so concurrent updates never lose one. `change` must not touch
+    /// this state itself.
+    func update(_ id: UUID, _ change: (inout Entry) -> Void) {
+        withMutation(keyPath: \.allEntries) {
+            entries.withLock { all in
+                var entry = all[id.uuidString] ?? Entry()
+                change(&entry)
+                all[id.uuidString] = entry.isEmpty ? nil : entry
+                save(all)
             }
         }
     }
 
-    /// Changes one bot's entry in place.
-    func update(_ id: UUID, _ change: (inout Entry) -> Void) {
-        var entry = self[id] ?? Entry()
-        change(&entry)
-        self[id] = entry
-    }
-
-    private func save() {
-        guard let fileURL, let data = try? JSONEncoder().encode(entries) else { return }
+    private func save(_ all: [String: Entry]) {
+        guard let fileURL, let data = try? JSONEncoder().encode(all) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
 }
