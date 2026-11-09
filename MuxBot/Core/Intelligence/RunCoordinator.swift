@@ -357,6 +357,41 @@ final class RunCoordinator {
 
     /// darkmux-run previews, by bot.
     var livePreviews: [UUID: LivePreview] = [:]
+    /// Tests answer a clean start (Start over) here.
+    var previewCleanStarter: (() async throws -> LivePreview)?
+    /// Tests answer whether darkmux can start over here.
+    var startOverProbe: (() async -> Bool)?
+    /// darkmux can start a preview over (`{"clean": true}`), as asked once
+    /// (again after a preview fails, in case darkmux changed meanwhile).
+    private(set) var canStartOver = false
+    private var startOverChecked = false
+
+    func checkStartOver() async {
+        guard !startOverChecked else { return }
+        if let startOverProbe {
+            startOverChecked = true
+            canStartOver = await startOverProbe()
+            return
+        }
+        guard let connection, let token = connection.token else { return }
+        startOverChecked = true
+        canStartOver = await connection.client.supportsCleanStart(token: token)
+    }
+
+    /// Start over: darkmux reinstalls the project's packages and starts the
+    /// preview again, running or not. Nothing at all where darkmux can't,
+    /// never a plain restart in its place.
+    func startOver(for bot: Bot) async {
+        guard canStartOver, bot.workspaceName != nil else { return }
+        let before = livePreviews[bot.id]?.url
+        livePreviews[bot.id] = nil
+        await ensurePreview(for: bot, clean: true)
+        // Same address: the page is reloaded so it shows the new server.
+        if let now = livePreviews[bot.id], now.status == .ready, now.url == before {
+            previewReloads[bot.id, default: 0] += 1
+        }
+    }
+
     /// Counts up each time a bot's open preview should reload (after a run
     /// changed files, or Undo); the panel reloads its page on a change.
     var previewReloads: [UUID: Int] = [:]
@@ -404,7 +439,7 @@ final class RunCoordinator {
     /// Has darkmux run the bot's preview, and follows it until it's ready or
     /// fails. Does nothing without a work copy or pairing (a preview link
     /// is shown as is).
-    func ensurePreview(for bot: Bot) async {
+    func ensurePreview(for bot: Bot, clean: Bool = false) async {
         guard let name = bot.workspaceName else {
             Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
             return
@@ -425,9 +460,15 @@ final class RunCoordinator {
         }
         Self.previewLog.info("preview \(name, privacy: .public): asking darkmux to start it")
         livePreviews[bot.id] = LivePreview(status: .starting)
-        let fetch: (Bool) async throws -> LivePreview = previewFetcher ?? { start in
-            start ? try await connection.client.startPreview(token: token, workspace: name).live
-                  : try await connection.client.previewStatus(token: token, workspace: name).live
+        let fetcher = previewFetcher, cleanStarter = previewCleanStarter
+        let fetch: (Bool) async throws -> LivePreview = { start in
+            if start, clean {
+                if let cleanStarter { return try await cleanStarter() }
+                return try await connection.client.startPreview(token: token, workspace: name, clean: true).live
+            }
+            if let fetcher { return try await fetcher(start) }
+            return start ? try await connection.client.startPreview(token: token, workspace: name).live
+                         : try await connection.client.previewStatus(token: token, workspace: name).live
         }
         do {
             var p = try await fetch(true)
@@ -464,6 +505,9 @@ final class RunCoordinator {
             Self.previewLog.error("preview \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
         }
+        // A failure is when Start over matters: ask darkmux again next time
+        // (it may have been updated meanwhile).
+        if livePreviews[bot.id]?.status.isFailed == true { startOverChecked = false }
     }
 
     private static let previewLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "preview")
