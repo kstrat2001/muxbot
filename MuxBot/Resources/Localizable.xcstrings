@@ -100,6 +100,9 @@
     "Add %@" : {
 
     },
+    "Add a model" : {
+
+    },
     "Add a repo and I'll look for its preview recipe." : {
 
     },
@@ -115,6 +118,12 @@
     "Allow notifications" : {
 
     },
+    "Always %@" : {
+
+    },
+    "Always ask" : {
+
+    },
     "Apple Intelligence is ready. Bots answer on this device." : {
 
     },
@@ -128,6 +137,12 @@
 
     },
     "Approved" : {
+
+    },
+    "Auto" : {
+
+    },
+    "Auto order" : {
 
     },
     "Back" : {
@@ -181,10 +196,16 @@
     "Canceled" : {
 
     },
+    "Change" : {
+
+    },
     "Change folder…" : {
 
     },
     "Checking the done-when in the preview…" : {
+
+    },
+    "Choosing the model" : {
 
     },
     "Clear %@'s conversation?" : {
@@ -292,6 +313,9 @@
     "Duration" : {
 
     },
+    "Each dispatch card asks, with Auto's pick ready." : {
+
+    },
     "Enter this code at %@%@:" : {
       "localizations" : {
         "en" : {
@@ -302,6 +326,12 @@
         }
       }
     },
+    "Every run uses %@. If it isn't running, the card says so." : {
+
+    },
+    "Fastest first. A run whose done-when wasn't met moves to the next one." : {
+
+    },
     "File on GitHub" : {
 
     },
@@ -309,6 +339,9 @@
 
     },
     "Fixes run on darkmux after you approve." : {
+
+    },
+    "For this bot" : {
 
     },
     "From your folder %@" : {
@@ -377,10 +410,26 @@
     "Messages" : {
 
     },
-    "Model: %@" : {
+    "Model" : {
+
+    },
+    "Model: %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Model: %1$@%2$@"
+          }
+        }
+      }
+    },
+    "Models" : {
 
     },
     "Mux Bot couldn't open its data" : {
+
+    },
+    "Mux Bot picks: the first in the Auto order that's running." : {
 
     },
     "Name" : {
@@ -554,10 +603,16 @@
     "Role" : {
 
     },
+    "Run again on %@" : {
+
+    },
     "Run again with these numbers" : {
 
     },
     "Running" : {
+
+    },
+    "Same as Settings" : {
 
     },
     "Search" : {
@@ -688,6 +743,9 @@
     "Unread" : {
 
     },
+    "Use %@ for this run" : {
+
+    },
     "Waiting for you to approve… code expires in %lld:%@" : {
       "localizations" : {
         "en" : {
@@ -747,6 +805,15 @@
 
     },
     "darkmux: paired" : {
+
+    },
+    "not on this Mac" : {
+
+    },
+    "not running" : {
+
+    },
+    "running" : {
 
     },
     "·" : {

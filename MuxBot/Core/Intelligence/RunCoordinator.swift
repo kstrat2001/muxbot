@@ -484,12 +484,32 @@ final class RunCoordinator {
         return (try? await connection.client.profiles(token: token)) ?? []
     }
 
-    /// Picks the run's model: the first that answers, or with `next` the one
-    /// after the model it last ran on (a done-when that wasn't met).
+    /// Settings › Models (tests set their own).
+    var modelSettings: () -> ModelSettings = { ModelSettings.load() }
+    /// Why each run has its model, for the dispatch card.
+    var runChoices: [UUID: ModelChoice] = [:]
+    /// What darkmux listed last, for pickers.
+    var lastListed: [DarkmuxClient.ProfileInfo] = []
+
+    /// Picks the run's model by the bot's mode (else the app's): Auto, a
+    /// default model, or Always ask. With `next`, it's a run again after a
+    /// done-when that wasn't met.
     func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
         let listed = await listedProfiles()
-        runProfiles[run.id] = next ? ModelPreference.next(after: previous ?? runProfiles[run.id], in: listed)
-                                   : ModelPreference.first(in: listed)
+        lastListed = listed
+        let settings = modelSettings()
+        let mode = settings.mode(forBot: run.bot.flatMap { LocalBotState.shared[$0.id]?.modelMode })
+        let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
+                                         previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next)
+        runChoices[run.id] = choice
+        runProfiles[run.id] = choice.profile
+    }
+
+    /// Another model for this one run (the card's Change, or Auto's pick when
+    /// the chosen one isn't running).
+    func override(_ run: BotRun, with profile: String) {
+        runProfiles[run.id] = profile
+        runChoices[run.id] = ModelChoice(profile: profile, reason: "chosen for this run")
     }
 
     func profile(for run: BotRun) -> String? { runProfiles[run.id] }
@@ -514,7 +534,15 @@ final class RunCoordinator {
         defer { checking.remove(run.id) }
         let after = await probe.measure(url: spec.page, widths: spec.widths)
         guard !after.isEmpty else { return }
-        runChecks[run.id] = LayoutCheck.evaluate(spec, after: after)
+        let result = LayoutCheck.evaluate(spec, after: after)
+        runChecks[run.id] = result
+        // A default model doesn't switch by itself: offer the next one.
+        if !result.met, var choice = runChoices[run.id], choice.stays, let name = choice.profile {
+            let settings = modelSettings()
+            choice.offerNext = ModelChoice.resolve(mode: .model(name), order: settings.order, listed: lastListed,
+                                                   previous: name, rerunAfterNotMet: true).offerNext
+            runChoices[run.id] = choice
+        }
     }
 
     /// The last message a Tweak composed (tests read it).

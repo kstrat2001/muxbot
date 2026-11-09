@@ -1,31 +1,137 @@
 import Foundation
 
-/// Which model a run goes to darkmux with. The app decides per run; darkmux
-/// says which profiles this app may use here and which answer now (`GET
-/// /client/profiles`: the role's own first, then every other local one).
-/// This is the one place the order is decided.
-enum ModelPreference {
-    /// Coder's models by profile name, fastest first, then the stronger one
-    /// a run moves to when its done-when isn't met. Names this machine
-    /// doesn't list are skipped; with none listed, darkmux's own default
-    /// for the role (what it lists first) is used, and a run never wanders
-    /// to some other local model.
-    static let coder = ["flint-rec", "q38-27b-tensorfold"]
+/// How a run's model is chosen. App-wide in Settings › Models, overridable
+/// per bot (`LocalBotState.modelMode`); machine-local, since the models a
+/// Mac can run differ.
+enum ModelMode: Equatable, Hashable, Sendable {
+    /// The app picks: the first in the Auto order that's running, and the
+    /// next one after a done-when that wasn't met.
+    case auto
+    /// The dispatch card asks, with Auto's pick preselected.
+    case ask
+    /// Always this model; a done-when not met offers the next one, never
+    /// switches by itself.
+    case model(String)
 
-    /// The first preferred profile that answers now, else darkmux's default
-    /// (listed first) when it answers; nil leaves the choice to darkmux.
-    static func first(in listed: [DarkmuxClient.ProfileInfo]) -> String? {
-        let up = listed.filter(\.reachable).map(\.name)
-        return coder.first(where: up.contains) ?? up.first.flatMap { listed.first?.name == $0 ? $0 : nil }
+    /// "auto", "ask" or "model:<name>".
+    var stored: String {
+        switch self {
+        case .auto: "auto"
+        case .ask: "ask"
+        case let .model(name): "model:\(name)"
+        }
     }
 
-    /// The preferred profile after `current` (a done-when that wasn't met
-    /// runs on the next, stronger one); the last stays the last.
-    static func next(after current: String?, in listed: [DarkmuxClient.ProfileInfo]) -> String? {
+    init?(stored: String?) {
+        switch stored {
+        case "auto"?: self = .auto
+        case "ask"?: self = .ask
+        case let s? where s.hasPrefix("model:"): self = .model(String(s.dropFirst("model:".count)))
+        default: return nil
+        }
+    }
+}
+
+/// Settings › Models: the app-wide mode and the Auto order.
+struct ModelSettings: Equatable, Sendable {
+    var mode: ModelMode = .auto
+    /// Coder's models by profile name, fastest first, then the stronger one
+    /// a run moves to when its done-when isn't met.
+    var order: [String] = ModelSettings.defaultOrder
+
+    static let defaultOrder = ["flint-rec", "q38-27b-tensorfold"]
+    private static let modeKey = "models.mode", orderKey = "models.order"
+
+    static func load(from defaults: UserDefaults = .standard) -> ModelSettings {
+        ModelSettings(mode: ModelMode(stored: defaults.string(forKey: modeKey)) ?? .auto,
+                      order: defaults.stringArray(forKey: orderKey) ?? defaultOrder)
+    }
+
+    func save(to defaults: UserDefaults = .standard) {
+        defaults.set(mode.stored, forKey: Self.modeKey)
+        defaults.set(order, forKey: Self.orderKey)
+    }
+
+    /// A bot's own mode when it has one, else the app's.
+    func mode(forBot stored: String?) -> ModelMode { ModelMode(stored: stored) ?? mode }
+}
+
+/// The model a run goes with, and why; what the dispatch card shows.
+struct ModelChoice: Equatable, Sendable {
+    /// nil leaves it to darkmux.
+    var profile: String?
+    var reason: String
+    /// Always ask: the card shows a picker with `profile` preselected.
+    var ask = false
+    /// The chosen model isn't usable here (said, never swapped).
+    var unavailable: String? = nil
+    /// Auto's pick, offered when `unavailable`.
+    var suggestion: String? = nil
+    /// A default model's run after a done-when not met: the model to offer.
+    var offerNext: String? = nil
+    /// A default model: stays on it after a done-when not met (it offers
+    /// `offerNext` instead of switching).
+    var stays = false
+
+    static func resolve(mode: ModelMode, order: [String], listed: [DarkmuxClient.ProfileInfo],
+                        previous: String?, rerunAfterNotMet: Bool) -> ModelChoice {
+        switch mode {
+        case .auto, .ask:
+            var c = rerunAfterNotMet ? auto(next: previous, order: order, listed: listed) : auto(order: order, listed: listed)
+            c.ask = mode == .ask
+            return c
+        case let .model(name):
+            let entry = listed.first { $0.name == name }
+            var c = ModelChoice(profile: name, reason: "your default model", stays: true)
+            if entry == nil {
+                c.unavailable = "\(name) isn't available to Mux Bot on this Mac."
+            } else if entry?.reachable == false {
+                c.unavailable = "\(name) isn't running on this Mac."
+            }
+            if c.unavailable != nil { c.suggestion = auto(order: order, listed: listed).profile.flatMap { $0 == name ? nil : $0 } }
+            if rerunAfterNotMet {
+                let next = ModelPreference.next(after: name, in: listed, order: order)
+                let fallback = auto(order: order, listed: listed).profile
+                c.offerNext = [next, fallback].compactMap { $0 }.first { $0 != name }
+            }
+            return c
+        }
+    }
+
+    private static func auto(order: [String], listed: [DarkmuxClient.ProfileInfo]) -> ModelChoice {
+        guard !listed.isEmpty else { return ModelChoice(profile: nil, reason: "darkmux picks (it didn't list models)") }
         let up = listed.filter(\.reachable).map(\.name)
-        let order = coder.filter(up.contains)
-        guard let current else { return first(in: listed) }
-        guard let i = order.firstIndex(of: current) else { return current }
-        return i + 1 < order.count ? order[i + 1] : order[i]
+        if let name = order.first(where: up.contains) {
+            return ModelChoice(profile: name, reason: "first in your Auto order that's running")
+        }
+        return ModelChoice(profile: ModelPreference.first(in: listed, order: order), reason: "darkmux's default for Coder")
+    }
+
+    private static func auto(next previous: String?, order: [String], listed: [DarkmuxClient.ProfileInfo]) -> ModelChoice {
+        guard let previous, order.contains(previous) else { return auto(order: order, listed: listed) }
+        let next = ModelPreference.next(after: previous, in: listed, order: order)
+        guard next != previous else { return ModelChoice(profile: next, reason: "last in your Auto order") }
+        return ModelChoice(profile: next, reason: "next in your Auto order, after a done-when that wasn't met")
+    }
+}
+
+/// The Auto order applied to what darkmux lists (`GET /client/profiles`:
+/// the role's own first, then every other local profile).
+enum ModelPreference {
+    /// The first in `order` that answers now, else darkmux's default (listed
+    /// first) when it answers; nil leaves the choice to darkmux. A run never
+    /// wanders to some other local model.
+    static func first(in listed: [DarkmuxClient.ProfileInfo], order: [String] = ModelSettings.defaultOrder) -> String? {
+        let up = listed.filter(\.reachable).map(\.name)
+        return order.first(where: up.contains) ?? up.first.flatMap { listed.first?.name == $0 ? $0 : nil }
+    }
+
+    /// The one after `current` in `order` that answers; the last stays.
+    static func next(after current: String?, in listed: [DarkmuxClient.ProfileInfo], order: [String] = ModelSettings.defaultOrder) -> String? {
+        let up = listed.filter(\.reachable).map(\.name)
+        let running = order.filter(up.contains)
+        guard let current else { return first(in: listed, order: order) }
+        guard let i = running.firstIndex(of: current) else { return current }
+        return i + 1 < running.count ? running[i + 1] : running[i]
     }
 }

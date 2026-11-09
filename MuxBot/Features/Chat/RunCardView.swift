@@ -51,10 +51,22 @@ struct RunCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            modelRow(run)
             DisclosureGroup("What \(run.crew.name) gets") {
                 if let model = brain.runs.profile(for: run) {
-                    Text("Model: \(model)").font(AppFont.footnote()).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        Text("Model: \(model)\(brain.runs.runChoices[run.id].map { " (\($0.reason))" } ?? "")")
+                            .font(AppFont.footnote()).foregroundStyle(.secondary)
+                        Spacer()
+                        if run.phase == .proposed, !brain.runs.lastListed.isEmpty {
+                            Menu("Change") {
+                                ForEach(brain.runs.lastListed.filter(\.reachable).map(\.name), id: \.self) { name in
+                                    Button(name) { brain.runs.override(run, with: name) }
+                                }
+                            }
+                            .fixedSize()
+                        }
+                    }
                 }
                 Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
@@ -250,6 +262,31 @@ struct RunCardView: View {
         }
     }
 
+    /// Always ask: a picker before Approve. A chosen model that isn't running:
+    /// said, with Auto's pick offered (never swapped silently).
+    @ViewBuilder private func modelRow(_ run: BotRun) -> some View {
+        if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
+            if let why = choice.unavailable {
+                HStack {
+                    Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+                    Spacer()
+                    if let other = choice.suggestion {
+                        Button("Use \(other) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
+                    }
+                }
+            } else if choice.ask {
+                let names = brain.runs.lastListed.filter(\.reachable).map(\.name)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Picker("Model", selection: Binding(get: { brain.runs.profile(for: run) ?? "" },
+                                                       set: { brain.runs.override(run, with: $0) })) {
+                        ForEach(names, id: \.self) { Text($0).tag($0) }
+                    }
+                    Text(choice.reason).font(AppFont.caption()).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     /// The done-when, measured in the preview after the run.
     @ViewBuilder private func doneWhenCheck(_ run: BotRun) -> some View {
         if brain.runs.checking.contains(run.id) {
@@ -265,10 +302,19 @@ struct RunCardView: View {
                         .font(AppFont.footnote(.semibold)).foregroundStyle(Color.brandOrange)
                     ForEach(check.failures, id: \.self) { Text("• \($0)").font(AppFont.footnote()).textSelection(.enabled) }
                     if isLatest {
-                        Button("Run again with these numbers", systemImage: "arrow.clockwise") {
-                            Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, nextModel: true) }
+                        HStack {
+                            Button("Run again with these numbers", systemImage: "arrow.clockwise") {
+                                Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, nextModel: true) }
+                            }
+                            .buttonStyle(.bordered)
+                            // A default model stays on its model; offer the next one.
+                            if let next = brain.runs.runChoices[run.id]?.offerNext {
+                                Button("Run again on \(next)") {
+                                    Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, model: next) }
+                                }
+                                .buttonStyle(.bordered)
+                            }
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
             }

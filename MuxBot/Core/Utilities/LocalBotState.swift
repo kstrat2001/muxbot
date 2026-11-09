@@ -18,10 +18,12 @@ final class LocalBotState: @unchecked Sendable {
         var previewViewport: String?
         /// Runs whose "needs you" you hid here (the banner's ×), by id.
         var dismissedRuns: [String]?
+        /// This bot's model mode (`ModelMode.stored`); nil follows Settings.
+        var modelMode: String?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
-                && (dismissedRuns ?? []).isEmpty
+                && (dismissedRuns ?? []).isEmpty && modelMode == nil
         }
     }
 

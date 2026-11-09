@@ -47,6 +47,16 @@ struct BotInfoView: View {
                 BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
             }
             workCopySection
+            Section("Model") {
+                Picker("For this bot", selection: modelModeBinding) {
+                    Text("Same as Settings").tag(String?.none)
+                    Text("Auto").tag(Optional(ModelMode.auto.stored))
+                    Text("Always ask").tag(Optional(ModelMode.ask.stored))
+                    ForEach(brain.runs.lastListed.map(\.name), id: \.self) { name in
+                        Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
+                    }
+                }
+            }
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
                     Label {
@@ -110,6 +120,7 @@ struct BotInfoView: View {
             }
         }
         .formStyle(.grouped)
+        .task { if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() } }
         .task {
             for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
             await refreshBranch()
@@ -129,6 +140,12 @@ struct BotInfoView: View {
 
     /// Where darkmux works on this bot's code, on this Mac. Status only:
     /// darkmux owns the copy; the app knows its name, never a path.
+    /// This bot's model mode, kept on this Mac (`LocalBotState`).
+    private var modelModeBinding: Binding<String?> {
+        Binding(get: { LocalBotState.shared[bot.id]?.modelMode },
+                set: { mode in LocalBotState.shared.update(bot.id) { $0.modelMode = mode } })
+    }
+
     private var workCopySection: some View {
         Section {
             HStack(spacing: Spacing.sm) {

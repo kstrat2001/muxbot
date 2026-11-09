@@ -13,6 +13,9 @@ struct SettingsView: View {
             Tab("darkmux", systemImage: "link") {
                 FleetPairingView()
             }
+            Tab("Models", systemImage: "cpu") {
+                ModelSettingsView()
+            }
             Tab("GitHub", systemImage: "person.badge.key") {
                 GitHubSignInView()
             }

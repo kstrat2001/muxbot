@@ -718,12 +718,13 @@ final class BotBrain {
     /// An issue run's brief is rebuilt from the issue, never just its title.
     /// `nextModel`: the done-when wasn't met, so it runs on the next model
     /// the app may use; otherwise it keeps the model it ran on.
-    func rerun(_ run: BotRun, change: String, store: BotStore, nextModel: Bool = false) async {
+    func rerun(_ run: BotRun, change: String, store: BotStore, nextModel: Bool = false, model: String? = nil) async {
         let plan = await rerunPlan(for: run, change: change)
         if run.phase == .result {
             runs.runChecks[run.id] = nil
             if let check = plan?.check ?? runs.checkSpecs[run.id] { runs.checkSpecs[run.id] = check }
             if nextModel { await runs.chooseProfile(for: run, next: true) }
+            if let model { runs.override(run, with: model) }
             runs.tweak(change, run: run, store: store, echo: false, message: plan?.brief)
         } else if let bot = run.bot {
             let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
@@ -734,6 +735,7 @@ final class BotBrain {
             } else {
                 runs.runProfiles[again.id] = runs.profile(for: run)
             }
+            if let model { runs.override(again, with: model) }
             runs.decide(.approve, on: again, store: store)
         }
     }
