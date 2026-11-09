@@ -38,13 +38,16 @@ struct LeadBotTile: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity)
+        // A compact card, centered: the guide stands apart from the list.
+        .frame(minWidth: Self.avatarSize + 56)
         .padding(.vertical, Spacing.md)
+        .padding(.horizontal, Spacing.lg)
         .background(RoundedRectangle(cornerRadius: CornerRadius.lg)
             .fill(selected ? Color.brandBlue.opacity(0.18) : Color.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: CornerRadius.lg)
             .strokeBorder(selected ? Color.brandBlue : .clear, lineWidth: 1.5))
         .contentShape(RoundedRectangle(cornerRadius: CornerRadius.lg))
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.accessibilityName)
         .accessibilityValue(unread ? String(localized: "Unread") : "")
