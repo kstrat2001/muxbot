@@ -7,6 +7,8 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 // Optional: iCloud sync of bots, runs and threads (CloudKit, private database).
 // Needs the iCloud container iCloud.com.darklyenergized.darkmuxapp in your
 // developer account (Xcode > Signing & Capabilities > iCloud > CloudKit).
+// The same switch syncs model settings (Settings > Models, per-bot model)
+// through iCloud key-value storage: enable "Key-value storage" under iCloud.
 // MUXBOT_CLOUD_SYNC = YES
 // MUXBOT_ENTITLEMENTS_MAC = MuxBot-iCloud-macOS.entitlements
 // MUXBOT_ENTITLEMENTS_IOS = MuxBot-iCloud-iOS.entitlements

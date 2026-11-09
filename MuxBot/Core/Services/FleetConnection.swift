@@ -14,18 +14,31 @@ final class FleetConnection {
 
     private(set) var state: State = .unpaired
     var client = DarkmuxClient()
-    private let keychain = KeychainHelper()
+    private let keychain: any KeychainProviding
     private static let tokenKey = "darkmux.client.token"
     private static let nameKey = "darkmux.client.name"
     private var pairing: Task<Void, Never>?
 
-    init() {
-        if keychain.get(key: Self.tokenKey) != nil, let name = UserDefaults.standard.string(forKey: Self.nameKey) {
+    /// `defaults` holds the paired name (tests pass their own, never the
+    /// app's).
+    init(keychain: any KeychainProviding = KeychainHelper(), defaults: UserDefaults = .standard) {
+        self.keychain = keychain
+        let stored = keychain.get(key: Self.tokenKey)
+        cachedToken = .some(stored)
+        if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
             state = .paired(name: name)
         }
     }
 
-    var token: String? { keychain.get(key: Self.tokenKey) }
+    /// The token, read from the Keychain once and kept: views ask for it on
+    /// every redraw, and a Keychain read takes milliseconds.
+    var token: String? {
+        if let cachedToken { return cachedToken }
+        let read = keychain.get(key: Self.tokenKey)
+        cachedToken = .some(read)
+        return read
+    }
+    @ObservationIgnored private var cachedToken: String??
 
     /// How to run darkmux on this Mac, for the commands we show: `darkmux`
     /// on PATH, or a dev build named by MUXBOT_DARKMUX_CLI in the gitignored
@@ -56,9 +69,8 @@ final class FleetConnection {
                     switch status.status {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
-                        keychain.save(key: Self.tokenKey, value: token)
                         UserDefaults.standard.set(name, forKey: Self.nameKey)
-                        state = .paired(name: name)
+                        completePairing(token: token, name: name)
                         return
                     case "denied": state = .failed("The request was denied."); return
                     case "expired": state = .failed("The request expired. Try again."); return
@@ -72,6 +84,17 @@ final class FleetConnection {
         }
     }
 
+    /// Called when pairing completes (the app starts what waited for it).
+    var onPaired: (() -> Void)?
+
+    /// Keeps the token and tells the app it's paired.
+    func completePairing(token: String, name: String) {
+        keychain.save(key: Self.tokenKey, value: token)
+        cachedToken = .some(token)
+        state = .paired(name: name)
+        onPaired?()
+    }
+
     func cancelPairing() {
         pairing?.cancel()
         state = .unpaired
@@ -79,6 +102,7 @@ final class FleetConnection {
 
     func unpair() {
         keychain.delete(key: Self.tokenKey)
+        cachedToken = .some(nil)
         UserDefaults.standard.removeObject(forKey: Self.nameKey)
         state = .unpaired
     }

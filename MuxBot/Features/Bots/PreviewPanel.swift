@@ -7,8 +7,12 @@ import WebKit
 struct PreviewPanel: View {
     let url: URL
     var recipeViewports: [String]? = nil
+    /// The bot whose preview this is: its device size is remembered on this
+    /// Mac (`LocalBotState`), across page changes, threads and relaunches.
+    var botId: UUID? = nil
     let close: () -> Void
 
+    /// Only without a bot; a bot's choice lives in `LocalBotState`.
     @State private var viewport: PreviewViewport?
     @State private var settled: PreviewViewport.Layout?
     @State private var settleTask: Task<Void, Never>?
@@ -16,6 +20,8 @@ struct PreviewPanel: View {
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
     @State private var copiedNote: String?
+    /// The camera shows a checkmark for a moment after a copy.
+    @State private var copied = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -23,24 +29,18 @@ struct PreviewPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Spacing.sm) {
-                Image(systemName: "safari").foregroundStyle(.secondary).accessibilityHidden(true)
+                Image(systemName: "safari").foregroundStyle(Color.secondaryText).accessibilityHidden(true)
                 Text(url.host() ?? url.absoluteString)
                     .font(AppFont.caption())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .lineLimit(1)
                 Spacer()
-                Menu {
-                    Button("Copy visible preview", systemImage: "rectangle.dashed") { copy(visible: true) }
-                    Button("Copy picked element", systemImage: "scope") { copy(visible: false) }
-                        .disabled(preview.pickedCrop == nil)
-                } label: {
-                    Label("Copy screenshot", systemImage: "camera")
-                } primaryAction: {
-                    copy(visible: true)
-                }
-                .labelStyle(.iconOnly)
-                .fixedSize()
-                .help("Copy a screenshot of the preview to the clipboard")
+                // One button: a screenshot of what the preview shows. (A picked
+                // element already rides along with your message as a chip.)
+                Button(copied ? "Copied" : "Copy the visible preview", systemImage: copied ? "checkmark" : "camera") { copyVisible() }
+                    .labelStyle(.iconOnly)
+                    .contentTransition(.symbolEffect(.replace))
+                    .help(copied ? "Copied" : "Copy the visible preview")
                 Button(preview.isPicking ? "Cancel" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
                     preview.togglePicking()
                 }
@@ -49,7 +49,7 @@ struct PreviewPanel: View {
                 .help("Point at part of the page; your next message is about it.")
                 Menu {
                     ForEach(PreviewViewport.allCases, id: \.self) { option in
-                        Button(option.label, systemImage: option.systemImage) { viewport = option }
+                        Button(option.label, systemImage: option.systemImage) { choose(option) }
                     }
                 } label: {
                     Label(currentViewport.label, systemImage: currentViewport.systemImage)
@@ -78,10 +78,7 @@ struct PreviewPanel: View {
                 // isn't re-laid out on every frame (that flickered).
                 let layout = settled ?? currentViewport.layout(in: geometry.size)
                 WebView(preview.page)
-                    .frame(width: layout.width, height: layout.height)
-                    .scaleEffect(layout.scale, anchor: .topLeading)
-                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
-                    .clipped()
+                    .modifier(DeviceFrame(layout: layout, panel: geometry.size))
                     .onChange(of: geometry.size) { settle(for: geometry.size) }
                     .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }
                     .onAppear { settled = currentViewport.layout(in: geometry.size) }
@@ -121,16 +118,54 @@ struct PreviewPanel: View {
             return forced
         }
         #endif
-        return viewport ?? PreviewViewport.preferred(from: recipeViewports)
+        return viewport ?? PreviewViewport.resolve(stored: botId.flatMap { LocalBotState.shared[$0]?.previewViewport },
+                                                   recipe: recipeViewports)
     }
 
-    private func copy(visible: Bool) {
-        Task {
-            let png = visible ? await preview.visiblePNG() : preview.pickedCrop
-            let ok = png.map(Clipboard.copyPNG) ?? false
-            withAnimation { copiedNote = ok ? "Copied" : "Couldn't copy" }
-            try? await Task.sleep(for: .seconds(1.5))
-            withAnimation { copiedNote = nil }
+    private func choose(_ option: PreviewViewport) {
+        if let botId {
+            LocalBotState.shared.update(botId) { $0.previewViewport = option.rawValue }
+        } else {
+            viewport = option
         }
+    }
+
+    private func copyVisible() {
+        Task {
+            let ok = await preview.visiblePNG().map(Clipboard.copyImage) ?? false
+            withAnimation {
+                if ok { copied = true } else { copiedNote = "Couldn't copy the preview" }
+            }
+            try? await Task.sleep(for: .seconds(1.5))
+            withAnimation { copied = false; copiedNote = nil }
+        }
+    }
+}
+
+/// Lays a page out at `layout`'s size and scale inside a panel: a device is
+/// centered in a rounded frame with a hairline edge; Desktop and Fit fill
+/// the panel from its corner.
+struct DeviceFrame: ViewModifier {
+    let layout: PreviewViewport.Layout
+    let panel: CGSize
+
+    func body(content: Content) -> some View {
+        let origin = layout.origin(in: panel)
+        let corner: CGFloat = layout.framed ? 18 : 0
+        content
+            .frame(width: layout.width, height: layout.height)
+            .scaleEffect(layout.scale, anchor: .topLeading)
+            .frame(width: layout.width * layout.scale, height: layout.height * layout.scale, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .overlay {
+                if layout.framed {
+                    RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(.quaternary, lineWidth: 1)
+                }
+            }
+            .shadow(color: .black.opacity(layout.framed ? 0.12 : 0), radius: 10, y: 3)
+            .offset(x: origin.x, y: origin.y)
+            .frame(width: panel.width, height: panel.height, alignment: .topLeading)
+            .background(layout.framed ? Color.secondary.opacity(0.06) : Color.clear)
+            .clipped()
     }
 }

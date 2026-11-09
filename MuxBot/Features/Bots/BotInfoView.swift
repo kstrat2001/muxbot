@@ -32,21 +32,54 @@ struct BotInfoView: View {
         Binding(get: { bot.instructions }, set: { bot.instructions = $0; try? context.save() })
     }
 
+    /// The state the picker's face previews (not saved).
+    @State private var previewMood = AvatarMood.idle
+
     var body: some View {
         Form {
             Section("About") {
                 HStack(spacing: Spacing.md) {
-                    BotAvatarView(look: bot.look, mood: AvatarMood(bot.state), size: 44, blinkId: bot.id)
+                    BotAvatarView(look: bot.look, mood: AvatarMood(NeedsYou.shownState(bot)), size: 44, blinkId: bot.id)
                     TextField("Name", text: nameBinding).font(AppFont.headline())
                 }
                 TextField("What this bot is about", text: aboutBinding, axis: .vertical)
                     .lineLimit(2...6)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Section("Look") {
-                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
+                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }), mood: $previewMood)
             }
             workCopySection
+            Section {
+                Picker("For this bot", selection: modelModeBinding) {
+                    Text("Same as Settings").tag(String?.none)
+                    Text("Auto").tag(Optional(ModelMode.auto.stored))
+                    Text("Always ask").tag(Optional(ModelMode.ask.stored))
+                    ForEach(brain.runs.lastListed.map(\.name), id: \.self) { name in
+                        Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
+                    }
+                    // A saved model this Mac doesn't list keeps a row, so the picker shows it.
+                    if let name = ModelMode.unlistedModel(ModelMode(stored: modelModeBinding.wrappedValue), listed: brain.runs.lastListed.map(\.name)) {
+                        if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(Optional(ModelMode.model(name).stored)) }
+                        else { Text("Always \(name)").tag(Optional(ModelMode.model(name).stored)) }
+                    }
+                }
+            } header: {
+                Text(brain.runs.machine.map { "Model on \($0.name)" } ?? "Model on this Mac")
+            }
+            if !bot.skills.isEmpty {
+                Section {
+                    ForEach(bot.skills, id: \.name) { skill in
+                        DisclosureGroup(skill.name) {
+                            HelpText(text: skill.body).font(AppFont.footnote())
+                        }
+                    }
+                } header: {
+                    Text("Skills")
+                } footer: {
+                    Text("From its template's playbook when it was made. The bot uses the one that fits each request.")
+                }
+            }
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
                     Label {
@@ -55,7 +88,7 @@ struct BotInfoView: View {
                             if resource.kind == .previewURL {
                                 Text("Your preview link, until darkmux runs previews itself.")
                                     .font(AppFont.caption())
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                             }
                         }
                     } icon: {
@@ -68,7 +101,7 @@ struct BotInfoView: View {
                     offsets.map { bot.sortedResources[$0] }.forEach(store.remove)
                 }
                 if bot.sortedResources.isEmpty {
-                    Text("None yet.").foregroundStyle(.secondary)
+                    Text("None yet.").foregroundStyle(Color.secondaryText)
                 }
             }
             Section("Preview") {
@@ -87,7 +120,7 @@ struct BotInfoView: View {
                     recipeRow(repo)
                 }
                 if bot.repoSlugs.isEmpty {
-                    Text("Add a repo and I'll look for its preview recipe.").foregroundStyle(.secondary)
+                    Text("Add a repo and I'll look for its preview recipe.").foregroundStyle(Color.secondaryText)
                 }
             }
             Section("Add a resource") {
@@ -110,8 +143,12 @@ struct BotInfoView: View {
             }
         }
         .formStyle(.grouped)
+        .task { if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() } }
         .task {
             for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
+            if bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
+                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github)
+            }
             await refreshBranch()
         }
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
@@ -129,6 +166,14 @@ struct BotInfoView: View {
 
     /// Where darkmux works on this bot's code, on this Mac. Status only:
     /// darkmux owns the copy; the app knows its name, never a path.
+    /// This bot's model mode on this machine (shared with your other devices).
+    private var modelModeBinding: Binding<String?> {
+        let machine = brain.runs.machineKey
+        let store = brain.runs.settingsStore
+        return Binding(get: { store.botMode(bot: bot.id, machine: machine)?.stored },
+                       set: { store.setBotMode(ModelMode(stored: $0), bot: bot.id, machine: machine) })
+    }
+
     private var workCopySection: some View {
         Section {
             HStack(spacing: Spacing.sm) {
@@ -144,19 +189,19 @@ struct BotInfoView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Ready on \(bot.workspaceMachine ?? FleetConnection.machineName)")
                         if let branch, !branch.isEmpty {
-                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(.secondary)
+                            Text("Branch \(branch)").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                         }
                     }
                 case (nil, nil):
-                    Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+                    Image(systemName: "circle.dashed").foregroundStyle(Color.secondaryText)
                     Text(bot.folderBookmark == nil && bot.repoSlugs.isEmpty ? "No code yet" : "Not set up on this Mac yet")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 Spacer()
             }
             .accessibilityElement(children: .combine)
             if let folder = bot.folderName {
-                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Label("From your folder \(folder)", systemImage: "folder").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
             if let folderProblem {
                 Label(folderProblem, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
@@ -192,14 +237,14 @@ struct BotInfoView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.brandGreen)
-                Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(.secondary)
-                Text(repo).font(AppFont.caption()).foregroundStyle(.secondary)
+                Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Text(repo).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
             }
         case .missing?:
             HStack {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("No preview recipe yet")
-                    Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(.secondary)
+                    Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 Spacer()
                 Button("Draft one") {}

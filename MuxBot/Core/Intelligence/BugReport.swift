@@ -81,6 +81,8 @@ struct BugDraft: Sendable, Equatable, Codable {
     /// One line on what should happen instead (the on-device model writes
     /// it from your words when it can).
     var expected: String? = nil
+    /// The file and rule the measurement points at.
+    var likelyPlace: String? = nil
 
     var body: String {
         var lines = [
@@ -89,6 +91,7 @@ struct BugDraft: Sendable, Equatable, Codable {
             selector.map { "2. Look at `\($0)`" } ?? "2. Look at the element described above", "",
             "**Expected**", expected ?? "_Describe what you expected._",
         ]
+        if let likelyPlace { lines += ["", "**Likely place**", likelyPlace] }
         if !facts.isEmpty { lines += ["", "**Page facts (measured in the Mux Bot preview)**"] + facts.map { "- \($0)" } }
         lines += ["", "**Screenshot:** paste below.", "", "_Drafted by Mux Bot._"]
         return lines.joined(separator: "\n")
@@ -127,6 +130,16 @@ enum BugReport {
         facts.matches.map { m in
             "The \(m.term) box (\(m.tag)) is \(m.left)px from the left edge and \(m.right)px from the right at \(facts.viewport)px wide; padding \(m.paddingLeft) / \(m.paddingRight), margin \(m.marginLeft) / \(m.marginRight)."
         }
+    }
+
+    /// Whether a line describes what you should see, not a fix or a cause:
+    /// an issue's Expected never guesses a mechanism ("Adjust the animation
+    /// timing…" sent two models into the wrong code on hcr#10).
+    static func isOutcomeOnly(_ line: String) -> Bool {
+        let lower = " " + line.lowercased()
+        let fixWords = [" adjust", " add ", " set ", " increase", " decrease", " change ", " use ", " refactor", " fix ",
+                        "media query", "breakpoint", "css", "flex", "grid", "timing", "duration", "javascript", "z-index"]
+        return !fixWords.contains { lower.contains($0) }
     }
 
     static func draft(from text: String, facts: PageFacts?, page: URL?, repo: String?) -> BugDraft {
@@ -264,6 +277,7 @@ enum BugReport {
         """
 }
 
-private extension String {
+extension String {
+    /// "from 769px…" → "From 769px…".
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }

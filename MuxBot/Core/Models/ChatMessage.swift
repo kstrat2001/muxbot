@@ -16,6 +16,9 @@ enum MessageKind: String, Codable, Sendable {
     /// An action other than a dispatch (hand-off, new bot, new resource)
     /// waiting for Approve; `actionJSON` holds the `BotAction`.
     case actionCard
+    /// A card from Mux Bot, the guide (setup check, first bot, a setting's
+    /// switch, a help answer); `actionJSON` holds the `GuideCard`.
+    case guideCard
 }
 
 /// Where an action card stands.
@@ -36,6 +39,7 @@ final class ChatMessage {
     /// For your messages: the preview element it was about, as JSON.
     var elementJSON: String?
     /// For action cards: the proposed `BotAction` as JSON, and its state.
+    /// For guide cards: the `GuideCard` as JSON.
     var actionJSON: String?
     var actionStateRaw: String?
     var conversation: ChatConversation?

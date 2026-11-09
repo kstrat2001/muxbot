@@ -9,6 +9,7 @@ struct MuxBotApp: App {
     @State private var connection = FleetConnection()
     @State private var notifications = NotificationService()
     @State private var store = StoreLoader()
+    @State private var github = GitHubAuth()
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -19,9 +20,11 @@ struct MuxBotApp: App {
                     .environment(preview)
                     .environment(connection)
                     .environment(notifications)
+                    .environment(github)
                     .modelContainer(container)
                     .task {
                         brain.pageInspector = preview
+                        if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
                         brain.connection = connection
                         brain.notifier = notifications
                         brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
@@ -39,6 +42,7 @@ struct MuxBotApp: App {
                 .environment(brain)
                 .environment(connection)
                 .environment(notifications)
+                .environment(github)
         }
 
         MenuBarExtra {
@@ -72,13 +76,15 @@ final class StoreLoader {
     static var isTestHost: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
     /// UI tests launch the app with `-uiTesting`: an in-memory store with one
     /// bot whose preview is a blank page, never the real store.
-    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") }
+    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") || isUITestingEmpty }
+    /// `-uiTestingEmpty`: the same in-memory store with no bots (first launch).
+    static var isUITestingEmpty: Bool { ProcessInfo.processInfo.arguments.contains("-uiTestingEmpty") }
 
     func load() {
         do {
             let inMemory = Self.isTestHost || Self.isUITesting
             let opened = inMemory ? try SharedModelContainer.inMemory() : try SharedModelContainer.create()
-            if Self.isUITesting {
+            if Self.isUITesting, !Self.isUITestingEmpty {
                 let store = BotStore(context: opened.mainContext)
                 let bot = store.addExample()
                 store.addResource(.previewURL, "about:blank", to: bot)
@@ -111,7 +117,7 @@ struct StoreRecoveryView: View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: "externaldrive.badge.exclamationmark").font(.system(size: 44)).foregroundStyle(Color.brandOrange)
             Text("Mux Bot couldn't open its data").font(AppFont.title2())
-            Text(loader.error ?? "").font(AppFont.footnote()).foregroundStyle(.secondary)
+            Text(loader.error ?? "").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 .multilineTextAlignment(.center).textSelection(.enabled)
             HStack {
                 Button("Try again", systemImage: "arrow.clockwise") { loader.load() }
@@ -119,7 +125,7 @@ struct StoreRecoveryView: View {
                     .buttonStyle(.borderedProminent)
             }
             Text("Start fresh keeps your old data: the files are renamed, not deleted, next to the new store.")
-                .font(AppFont.caption()).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .font(AppFont.caption()).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
         }
         .padding(Spacing.xl)
         .frame(maxWidth: 520)

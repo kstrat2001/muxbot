@@ -4,13 +4,14 @@ import Foundation
 /// `.darkmux/preview.json`), and which URL the preview panel shows.
 struct LivePreview: Equatable, Sendable {
     enum Status: Equatable, Sendable {
-        case starting, installing, ready, stopped
+        case waiting, starting, installing, ready, stopped
         case failed(String)
 
         var isFailed: Bool { if case .failed = self { true } else { false } }
 
         var text: String {
             switch self {
+            case .waiting: "Waiting for darkmux…"
             case .starting: "Starting the preview…"
             case .installing: "Installing the project's dependencies (first time only)…"
             case .ready: "Preview ready."
@@ -30,7 +31,7 @@ struct LivePreview: Equatable, Sendable {
     static func url(darkmux: LivePreview?, resource: URL?) -> URL? {
         switch darkmux?.status {
         case .ready?: darkmux?.url
-        case .starting?, .installing?, .failed?: nil
+        case .waiting?, .starting?, .installing?, .failed?: nil
         case .stopped?, nil: resource
         }
     }

@@ -40,7 +40,34 @@ struct RunCardView: View {
             Label("Dispatch to \(run.crew.name)", systemImage: run.crew.systemImage).font(AppFont.headline())
             Text(Linkify.attributed(run.task, repo: repo(run))).font(AppFont.body())
             RefChips(refs: refs(run))
+            // What the app measured in the preview, in plain sight before Approve.
+            let measured = LayoutMeasure.measuredLines(in: run.brief ?? "")
+            if !measured.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Label("Measured in the preview", systemImage: "ruler").font(AppFont.footnote(.semibold))
+                    ForEach(measured, id: \.self) { line in
+                        Text("• \(line)").font(AppFont.footnote()).textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            modelRow(run)
             DisclosureGroup("What \(run.crew.name) gets") {
+                if let model = brain.runs.profile(for: run) {
+                    HStack {
+                        Text("Model: \(model)\(brain.runs.runChoices[run.id].map { " (\($0.reason))" } ?? "")")
+                            .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                        Spacer()
+                        if run.phase == .proposed, !brain.runs.lastListed.isEmpty {
+                            Menu("Change") {
+                                ForEach(brain.runs.lastListed.filter(\.reachable).map(\.name), id: \.self) { name in
+                                    Button(name) { brain.runs.override(run, with: name) }
+                                }
+                            }
+                            .fixedSize()
+                        }
+                    }
+                }
                 Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -50,11 +77,10 @@ struct RunCardView: View {
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
-                } else if case let .pendingChanges(waitingId)? = brain.runs.blocker(for: run),
-                          let waiting = BotStore(context: context).run(id: waitingId) {
-                    pendingChangesAsk(waiting, before: run)
+                } else if case .projectNotMade(_, here: true)? = brain.runs.blocker(for: run), let bot = run.bot {
+                    projectAsk(bot: bot, run: run)
                 } else if let reason = brain.runs.whyRunCannotStart(run) {
-                    Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     HStack {
                         Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
                         Spacer()
@@ -94,35 +120,38 @@ struct RunCardView: View {
                 Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
                     .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
             }
-            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(.secondary)
+            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
         case .resultCard:
-            if RunCardState.isReplaced(run) {
+            if let line = RunCardState.collapsedLine(run) {
+                Label(line, systemImage: run.phase == .discarded ? "arrow.uturn.backward" : "checkmark.circle")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            } else if RunCardState.isReplaced(run) {
                 Label("Replaced by the next run", systemImage: "arrow.turn.down.right")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
-            } else if run.phase == .result && run.changedFiles.isEmpty {
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            } else if run.phase == .result && run.changedFiles.isEmpty && run.crew.changesFiles {
                 questionCard(run)
             } else {
                 resultCard(run)
             }
+        case .prCard where message.content.hasPrefix("Opened PR"):
+            Label("Pull request opened", systemImage: "arrow.triangle.pull").font(AppFont.headline())
+            Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.body())
         case .prCard:
             Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
             RefChips(refs: refs(run))
             switch run.phase {
             case .kept:
-                Text(RunResultText.prUnavailable(branch: run.keptBranch)).font(AppFont.footnote()).foregroundStyle(.secondary)
-                HStack {
-                    Button("Not now") { brain.runs.decide(.skipPR, on: run, store: store) }.buttonStyle(.bordered)
-                    Spacer()
-                    Button("Pass to \(LeadBot.name)") { brain.runs.passPRToLead(run, store: store) }.buttonStyle(.borderedProminent)
-                }
+                // Earlier builds' Keep: moved to a committed result at launch
+                // (BotStore.migrateKeptRuns), so Open PR includes it.
+                Text("Committed. Open a pull request from the thread's Open PR.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
                 Text("Not opened.")
-                    .font(AppFont.footnote()).foregroundStyle(.secondary)
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             default:
-                Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text("No pull request.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
-        case .text, .bugCard, .actionCard:
+        case .text, .bugCard, .actionCard, .guideCard:
             EmptyView()
         }
     }
@@ -144,44 +173,66 @@ struct RunCardView: View {
                 .font(AppFont.footnote())
             }
         } else {
+            // The bot's reply: what changed, in plain words. darkmux already
+            // committed it to the bot's branch.
             Text(Linkify.attributed(message.content, repo: repo(run), linkPaths: true)).font(AppFont.body())
-            if !run.changedFiles.isEmpty {
-                DisclosureGroup {
-                    DiffView(diff: run.diff ?? "No diff available.")
-                } label: {
-                    Label(run.changedFiles.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "), systemImage: "doc.text")
-                        .font(AppFont.footnote(.semibold))
+            doneWhenCheck(run)
+            HStack(spacing: Spacing.md) {
+                if let bot = run.bot, brain.runs.canPreview(bot) {
+                    Button("See it in the preview", systemImage: "play.rectangle") { router.showPreview = true }
+                        .buttonStyle(.borderless)
+                }
+                // The PR this run went into, once one is open.
+                if let pr = prURL(after: run) {
+                    Link(destination: pr) { Label("PR #\(pr.lastPathComponent)", systemImage: "arrow.triangle.pull") }
+                        .buttonStyle(.borderless)
                 }
             }
-            if let notes = run.notes {
-                DisclosureGroup("\(run.crew.name)'s notes") {
-                    Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
-                                       repo: repo(run), linkPaths: true))
-                        .font(AppFont.footnote())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            DisclosureGroup("Details") {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    if let model = brain.runs.profile(for: run) {
+                        Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    }
+                    if let branch = run.keptBranch, let commit = run.keptCommit {
+                        Text("Committed to \(branch) (\(commit))").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    }
+                    // A commit error always shows, even with an older commit's branch.
+                    if let why = run.details {
+                        Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+                    }
+                    Label(run.changedFiles.joined(separator: "\n"), systemImage: "doc.text").font(AppFont.footnote())
+                    DiffView(diff: run.diff ?? "No diff available.")
+                    if let notes = run.notes {
+                        Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
+                                           repo: repo(run), linkPaths: true))
+                            .font(AppFont.footnote())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                .font(AppFont.footnote())
+            }
+            .font(AppFont.footnote())
+            if let problem = RunCardState.checkpointProblem(run) {
+                // darkmux couldn't commit the changes: they're in the work copy,
+                // but there's no checkpoint to undo.
+                Label("The checkpoint didn't happen: \(problem) The changes are in the work copy, uncommitted.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
             }
             if isLatest && run.phase == .result {
                 HStack {
-                    Button("Discard", systemImage: "trash", role: .destructive) { brain.runs.decide(.discard, on: run, store: store) }
-                        .buttonStyle(.bordered)
-                        .help("Put the changed files back as they were")
-                    Button("Tweak", systemImage: "pencil") {
-                        brain.runs.tweakRunId = run.id
-                        router.barDraft = ""
-                    }
-                    .buttonStyle(.bordered)
+                    Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     Spacer()
                     if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
-                    Button("Keep", systemImage: "checkmark") { brain.runs.decide(.keep, on: run, store: store) }
-                        .buttonStyle(.borderedProminent)
-                        .help("Commit these changes to the work copy's branch")
+                    if RunCardState.canUndo(run) {
+                        Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
+                            .buttonStyle(.bordered)
+                            .disabled(brain.runs.deciding.contains(run.id))
+                            .help("Revert this run's commit")
+                    } else if run.needsYou {
+                        Button("Close") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
+                    }
                 }
-                .disabled(brain.runs.deciding.contains(run.id))
-            } else {
-                outcome(isLatest && run.phase == .discarded ? .failed : .done)
             }
         }
         decisionError(run)
@@ -192,8 +243,14 @@ struct RunCardView: View {
     /// and Close. Never Keep or Discard: there's nothing to keep.
     @ViewBuilder private func questionCard(_ run: BotRun) -> some View {
         RefChips(refs: refs(run))
-        Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
-            .font(AppFont.headline())
+        if let claim = RunResultText.unbackedClaim(in: [run.notes ?? "", run.summary], crew: run.crew.name, changedFiles: run.changedFiles) {
+            // Its words say it edited something; darkmux saw no change.
+            Label(claim, systemImage: "exclamationmark.triangle")
+                .font(AppFont.headline()).foregroundStyle(Color.brandOrange)
+        } else {
+            Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
+                .font(AppFont.headline())
+        }
         if let notes = run.notes {
             Text(Linkify.apply(to: (try? AttributedString(markdown: notes, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notes),
                                repo: repo(run), linkPaths: true))
@@ -212,35 +269,72 @@ struct RunCardView: View {
                 .buttonStyle(.bordered)
             }
             HStack {
-                Button("Answer…", systemImage: "pencil") {
-                    brain.runs.tweakRunId = run.id
-                    router.barDraft = ""
-                    router.focusBarRequest += 1
-                }
-                .buttonStyle(.bordered)
+                Text(options.isEmpty ? "Reply to answer." : "Tap an answer, or reply in your own words.")
+                    .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 Spacer()
-                Button("Close") { brain.runs.decide(.discard, on: run, store: store) }
-                    .buttonStyle(.bordered)
-                    .help("Nothing changed, so closing undoes nothing")
+                Button("Close") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
             }
             decisionError(run)
         }
     }
 
-    /// Another run's changes still wait in this work copy: decide them first,
-    /// so two runs never share uncommitted files.
-    @ViewBuilder private func pendingChangesAsk(_ waiting: BotRun, before run: BotRun) -> some View {
-        Text("The last run's changes (“\(waiting.task)”) are still waiting. Keep or Discard them first?")
-            .font(AppFont.footnote()).foregroundStyle(.secondary)
-        HStack {
-            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
-            Spacer()
-            if brain.runs.deciding.contains(waiting.id) { ProgressView().controlSize(.small) }
-            Button("Discard them", role: .destructive) { brain.runs.decide(.discard, on: waiting, store: store) }.buttonStyle(.bordered)
-            Button("Keep them") { brain.runs.decide(.keep, on: waiting, store: store) }.buttonStyle(.borderedProminent)
+    /// Always ask: a picker before Approve. A chosen model that isn't running:
+    /// said, with Auto's pick offered (never swapped silently).
+    @ViewBuilder private func modelRow(_ run: BotRun) -> some View {
+        if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
+            if let why = choice.unavailable {
+                HStack {
+                    Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+                    Spacer()
+                    if let other = choice.suggestion {
+                        Button("Use \(other) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
+                    }
+                }
+            } else if choice.ask {
+                let names = brain.runs.lastListed.filter(\.reachable).map(\.name)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Picker("Model", selection: Binding(get: { brain.runs.profile(for: run) ?? "" },
+                                                       set: { brain.runs.override(run, with: $0) })) {
+                        ForEach(names, id: \.self) { Text($0).tag($0) }
+                    }
+                    Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                }
+            }
         }
-        .disabled(brain.runs.deciding.contains(waiting.id))
-        decisionError(waiting)
+    }
+
+    /// The done-when, measured in the preview after the run.
+    @ViewBuilder private func doneWhenCheck(_ run: BotRun) -> some View {
+        if brain.runs.checking.contains(run.id) {
+            Label("Checking the done-when in the preview…", systemImage: "ruler")
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+        } else if let check = brain.runs.runChecks[run.id] {
+            if check.met {
+                Label("Done when: met (measured in the preview)", systemImage: "checkmark.seal.fill")
+                    .font(AppFont.footnote(.semibold)).foregroundStyle(.green)
+            } else {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Label("Done when: not met", systemImage: "xmark.seal.fill")
+                        .font(AppFont.footnote(.semibold)).foregroundStyle(Color.brandOrange)
+                    ForEach(check.failures, id: \.self) { Text("• \($0)").font(AppFont.footnote()).textSelection(.enabled) }
+                    if isLatest {
+                        HStack {
+                            Button("Run again with these numbers", systemImage: "arrow.clockwise") {
+                                Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, nextModel: true) }
+                            }
+                            .buttonStyle(.bordered)
+                            // A default model stays on its model; offer the next one.
+                            if let next = brain.runs.runChoices[run.id]?.offerNext {
+                                Button("Run again on \(next)") {
+                                    Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, model: next) }
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder private func decisionError(_ run: BotRun) -> some View {
@@ -251,6 +345,13 @@ struct RunCardView: View {
 
     private var store: BotStore { BotStore(context: context) }
 
+    /// A PR opened in this thread after the run finished (so it carries it).
+    private func prURL(after run: BotRun) -> URL? {
+        let done = run.finishedAt ?? run.createdAt
+        let later = (message.conversation?.messages ?? []).filter { $0.kind == .prCard && $0.timestamp >= done }
+        return PRLinks.latest(in: later)
+    }
+
     /// The bot has code but no work copy on this Mac: offer to set one up
     /// (Approve), then the card becomes the usual dispatch card.
     @ViewBuilder private func workCopyAsk(_ what: String, bot: Bot, run: BotRun) -> some View {
@@ -259,15 +360,48 @@ struct RunCardView: View {
         case .settingUp?:
             HStack(spacing: Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(.secondary)
+                Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case let .failed(why)?:
             Label("Couldn't set up \(what): \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
             buttonsForSetup(bot: bot, run: run, retry: true)
         case nil:
             Text("Set up \(what) on \(machine)? darkmux makes its own copy on a new branch, so your files aren't touched.")
-                .font(AppFont.footnote()).foregroundStyle(.secondary)
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             buttonsForSetup(bot: bot, run: run, retry: false)
+        }
+    }
+
+    /// A template bot whose project isn't on this Mac yet (it was made while
+    /// unpaired, or on iPhone): make it here from its template.
+    @ViewBuilder private func projectAsk(bot: Bot, run: BotRun) -> some View {
+        switch brain.runs.workCopySetup[bot.id] {
+        case .settingUp?:
+            HStack(spacing: Spacing.sm) {
+                ProgressView().controlSize(.small)
+                Text("Making \(bot.name)'s project on this Mac…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            }
+        case let .failed(why)?:
+            Label("Couldn't make \(bot.name)'s project: \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            buttonsForProject(bot: bot, run: run, retry: true)
+        case nil:
+            Text("\(bot.name)'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start.")
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            buttonsForProject(bot: bot, run: run, retry: false)
+        }
+    }
+
+    private func buttonsForProject(bot: Bot, run: BotRun, retry: Bool) -> some View {
+        HStack {
+            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+            Spacer()
+            Button(retry ? "Try again" : "Make the project") {
+                Task {
+                    await brain.runs.setUpWorkCopy(for: bot, store: store)
+                    if bot.workspaceName != nil { await brain.runs.ensurePreview(for: bot) }
+                }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 

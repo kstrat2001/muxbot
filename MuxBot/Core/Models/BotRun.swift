@@ -15,6 +15,9 @@ enum RunPhase: String, Codable, Sendable {
 
 enum RunEvent: Equatable, Sendable {
     case approve, cancel, finish(summary: String), keep, tweak, discard, openPR, skipPR, stop
+    /// Closes a result there's nothing to undo in (a question, or a run whose
+    /// checkpoint didn't happen).
+    case close
     case fail(reason: String, details: String?)
 }
 
@@ -30,6 +33,7 @@ extension RunPhase {
         case (.result, .discard): .discarded
         case (.kept, .openPR): .prOpened
         case (.kept, .skipPR): .done
+        case (.result, .close): .done
         case (.running, .stop): .canceled
         case (.running, .fail): .failed
         default: nil
@@ -69,7 +73,19 @@ final class BotRun {
     var bot: Bot?
 
     /// Needs you (0), running (1), finished (2): the Activity table's default order.
-    var statusRank: Int { phase.awaitsYou ? 0 : phase.isActive ? 1 : 2 }
+    /// Waits on you: an Approve, or a question from a run that changed
+    /// nothing. A finished run with changes is already committed, so it
+    /// waits on nothing.
+    /// A read-only crew's run (Reviewer, Researcher, Eval runner) changes
+    /// nothing by design: its result is finished, not a question. A result
+    /// whose checkpoint didn't happen (no commit) waits on you too.
+    var needsYou: Bool {
+        phase == .proposed
+            || (phase == .result && changedFiles.isEmpty && crew.changesFiles)
+            || (phase == .result && !changedFiles.isEmpty && keptCommit == nil)
+    }
+
+    var statusRank: Int { needsYou ? 0 : phase.isActive ? 1 : 2 }
 
     var durationSeconds: Double? {
         guard let startedAt else { return nil }

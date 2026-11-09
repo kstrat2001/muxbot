@@ -55,8 +55,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         return best?.0
     }
 
-    /// "#8" or ".../issues/8" → 8.
+    /// "#8", ".../issues/8", "PR 9" or "pull request 9" → the number.
     static func issueNumber(in text: String) -> Int? {
+        if let pr = prReference(in: text) { return pr }
         let patterns = [#"/issues/(\d+)"#, #"#(\d+)\b"#, #"(?i)\bissue\s+(\d+)\b"#, #"(?i)\bfix\s+(\d+)\b"#]
         for pattern in patterns {
             if let match = text.range(of: pattern, options: .regularExpression) {
@@ -65,6 +66,52 @@ enum Intent: String, Codable, CaseIterable, Sendable {
             }
         }
         return nil
+    }
+
+    /// "PR 9 is still not right": a complaint about pull request N, with
+    /// what's wrong when the message says (nil when it doesn't).
+    struct PRComplaint: Equatable {
+        var number: Int
+        var whatsWrong: String?
+    }
+
+    static func prComplaint(in text: String) -> PRComplaint? {
+        guard let match = prReferenceRange(in: text), let number = Int(text[match].filter(\.isNumber)) else { return nil }
+        var rest = text
+        rest.removeSubrange(match)
+        guard let cue = complaintCues.lazy.compactMap({ rest.range(of: $0, options: .caseInsensitive) }).first else { return nil }
+        rest.removeSubrange(cue)
+        return PRComplaint(number: number, whatsWrong: whatsLeft(rest))
+    }
+
+    /// "PR 9", "pr #9", "PR#9", "pull request 9" or a /pull/9 link → 9.
+    static func prReference(in text: String) -> Int? {
+        prReferenceRange(in: text).flatMap { Int(text[$0].filter(\.isNumber)) }
+    }
+
+    private static func prReferenceRange(in text: String) -> Range<String.Index>? {
+        [#"/pull/\d+"#, #"(?i)\bpr\s*#?\d+\b"#, #"(?i)\bpull request\s*#?\d+\b"#]
+            .lazy.compactMap { text.range(of: $0, options: .regularExpression) }.first
+    }
+
+    /// Longest first, so "still not right" wins over "still".
+    static let complaintCues = [
+        "still not right", "still not working", "still broken", "still wrong", "still off",
+        "didn't fix", "did not fix", "doesn't fix", "does not fix", "didn't work", "did not work",
+        "not right", "not fixed", "is broken", "broke", "wrong", "still",
+    ]
+
+    /// What's left of a complaint once the PR and the cue are gone, or nil
+    /// when it's only filler ("is", "it").
+    private static func whatsLeft(_ rest: String) -> String? {
+        let filler: Set<String> = ["is", "it", "its", "it's", "yet", "still", "really", "and", "but"]
+        let trim = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        var words = rest.split(whereSeparator: \.isWhitespace).map(String.init)
+        while let first = words.first, filler.contains(first.lowercased().trimmingCharacters(in: trim)) || first.trimmingCharacters(in: trim).isEmpty {
+            words.removeFirst()
+        }
+        let left = words.joined(separator: " ").trimmingCharacters(in: trim)
+        return left.isEmpty ? nil : left
     }
 
     /// The best guess when no prefix or choice was given; nil leaves it to

@@ -9,9 +9,9 @@ struct PreviewStatusView: View {
     var body: some View {
         VStack(spacing: Spacing.md) {
             switch preview.status {
-            case .starting, .installing:
+            case .waiting, .starting, .installing:
                 ProgressView()
-                Text(preview.status.text).foregroundStyle(.secondary)
+                Text(preview.status.text).foregroundStyle(Color.secondaryText)
             case .failed:
                 Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(Color.brandOrange)
                 Text(preview.status.text).multilineTextAlignment(.center)
@@ -26,7 +26,7 @@ struct PreviewStatusView: View {
                 }
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             case .ready, .stopped:
-                Text(preview.status.text).foregroundStyle(.secondary)
+                Text(preview.status.text).foregroundStyle(Color.secondaryText)
                 Button("Start", systemImage: "play", action: retry)
             }
         }

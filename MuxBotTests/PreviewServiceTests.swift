@@ -37,3 +37,42 @@ struct PreviewServiceTests {
         #expect(ready.live.status == .ready)
     }
 }
+
+/// At launch the darkmux connection isn't attached yet: the preview says it's
+/// waiting (never a blank panel) and starts once the connection appears.
+@Suite(.serialized) @MainActor
+struct PreviewWaitingTests {
+    @Test func withoutTheConnectionThePreviewSaysItsWaiting() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        bot.workspaceName = "hcr-test"
+        let runs = RunCoordinator()
+        await runs.ensurePreview(for: bot)
+        #expect(runs.livePreviews[bot.id]?.status == .waiting)
+        #expect(LivePreview.Status.waiting.text == "Waiting for darkmux…")
+        #expect(LivePreview.url(darkmux: runs.livePreviews[bot.id], resource: URL(string: "http://example.test/")) == nil)
+        bot.workspaceName = nil
+    }
+
+    @Test func theConnectionAppearingRetriesWaitingPreviews() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        bot.workspaceName = "hcr-test"
+        let runs = RunCoordinator()
+        await runs.ensurePreview(for: bot)
+        var retried: [UUID] = []
+        runs.retryPreview = { retried.append($0.id) }
+        runs.connectionAttached()
+        await Task.yield()
+        #expect(retried == [bot.id])
+        bot.workspaceName = nil
+    }
+
+    @Test func aBotWithoutAWorkCopyHasNothingToWaitFor() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        let runs = RunCoordinator()
+        await runs.ensurePreview(for: bot)
+        #expect(runs.livePreviews[bot.id] == nil)
+    }
+}

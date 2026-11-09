@@ -131,8 +131,11 @@ enum SchemaV2: VersionedSchema {
 
 /// How older stores become the current one.
 enum MuxBotMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self, SchemaV3.self] }
-    static var stages: [MigrationStage] { [v1ToV2, v2ToV3] }
+    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self, SchemaV3.self, SchemaV4.self] }
+    static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4] }
+
+    /// V4 only adds defaulted fields (the bot's use case and skills).
+    static let v3ToV4 = MigrationStage.lightweight(fromVersion: SchemaV3.self, toVersion: SchemaV4.self)
 
     /// V3 only adds defaulted fields (the bot's character).
     static let v2ToV3 = MigrationStage.lightweight(fromVersion: SchemaV2.self, toVersion: SchemaV3.self)

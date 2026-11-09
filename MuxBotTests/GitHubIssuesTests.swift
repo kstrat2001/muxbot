@@ -6,6 +6,11 @@ struct MockGitHub: GitHubClient {
     var issues: [GitHubIssue] = []
     var error: (any Error)?
     var files: [String: String] = [:]
+    var pulls: [PullRequestInfo] = []
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo? {
+        if let error { throw error }
+        return pulls.first { $0.number == number }
+    }
     func file(repo: String, path: String) async throws -> Data? {
         files["\(repo)/\(path)"].map { Data($0.utf8) }
     }
@@ -99,7 +104,9 @@ struct BotIssueLookupTests {
     }
 
     @Test func askingForBugTicketsReadsGitHubAndProposesAFix() async {
-        let (store, bot, brain) = setUp(issues: [issue(7, "Footer link 404s", labels: ["bug"])])
+        var seven = issue(7, "Footer link 404s", labels: ["bug"])
+        seven.body = "Open /pricing; the `footer a.about` link 404s"   // says where: never a bare title (IssuesListBriefTests)
+        let (store, bot, brain) = setUp(issues: [seven])
         await brain.send("Do you see any bug tickets we can fix?", in: .bot(bot.id), store: store)
         #expect(lastReply(store, bot)?.contains("Open on kstrat2001/hcr") == true)
         #expect(bot.runs?.first?.task == "Fix #7: Footer link 404s (kstrat2001/hcr)")
@@ -111,6 +118,12 @@ struct BotIssueLookupTests {
         await brain.send("any open issues?", in: .bot(bot.id), store: store)
         #expect(lastReply(store, bot)?.contains("rate limit") == true)
         #expect(bot.runs?.isEmpty ?? true)
+    }
+
+    @Test func aMissingRepoSaysToSignInNotThatSignInIsMissing() {
+        let why = GitHubError(status: 404).localizedDescription
+        #expect(!why.contains("isn't supported"), "\(why)")
+        #expect(why.contains("sign in with GitHub"), "\(why)")
     }
 
     @Test func noRepoAsksForOne() async {

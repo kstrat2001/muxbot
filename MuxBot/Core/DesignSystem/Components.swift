@@ -25,7 +25,7 @@ struct SectionHeader: View {
             if let count {
                 Text("\(count)")
                     .font(AppFont.caption(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             Spacer()
         }
@@ -42,12 +42,12 @@ struct EmptyStateView: View {
         VStack(spacing: Spacing.md) {
             Image(systemName: systemImage)
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .accessibilityHidden(true)
             Text(title).font(AppFont.title2())
             Text(message)
                 .font(AppFont.body())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .padding(Spacing.xl)
@@ -107,7 +107,7 @@ struct StatusBadge: View {
             }
         case .queued:
             Image(systemName: "hourglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .symbolEffect(.pulse, isActive: !reduceMotion)
         case .needsYou:
             Image(systemName: "exclamationmark.triangle.fill")

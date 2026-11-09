@@ -38,9 +38,9 @@ struct ActionCardView: View {
                         Button("Approve") { decide(true) }.buttonStyle(.borderedProminent)
                     }
                 case .approved:
-                    Label("Approved", systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    Label("Approved", systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 case .canceled:
-                    Label("Canceled", systemImage: "xmark.circle").font(AppFont.footnote()).foregroundStyle(.secondary)
+                    Label("Canceled", systemImage: "xmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(NotificationService.self) private var notifications
     @Query private var runs: [BotRun]
+    @Query private var bots: [Bot]
 
     /// Runs waiting on a decision: the app badge.
     private var waitingCount: Int { RunNotice.badgeCount(runs) }
@@ -25,13 +26,24 @@ struct ContentView: View {
         Group {
             if wantsSidebar { split } else { tabs }
         }
-        .onAppear { router.usesSidebar = wantsSidebar }
+        .onAppear {
+            router.usesSidebar = wantsSidebar
+            router.openOnStart(botCount: bots.count)
+        }
         .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
+        // Runs an earlier build kept become committed results (Open PR).
+        .task { BotStore(context: context).migrateKeptRuns() }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif
         .sheet(isPresented: $router.showNewBot) {
             NavigationStack { NewBotView() }
+        }
+        .sheet(isPresented: $router.showStartProject) {
+            NavigationStack { StartProjectView() }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 460)
+                #endif
         }
         .sheet(isPresented: $router.showPairing) {
             NavigationStack { FleetPairingView() }
@@ -108,7 +120,10 @@ struct ContentView: View {
                     switch router.sidebar {
                     case .activity?: ActivityView()
                     case let .bot(id)?: BotThreadView(context: .bot(id)).id(id)
-                    case .lead?, nil: BotThreadView(context: .lead)
+                    case .lead?: BotThreadView(context: .lead)
+                    case nil:
+                        // No bots yet: start with what you want to get done.
+                        if bots.isEmpty { StartProjectView(inline: true) } else { BotThreadView(context: .lead) }
                     }
                 }
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }

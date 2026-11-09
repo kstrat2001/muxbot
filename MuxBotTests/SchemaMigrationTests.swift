@@ -3,18 +3,70 @@ import SwiftData
 import Testing
 @testable import MuxBot
 
-@Suite(.serialized) @MainActor
-struct SchemaMigrationTests {
-    private func tempDir() -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("muxbot-mig-\(UUID().uuidString)")
+/// Temp folders for on-disk stores, removed when the test ends (and
+/// leftovers from crashed runs swept), so the app's tmp doesn't fill up.
+final class MigrationTempDirs: Sendable {
+    static let prefix = "muxbot-mig-"
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("\(MigrationTempDirs.prefix)\(UUID().uuidString)")
+
+    init() {
+        Self.sweep(olderThan: 3600)
+    }
+
+    deinit { try? FileManager.default.removeItem(at: root) }
+
+    func make() -> URL {
+        let dir = root.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
+    /// Removes `muxbot-mig-*` folders not touched for `age` seconds.
+    static func sweep(olderThan age: TimeInterval, in tmp: URL = FileManager.default.temporaryDirectory) {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: tmp.path)) ?? []
+        for name in names where name.hasPrefix(prefix) {
+            let url = tmp.appendingPathComponent(name)
+            let modified = (try? fm.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .distantFuture
+            if Date().timeIntervalSince(modified) > age { try? fm.removeItem(at: url) }
+        }
+    }
+}
+
+struct MigrationTempDirTests {
+    @Test func aTestsFoldersGoWhenItEnds() {
+        var dirs: MigrationTempDirs? = MigrationTempDirs()
+        let made = dirs!.make()
+        #expect(FileManager.default.fileExists(atPath: made.path))
+        let root = dirs!.root
+        dirs = nil
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+    }
+
+    @Test func staleLeftoversAreSweptFreshOnesKept() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let old = tmp.appendingPathComponent("\(MigrationTempDirs.prefix)old"), fresh = tmp.appendingPathComponent("\(MigrationTempDirs.prefix)fresh")
+        let other = tmp.appendingPathComponent("not-ours")
+        for d in [old, fresh, other] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: old.path)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: other.path)
+        MigrationTempDirs.sweep(olderThan: 3600, in: tmp)
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(FileManager.default.fileExists(atPath: fresh.path))
+        #expect(FileManager.default.fileExists(atPath: other.path), "only ours")
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct SchemaMigrationTests {
+    private let dirs = MigrationTempDirs()
+    private func tempDir() -> URL { dirs.make() }
+
     /// Writes a store as the app wrote it before versioning (SchemaV1).
     private func writeV1Store(at url: URL) throws -> (botId: UUID, otherId: UUID) {
         let schema = Schema(versionedSchema: SchemaV1.self)
-        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         let context = ModelContext(container)
         let hcr = SchemaV1.Bot(name: "humancodereader", instructions: "Site")
         hcr.workspaceName = "hcr-humancodereader"
@@ -75,7 +127,7 @@ struct SchemaMigrationTests {
         let dir = tempDir()
         let url = dir.appendingPathComponent("MuxBot.store")
         let schema = Schema(versionedSchema: SchemaV2.self)
-        let v2 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+        let v2 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
         let writer = ModelContext(v2)
         let old = SchemaV2.Bot(name: "darkmux", instructions: "CLI")
         writer.insert(old)
@@ -87,6 +139,30 @@ struct SchemaMigrationTests {
         #expect(bot.avatarAnimal.isEmpty && bot.bodyColorHex.isEmpty && bot.eyeColorHex.isEmpty)
         #expect(bot.look == BotLook.suggested(for: "darkmux"))
         #expect(bot.look.animal == .raccoon)
+    }
+
+    @Test func aV3StoreOpensAsV4AndBotsKeepTheirLookWithNoUseCase() throws {
+        let dir = tempDir()
+        let url = dir.appendingPathComponent("MuxBot.store")
+        let schema = Schema(versionedSchema: SchemaV3.self)
+        let v3 = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)])
+        let writer = ModelContext(v3)
+        let old = SchemaV3.Bot(name: "hcr", instructions: "Site")
+        old.avatarAnimal = "owl"
+        old.bodyColorHex = "0e9f8e"
+        writer.insert(old)
+        let resource = SchemaV3.BotResource(kind: .repo, value: "https://github.com/kstrat2001/hcr")
+        resource.bot = old
+        writer.insert(resource)
+        try writer.save()
+        let id = old.id
+
+        let container = try SharedModelContainer.open(storeURL: url, local: LocalBotState(fileURL: dir.appendingPathComponent("local.json")), cloudSync: false)
+        let bot = try #require(try ModelContext(container).fetch(FetchDescriptor<Bot>()).first { $0.id == id })
+        #expect(bot.avatarAnimal == "owl" && bot.bodyColorHex == "0e9f8e")
+        #expect(bot.useCaseId.isEmpty, "a bot from before use cases has none")
+        #expect(bot.skills.isEmpty)
+        #expect(bot.resources?.first?.value == "https://github.com/kstrat2001/hcr")
     }
 
     @Test func renamingKeepsTheLookAndPickedLooksStick() {
@@ -126,6 +202,26 @@ struct SchemaMigrationTests {
         #expect(FileManager.default.fileExists(atPath: url.path + "-wal.moved-20261107-1200"))
     }
 
+    /// Tests run inside the app, which has the iCloud entitlement in a sync
+    /// build: no test store may ever mirror to CloudKit (it did, and test
+    /// fixtures replaced a user's bots).
+    @Test func testStoresNeverTouchICloud() throws {
+        let memory = try SharedModelContainer.inMemory()
+        #expect(memory.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        #expect(TestStore.container.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        let url = dirs.make().appendingPathComponent("MuxBot.store")
+        let opened = try SharedModelContainer.open(storeURL: url, local: LocalBotState(fileURL: nil), cloudSync: false)
+        #expect(opened.configurations.allSatisfy { $0.cloudKitContainerIdentifier == nil })
+        // Every store a test makes says so explicitly.
+        let tests = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for file in try FileManager.default.contentsOfDirectory(at: tests, includingPropertiesForKeys: nil) where file.pathExtension == "swift" {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            for line in text.components(separatedBy: "\n") where line.contains("ModelConfiguration(") && !line.contains("cloudKitDatabase: .none") && !line.contains("contains(\"ModelConfiguration(\")") {
+                Issue.record("\(file.lastPathComponent): a ModelConfiguration without cloudKitDatabase: .none: \(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+    }
+
     @Test func cloudSyncIsOffUnlessTheBuildTurnsItOn() {
         #expect(!SharedModelContainer.cloudSyncEnabled(info: [:]))
         #expect(!SharedModelContainer.cloudSyncEnabled(info: ["MuxBotCloudSync": "NO"]))
@@ -136,14 +232,14 @@ struct SchemaMigrationTests {
     @Test func theSyncedModelsAreCloudKitSafe() {
         // No unique constraints, every attribute optional or defaulted, every
         // relationship optional: what CloudKit sync requires.
-        for entity in Schema(versionedSchema: SchemaV3.self).entities {
+        for entity in Schema(versionedSchema: SchemaV4.self).entities {
             #expect(entity.uniquenessConstraints.isEmpty, "\(entity.name)")
             for rel in entity.relationships { #expect(rel.isOptional, "\(entity.name).\(rel.name)") }
             for attr in entity.attributes where !attr.isOptional {
                 #expect(attr.defaultValue != nil, "\(entity.name).\(attr.name) needs a default")
             }
         }
-        let bot = Schema(versionedSchema: SchemaV3.self).entities.first { $0.name == "Bot" }
+        let bot = Schema(versionedSchema: SchemaV4.self).entities.first { $0.name == "Bot" }
         let names = Set(bot?.attributes.map(\.name) ?? [])
         #expect(names.isDisjoint(with: ["workspaceName", "workspaceMachine", "folderBookmark", "folderName", "modelName"]))
     }

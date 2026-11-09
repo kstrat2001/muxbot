@@ -54,15 +54,17 @@ enum WorkStatus {
         if !proposed.isEmpty {
             sections.append("Waiting for your Approve:\n" + proposed.map { line($0, nil) }.joined(separator: "\n"))
         }
-        let results = runs.filter { $0.phase == .result }.sorted(by: newest)
-        if !results.isEmpty {
-            sections.append("Results to Keep or Discard:\n" + results.map { r in
+        let questions = runs.filter { $0.phase == .result && $0.changedFiles.isEmpty }.sorted(by: newest)
+        if !questions.isEmpty {
+            sections.append("Questions for you:\n" + questions.map { r in
                 line(r, r.finishedAt.map { "waiting \(span(now.timeIntervalSince($0)))" })
             }.joined(separator: "\n"))
         }
-        let kept = runs.filter { $0.phase == .kept }.sorted(by: newest)
-        if !kept.isEmpty {
-            sections.append("Kept, PR not decided:\n" + kept.map { line($0, $0.keptBranch) }.joined(separator: "\n"))
+        let finished = runs.filter { r in
+            r.phase == .result && !r.changedFiles.isEmpty && (r.finishedAt.map { now.timeIntervalSince($0) < 86400 } ?? false)
+        }.sorted(by: newest)
+        if !finished.isEmpty {
+            sections.append("Finished today (committed; reply to change, or Undo):\n" + finished.map { line($0, $0.keptBranch) }.joined(separator: "\n"))
         }
         let failed = runs.filter { r in
             r.phase == .failed && (r.finishedAt.map { now.timeIntervalSince($0) < 86400 } ?? false)
@@ -73,13 +75,13 @@ enum WorkStatus {
         return sections.isEmpty ? "Nothing is running and nothing waits on you." : sections.joined(separator: "\n\n")
     }
 
-    /// Results that have waited too long for a decision.
+    /// Questions that have waited too long for an answer.
     @MainActor
     static func nudges(runs: [BotRun], now: Date = .now) -> [String] {
-        runs.filter { $0.phase == .result }
+        runs.filter { $0.phase == .result && $0.changedFiles.isEmpty }
             .compactMap { r in
                 guard let done = r.finishedAt, now.timeIntervalSince(done) >= nudgeAfter else { return nil }
-                return "\(r.botName)'s result for “\(r.task)” has waited \(span(now.timeIntervalSince(done))) for Keep or Discard."
+                return "\(r.botName)'s question on “\(r.task)” has waited \(span(now.timeIntervalSince(done))) for your answer."
             }
     }
 }

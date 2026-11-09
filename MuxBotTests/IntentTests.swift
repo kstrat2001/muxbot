@@ -225,7 +225,7 @@ struct PreviewViewportTests {
 
     @Test func phoneFitsWithoutScalingInAWidePanel() {
         let l = PreviewViewport.phone.layout(in: CGSize(width: 1200, height: 900))
-        #expect(l.width == 390 && l.scale == 1 && l.height == 900)
+        #expect(l.width == 390 && l.scale == 1 && l.height == 844)   // a phone's height, centered (PreviewDeviceTests)
     }
 
     @Test func recipeViewportsPickTheDefault() {

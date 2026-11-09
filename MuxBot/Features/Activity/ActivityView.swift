@@ -72,13 +72,13 @@ private struct ActivityTable: View {
                 Label(run.crew.name, systemImage: run.crew.systemImage)
             }
             .width(min: 90, ideal: 110)
-            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(.secondary) }
+            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(Color.secondaryText) }
                 .width(min: 80, ideal: 110)
             TableColumn("Started", value: \.createdAt) { run in
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text(ActivityTime.started(run.startedAt ?? run.createdAt, now: context.date))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
                 .help((run.startedAt ?? run.createdAt).formatted(date: .complete, time: .standard))
             }
@@ -89,7 +89,7 @@ private struct ActivityTable: View {
                         Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit()
                     }
                 } else {
-                    Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit().foregroundStyle(.secondary)
+                    Text(run.durationSeconds.map(ActivityTime.duration) ?? "").monospacedDigit().foregroundStyle(Color.secondaryText)
                 }
             }
             .width(min: 60, ideal: 70)
@@ -124,7 +124,7 @@ private struct StopButton: View {
 }
 #endif
 
-private struct ActivityRow: View {
+struct ActivityRow: View {
     let run: BotRun
 
     @Environment(\.modelContext) private var context
@@ -151,7 +151,7 @@ private struct ActivityRow: View {
                     }
                 }
                 .font(AppFont.caption())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             }
             Spacer(minLength: 0)
             StatusBadge(kind: kind)
@@ -170,13 +170,14 @@ private struct ActivityRow: View {
 
     private var kind: StatusKind { Self.kind(of: run) }
 
+    /// The badge: Needs you only for what waits on you here (a hidden one
+    /// doesn't); a committed result is done.
     static func kind(of run: BotRun) -> StatusKind {
+        if NeedsYou.isWaiting(run) { return .needsYou }
         switch run.phase {
-        case .running: .running
-        case .proposed, .result, .kept: .needsYou
-        case .failed, .discarded: .failed
-        case .canceled: .failed
-        default: .done
+        case .running: return .running
+        case .failed, .discarded, .canceled: return .failed
+        default: return .done
         }
     }
 

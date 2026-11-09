@@ -8,6 +8,7 @@ struct BotThreadView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(BotBrain.self) private var brain
+    @Environment(GitHubAuth.self) private var github
     @Environment(FleetConnection.self) private var connection
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
@@ -59,7 +60,7 @@ struct BotThreadView: View {
                 let full = router.previewFullScreen
                 let panel = Group {
                     if let url = previewURL {
-                        PreviewPanel(url: url, recipeViewports: recipeViewports) {
+                        PreviewPanel(url: url, recipeViewports: recipeViewports, botId: bot?.id) {
                             router.showPreview = false
                             router.previewFullScreen = false
                         }
@@ -114,8 +115,21 @@ struct BotThreadView: View {
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
                     }
+                    if let bot, brain.runs.canOpenPR(bot, store: BotStore(context: modelContext), github: github) {
+                        if brain.runs.openingPR.contains(bot.id) {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Button("Open PR", systemImage: "arrow.triangle.pull") {
+                                Task { await brain.runs.openPR(for: bot, store: BotStore(context: modelContext), github: github) }
+                            }
+                            .help("Open a pull request with this bot's committed changes")
+                        }
+                    }
+                    #if !os(macOS)
+                    // On the Mac, info is the (i) on the bot's sidebar row (and ⌘I).
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
                         .help("Bot info and resources")
+                    #endif
                 }
             }
         }
@@ -152,12 +166,16 @@ struct BotThreadView: View {
         .task {
             // Opening a bot that needs you goes to the card that's waiting.
             if router.focusRunId == nil,
-               let waiting = (bot?.runs ?? []).filter({ $0.phase.awaitsYou }).max(by: { $0.createdAt < $1.createdAt }) {
+               let waiting = NeedsYou.waiting(bot?.runs ?? []).max(by: { $0.createdAt < $1.createdAt }) {
                 router.focusRunId = waiting.id
             }
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
                 await brain.runs.recipes.load(for: repo, workspace: bot?.workspaceName, connection: brain.connection, github: brain.github)
+            }
+            // A project with no repo yet: its recipe is in its workspace.
+            if let bot, bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
+                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github)
             }
         }
         #if os(iOS)
@@ -180,11 +198,41 @@ struct BotThreadView: View {
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
             } else if let conversation = conversations.first {
                 ChatView(conversation: conversation, isThinking: brain.isThinking)
+                    .safeAreaInset(edge: .top) { needsYouBanner }
             } else {
                 ProgressView()
             }
         }
         .safeAreaInset(edge: .bottom) { BotBar() }
+    }
+
+    /// Pinned at the top: runs waiting for Approve or with a question. A tap
+    /// goes to the card; × hides it until something new needs you.
+    @ViewBuilder private var needsYouBanner: some View {
+        let items = NeedsYou.banner(bot?.runs ?? [])
+        if let first = items.last {
+            HStack(spacing: Spacing.sm) {
+                StatusBadge(kind: .needsYou)
+                Button {
+                    router.focusRunId = first.id
+                } label: {
+                    Text(items.count == 1
+                         ? (first.phase == .proposed ? "Waiting for your Approve: \(first.task)" : "\(first.crew.name) has a question: \(first.task)")
+                         : "\(items.count) things need you")
+                        .font(AppFont.footnote(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                Button("Hide", systemImage: "xmark") { NeedsYou.dismiss(items) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Hide this here (and its badge) until something new needs you; it stays in Activity")
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
+            .background(.bar)
+        }
     }
 
     private func markRead() {
@@ -198,8 +246,11 @@ struct BotThreadView: View {
         if context.botId != nil && bot == nil { return }
         let conversation = store.conversation(for: context)
         guard (conversation.messages ?? []).isEmpty else { return }
-        let hello = bot.map { "Hi, I'm \($0.name). \($0.instructions)" }
-            ?? "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it."
+        let hello = bot.map { BotGreeting.text(name: $0.name, about: $0.useCaseId.isEmpty ? $0.instructions : "",
+                                               hasPreview: $0.previewURL != nil || $0.workspaceName != nil) }
+            ?? (Guide.isEnabled
+                ? String(localized: "Hi, I'm \(LeadBot.name). I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”.")
+                : "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it.")
         store.append(.assistant, hello, to: conversation)
     }
 }

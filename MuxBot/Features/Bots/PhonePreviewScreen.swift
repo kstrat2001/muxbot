@@ -26,15 +26,15 @@ struct PhonePreviewScreen: View {
 
     private var controls: some View {
         HStack(spacing: Spacing.md) {
-            if let bot, bot.state != .ready {
-                StatusBadge(kind: bot.state.kind)
+            if let bot, NeedsYou.shownState(bot) != .ready {
+                StatusBadge(kind: NeedsYou.shownState(bot).kind)
             }
             Button(preview.isPicking ? "Cancel pick" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
                 preview.togglePicking()
             }
             Button(copied ? "Copied" : "Copy screenshot", systemImage: copied ? "checkmark" : "camera") {
                 Task {
-                    if let png = await preview.visiblePNG() { copied = Clipboard.copyPNG(png) }
+                    if let png = await preview.visiblePNG() { copied = Clipboard.copyImage(png) }
                     try? await Task.sleep(for: .seconds(1.5))
                     copied = false
                 }

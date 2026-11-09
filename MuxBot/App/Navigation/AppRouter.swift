@@ -20,6 +20,8 @@ final class AppRouter {
     /// The Mac / iPad sidebar's own show-hide state (the toolbar toggle).
     var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
+    /// "What do you want to get done?" (`StartProjectView`).
+    var showStartProject = false
     var showPairing = false
     /// Search across bots and threads (⌘F).
     var showSearch = false
@@ -33,6 +35,35 @@ final class AppRouter {
     var previewFullScreen = false
     /// A run to scroll to (and briefly highlight) in its bot's conversation.
     var focusRunId: UUID?
+    /// The bot whose info is open (macOS: a popover on its sidebar row).
+    var infoBotId: UUID?
+
+    /// With no bots yet, the window opens on "What do you want to get
+    /// done?" (the sidebar's empty selection shows the chooser); Mux Bot's
+    /// row still opens the guide.
+    func openOnStart(botCount: Int) {
+        if usesSidebar, botCount == 0, sidebar == .lead, path.isEmpty { sidebar = nil }
+    }
+
+    /// Paired, with no bots yet: straight on to starting a project.
+    func continueAfterPairing(botCount: Int) {
+        guard botCount == 0 else { return }
+        path = []
+        if usesSidebar { sidebar = nil } else { tab = .bots }
+    }
+
+    /// Whether the thread on screen is a bot's (the lead bot has no info).
+    var canShowInfo: Bool { context.botId != nil }
+
+    /// ⌘I: the info of the bot on screen. It's a popover on the bot's
+    /// sidebar row, so a collapsed sidebar (or a full-window preview) comes
+    /// back first.
+    func showInfo() {
+        infoBotId = context.botId
+        guard infoBotId != nil else { return }
+        if columnVisibility == .detailOnly { columnVisibility = .all }
+        if previewFullScreen { previewFullScreen = false }
+    }
 
     /// Follows navigation: whichever bot's thread is on top is the one you
     /// talk to; Home and the lead bot's thread talk to the lead bot.

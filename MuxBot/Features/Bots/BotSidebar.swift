@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// The macOS / iPad sidebar: Mux Bot, each bot (character, name, unread dot,
-/// status), "New bot", then Activity.
+/// The macOS / iPad sidebar (`SidebarLayout`): Mux Bot featured on top, then
+/// each bot (character, name, unread dot, status), "New bot", then Activity.
 struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
@@ -22,11 +22,20 @@ struct BotSidebar: View {
         @Bindable var router = router
         return List(selection: $router.sidebar) {
             Section {
-                row(name: LeadBot.name, look: .lead, id: nil, unread: unread(nil), state: nil)
-                    .tag(SidebarItem.lead)
-                    .botContextMenu(nil)
+                Button { router.sidebar = .lead } label: {
+                    LeadBotTile(selected: router.sidebar == .lead, unread: unread(nil))
+                }
+                .buttonStyle(.plain)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .botContextMenu(nil)   // ⌘1 (Go menu) opens it from the keyboard
+            }
+            Section {
                 ForEach(bots) { bot in
-                    row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: bot.state)
+                    Self.row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: NeedsYou.shownState(bot))
+                        #if os(macOS)
+                        .modifier(SidebarInfoButton(bot: bot))   // inside the row, so the tag stays outermost
+                        #endif
                         .tag(SidebarItem.bot(bot.id))
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
@@ -36,13 +45,13 @@ struct BotSidebar: View {
                     plainRow("New bot", systemImage: "plus")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 if bots.isEmpty {
                     Button { BotStore(context: modelContext).addExample() } label: {
                         plainRow("Add an example bot", systemImage: "sparkles")
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 }
             } header: {
                 Text("Bots")
@@ -79,11 +88,13 @@ struct BotSidebar: View {
     static let rowPadding: CGFloat = 0
     #endif
 
-    private func row(name: String, look: BotLook, id: UUID?, unread: Bool, state: BotState?) -> some View {
+    static func row(name: String, look: BotLook, id: UUID?, unread: Bool, state: BotState?) -> some View {
         HStack(spacing: Spacing.sm) {
             BotAvatarView(look: look, mood: state.map(AvatarMood.init) ?? .idle, size: Self.avatarSize, blinkId: id)
             Text(name).lineLimit(1)
             Spacer(minLength: 0)
+            // macOS: the (i) sits before the badges, side by side, never on top.
+            if let id { SidebarInfoGlyph(botId: id, name: name) }
             if unread {
                 Circle().fill(Color.brandBlue).frame(width: 8, height: 8).accessibilityLabel("Unread")
             }
@@ -142,7 +153,7 @@ struct BotSidebar: View {
     /// "1 result waiting for you", "2 things waiting for you", "Running".
     static func waitingText(_ bot: Bot) -> String? {
         let runs = bot.runs ?? []
-        let waiting = runs.filter { $0.phase.awaitsYou }
+        let waiting = NeedsYou.waiting(runs)
         if waiting.count == 1 {
             switch waiting[0].phase {
             case .result: return "1 result waiting for you"
@@ -153,5 +164,56 @@ struct BotSidebar: View {
         if waiting.count > 1 { return "\(waiting.count) things waiting for you" }
         if runs.contains(where: { $0.phase == .running }) { return "Running" }
         return nil
+    }
+}
+
+/// The (i) on a bot's sidebar row (macOS): the row reports hover here and
+/// anchors Bot info's popover; `SidebarInfoGlyph` draws the button inside
+/// the row, before its badges.
+struct SidebarInfoButton: ViewModifier {
+    let bot: Bot
+    @Environment(AppRouter.self) private var router
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.sidebarInfo, SidebarInfoContext(enabled: true, hovering: hovering))
+            .onHover { hovering = $0 }
+            .popover(isPresented: Binding(get: { router.infoBotId == bot.id },
+                                          set: { if !$0, router.infoBotId == bot.id { router.infoBotId = nil } }),
+                     arrowEdge: .trailing) {
+                NavigationStack { BotInfoView(bot: bot) }
+                    .frame(width: 440, height: 580)
+            }
+    }
+}
+
+struct SidebarInfoContext: Equatable {
+    var enabled = false
+    var hovering = false
+}
+
+extension EnvironmentValues {
+    /// Whether this row shows an (i), and whether it's hovered.
+    @Entry var sidebarInfo = SidebarInfoContext()
+}
+
+/// The (i) itself, shown while its row is hovered, selected or open.
+struct SidebarInfoGlyph: View {
+    let botId: UUID
+    let name: String
+    @Environment(\.sidebarInfo) private var info
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        let open = router.infoBotId == botId
+        if info.enabled, info.hovering || open || router.sidebar == .bot(botId) {
+            Button { router.infoBotId = botId } label: {
+                Image(systemName: open ? "info.circle.fill" : "info.circle")
+            }
+            .buttonStyle(.borderless)
+            .help("Bot info (⌘I)")
+            .accessibilityLabel("\(name) info")
+        }
     }
 }

@@ -24,7 +24,12 @@ struct DarkmuxClient: Sendable {
         var reason: String?
         var finalAssistant: String?
         var changes: Changes?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes }
+        /// The run's commit on the work copy's branch (darkmux commits every
+        /// finished run with changes), or why there's none.
+        var commit: String?
+        var branch: String?
+        var commitError: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch; case commitError = "commit_error" }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -32,6 +37,9 @@ struct DarkmuxClient: Sendable {
             error = try c.decodeIfPresent(String.self, forKey: .error)
             reason = try c.decodeIfPresent(String.self, forKey: .reason)
             changes = try? c.decodeIfPresent(Changes.self, forKey: .changes)
+            commit = try? c.decodeIfPresent(String.self, forKey: .commit)
+            branch = try? c.decodeIfPresent(String.self, forKey: .branch)
+            commitError = try? c.decodeIfPresent(String.self, forKey: .commitError)
             let result = try? c.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
             finalAssistant = try result?.decodeIfPresent(String.self, forKey: .finalAssistant)
         }
@@ -84,7 +92,11 @@ struct DarkmuxClient: Sendable {
         var repoURL: String?
         var sourcePath: String?
         var bot: String
-        enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot }
+        /// A template: a fresh project from `repoURL` at `ref` (no history,
+        /// no remote), never an existing workspace.
+        var template: Bool? = nil
+        var ref: String? = nil
+        enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot, template, ref }
     }
 
     struct Workspace: Decodable, Sendable, Equatable {
@@ -178,6 +190,41 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(KeepResult.self, from: data)
     }
 
+    /// What a bot's branch holds that the repo's default branch doesn't
+    /// (committed changes only), for opening a PR with your GitHub sign-in.
+    struct Changes: Decodable, Sendable, Equatable {
+        struct File: Decodable, Sendable, Equatable {
+            var path: String
+            var mode: String?
+            /// Base64 file content; nil when deleted.
+            var content: String?
+            var deleted: Bool?
+        }
+        var base: String
+        var baseBranch: String
+        var head: String
+        var branch: String
+        var files: [File]
+        enum CodingKeys: String, CodingKey { case base, head, branch, files; case baseBranch = "base_branch" }
+    }
+
+    func changes(token: String, workspace: String) async throws -> Changes {
+        let data = try await send("GET", "/client/workspaces/\(workspace)/changes", headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(Changes.self, from: data)
+    }
+
+    struct UndoResult: Decodable, Sendable, Equatable {
+        var revert: String
+        var files: [String]
+    }
+
+    /// Reverts the run's commit (a new commit; history is never rewritten).
+    func undoWork(token: String, workId: String) async throws -> UndoResult {
+        let data = try await send("POST", "/client/work/\(workId)/undo", body: [String: String](),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(UndoResult.self, from: data)
+    }
+
     /// Puts back every file the run changed and removes files it added.
     func discardWork(token: String, workId: String) async throws -> DiscardResult {
         let data = try await send("POST", "/client/work/\(workId)/discard", body: [String: String](),
@@ -187,6 +234,58 @@ struct DarkmuxClient: Sendable {
 
     func cancelWork(token: String, workId: String) async throws {
         _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
+    }
+
+    /// A profile this app may run work on here (`GET /client/profiles`):
+    /// what it is and whether its server answers now.
+    struct ProfileInfo: Decodable, Sendable, Equatable {
+        var name: String
+        var description: String?
+        var model: String?
+        var endpoint: String
+        var reachable: Bool
+        var loaded: Bool?
+        var error: String? = nil
+    }
+
+    /// The darkmux machine: a stable id (the same from every device that
+    /// pairs with it) and its name. An older darkmux doesn't say.
+    struct Machine: Decodable, Sendable, Equatable {
+        var id: String
+        var name: String
+    }
+
+    struct ProfileList: Decodable, Sendable {
+        var role: String
+        var profiles: [ProfileInfo]
+        var machine: Machine?
+    }
+
+    /// The profiles Coder may run on here, in the owner's grant order. An
+    /// older darkmux without the route answers 404: no list.
+    func profiles(token: String) async throws -> ProfileList {
+        // darkmux looks at every local model server (about 1 s at most);
+        // room for a slow LM Studio.
+        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 15)
+        return try JSONDecoder().decode(ProfileList.self, from: data)
+    }
+
+    /// What this app may run here (`GET /client/whoami`): `profiles` is nil
+    /// for any local profile (darkmux's default), else the granted names.
+    struct Whoami: Decodable, Sendable, Equatable {
+        var profiles: [String]?
+        enum CodingKeys: String, CodingKey { case scopes }
+        enum ScopeKeys: String, CodingKey { case profiles }
+        init(profiles: [String]?) { self.profiles = profiles }
+        init(from decoder: any Decoder) throws {
+            let scopes = try decoder.container(keyedBy: CodingKeys.self).nestedContainer(keyedBy: ScopeKeys.self, forKey: .scopes)
+            profiles = try? scopes.decode([String].self, forKey: .profiles)
+        }
+    }
+
+    func whoami(token: String) async throws -> Whoami {
+        let data = try await send("GET", "/client/whoami", headers: ["Authorization": "Bearer \(token)"])
+        return try JSONDecoder().decode(Whoami.self, from: data)
     }
 
     func workStatus(token: String, workId: String) async throws -> WorkStatus {

@@ -7,6 +7,7 @@ import SwiftData
 struct BugCardView: View {
     let message: ChatMessage
 
+    @Environment(BotBrain.self) private var brain
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @Environment(PreviewController.self) private var preview
@@ -22,7 +23,7 @@ struct BugCardView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Label("Bug: \(draft.title)", systemImage: "ladybug").font(AppFont.headline())
                     Text("\(draft.page)\(draft.viewport.map { " · \($0)px wide" } ?? "")")
-                        .font(AppFont.caption()).foregroundStyle(.secondary)
+                        .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     ForEach(draft.facts, id: \.self) { Text($0).font(AppFont.footnote()) }
                     HStack {
                         Button("File on GitHub", systemImage: "arrow.up.forward.square") { file(draft) }
@@ -33,7 +34,7 @@ struct BugCardView: View {
                             .buttonStyle(.borderedProminent)
                     }
                     Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Pair with darkmux to run fixes.")
-                        .font(AppFont.caption()).foregroundStyle(.secondary)
+                        .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -58,8 +59,10 @@ struct BugCardView: View {
 
     private func fix(_ draft: BugDraft) {
         guard let bot else { return }
-        store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
-                         brief: "Fix this bug:\n\n" + draft.body)
+        let run = store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
+                                   brief: "Fix this bug:\n\n" + draft.body)
+        // The model is chosen like any other dispatch (mode, Auto order).
+        Task { await brain.runs.chooseProfile(for: run) }
     }
 
     private func copySnapshot() async -> Bool {
@@ -71,5 +74,5 @@ struct BugCardView: View {
         return copy(png)
     }
 
-    private func copy(_ png: Data) -> Bool { Clipboard.copyPNG(png) }
+    private func copy(_ png: Data) -> Bool { Clipboard.copyImage(png) }
 }

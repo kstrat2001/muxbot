@@ -1,0 +1,418 @@
+import Foundation
+import Testing
+@testable import MuxBot
+
+/// Visual issues are measured in the app before a dispatch: the page at the
+/// issue's width (or the device presets) and at desktop, with layout facts
+/// read by script. No model judges what it sees (Kain's pick, 2026-11-07).
+
+/// Issue #10 as filed (Mux Bot's own draft, with a screenshot).
+let issueTen = GitHubIssue(number: 10, title: "Tablet sizing looks off", body: """
+    **What's wrong**
+    tablet sizing looks off. the animated code gets pushed off to the right by the typing animation  next to >, and sometimes the text wraps down to the next line
+
+    **Steps**
+    1. Open / at 820px wide
+    2. Look at `div#app > div.layout > main > section.hero.container:nth-of-type(1)`
+
+    **Expected**
+    Adjust the animation timing to ensure the text wraps correctly and the animation does not push the content off-screen.
+
+    <img width="746" height="772" alt="Image" src="https://github.com/user-attachments/assets/364c" />
+    """)
+
+/// What the hcr home page measures at 820px: a 2-column hero 380px wider
+/// than the screen, and one @media rule that stops at 768px.
+func overflowingAt820() -> LayoutFacts {
+    LayoutFacts(viewport: 820, scrollWidth: 1200, clientWidth: 820,
+                wide: [.init(selector: "section.hero.container", width: 1200, right: 1200),
+                       .init(selector: "div.scanning-visual", width: 560, right: 1180)],
+                media: [.init(media: "(max-width: 768px)", matches: false, selectors: [".container", "header .container"], source: "/inertia/css/app.css")],
+                sections: [.init(selector: "section.hero.container", width: 1200, left: 0, display: "grid", columns: 2,
+                                 paddingLeft: "20px", paddingRight: "20px", fontSize: "16px", maxWidth: "1200px")])
+}
+
+func fitsAt(_ width: Int) -> LayoutFacts {
+    LayoutFacts(viewport: width, scrollWidth: width, clientWidth: width, wide: [],
+                media: [.init(media: "(max-width: 768px)", matches: width <= 768, selectors: [".container"], source: "/inertia/css/app.css")],
+                sections: [.init(selector: "section.hero.container", width: min(width, 1200), left: 0, display: "grid", columns: width <= 768 ? 1 : 2,
+                                 paddingLeft: "20px", paddingRight: "20px", fontSize: "16px", maxWidth: "1200px")])
+}
+
+@MainActor
+final class MockProbe: LayoutProbing {
+    var facts: [Int: LayoutFacts]
+    var asked: [(url: URL, widths: [Int])] = []
+    init(_ facts: [Int: LayoutFacts]) { self.facts = facts }
+    func measure(url: URL, widths: [Int]) async -> [LayoutFacts] {
+        asked.append((url, widths))
+        return widths.compactMap { facts[$0] }
+    }
+}
+
+struct LayoutMeasureTests {
+    @Test func visualIssuesAreThoseWithAScreenshotOrLayoutWords() {
+        #expect(LayoutMeasure.isVisual(issueTen))
+        #expect(LayoutMeasure.isVisual(GitHubIssue(number: 1, title: "Footer padding is gone", body: "Open /pricing")))
+        #expect(!LayoutMeasure.isVisual(GitHubIssue(number: 2, title: "Typo in the README", body: "Open /about; `p.lead` says teh")))
+    }
+
+    @Test func theIssuesWidthWhenItsAPresetPlusDesktop() {
+        #expect(LayoutMeasure.widths(forViewport: 820) == [820, 768, 1440], "the next preset down shows a layout switch")
+        #expect(LayoutMeasure.widths(forViewport: 1024) == [1024, 820, 1440])
+        #expect(LayoutMeasure.widths(forViewport: 390) == [390, 1440])
+        #expect(LayoutMeasure.widths(forViewport: 700) == [390, 768, 820, 1024, 1440])
+        #expect(LayoutMeasure.widths(forViewport: nil) == [390, 768, 820, 1024, 1440])
+    }
+
+    @Test func measuredLinesSayWhatTheNumbersSay() {
+        let m = LayoutMeasure.summarize([overflowingAt820(), fitsAt(1440)], focus: 820)
+        #expect(m.lines.contains("At 820px: the page is 380px wider than the screen (scrollWidth 1200)."), "\(m.lines)")
+        #expect(m.lines.contains("At 820px: wider than the screen: section.hero.container (1200px), div.scanning-visual (560px, right edge at 1180px)."))
+        #expect(m.lines.contains("At 820px: section.hero.container is a 2-column grid, max-width 1200px, font 16px."))
+        #expect(m.lines.contains("At 820px: no @media rule matches; the only one is (max-width: 768px) in inertia/css/app.css."))
+        #expect(m.lines.contains("At 1440px: fits; nothing is wider than the screen."))
+        #expect(m.doneWhen == "at 820px nothing is wider than the screen, and 1440px looks the same as now.")
+        #expect(m.likelyFile == "inertia/css/app.css")
+        #expect(m.foundProblem)
+    }
+
+    @Test func zeroPaddingAtThePageEdgeIsAProblem() {
+        var f = fitsAt(820)
+        f.sections[0].paddingLeft = "0px"; f.sections[0].paddingRight = "0px"
+        f.sections[0].textLeft = 0; f.sections[0].textRight = 820
+        let m = LayoutMeasure.summarize([f], focus: 820)
+        #expect(m.lines.contains("At 820px: section.hero.container's text touches the page edges (0px side padding)."), "\(m.lines)")
+        #expect(m.doneWhen == "at 820px section.hero.container keeps side padding.")
+        #expect(m.foundProblem)
+    }
+
+    /// hcr's real home page at 820px (2026-11-07): full-width sections with
+    /// 0px padding whose inner .container keeps the text 20px in, and Vite
+    /// listing app.css twice (by URL and by absolute path).
+    @Test func realHcrAt820HasNoEdgeProblemAndOneMediaRule() {
+        let rule = LayoutFacts.Media(media: "(max-width: 768px)", matches: false, selectors: [":root", ".container"], source: "/inertia/css/app.css")
+        var twin = rule
+        twin.source = "/Users/me/.darkmux/worktrees/hcr-site/inertia/css/app.css"
+        let header = LayoutFacts.Section(selector: "header.header", width: 820, left: 0, display: "block", columns: nil,
+                                         paddingLeft: "0px", paddingRight: "0px", fontSize: "16px", maxWidth: "none",
+                                         textLeft: 20, textRight: 800)
+        let f = LayoutFacts(viewport: 820, scrollWidth: 820, clientWidth: 820, wide: [], media: [rule, twin], sections: [header])
+        let m = LayoutMeasure.summarize([f], focus: 820)
+        #expect(!m.foundProblem, "\(m.lines)")
+        #expect(m.lines.contains("At 820px: no @media rule matches; the only one is (max-width: 768px) in inertia/css/app.css."), "\(m.lines)")
+        #expect(m.likelyFile == "inertia/css/app.css")
+    }
+
+    @Test func textAtThePageEdgeIsAProblem() {
+        let bare = LayoutFacts.Section(selector: "section.cta", width: 820, left: 0, display: "block", columns: nil,
+                                       paddingLeft: "0px", paddingRight: "0px", fontSize: "16px", maxWidth: "none",
+                                       textLeft: 0, textRight: 820)
+        let m = LayoutMeasure.summarize([LayoutFacts(viewport: 820, scrollWidth: 820, clientWidth: 820, wide: [], media: [], sections: [bare])], focus: 820)
+        #expect(m.lines.contains("At 820px: section.cta's text touches the page edges (0px side padding)."), "\(m.lines)")
+        #expect(m.foundProblem)
+    }
+
+    @Test func aPageThatMeasuresFineIsNotAProblem() {
+        let m = LayoutMeasure.summarize([fitsAt(820), fitsAt(1440)], focus: 820)
+        #expect(!m.foundProblem)
+        #expect(m.doneWhen == nil)
+    }
+}
+
+@Suite(.serialized) @MainActor
+struct MeasureBeforeDispatchTests {
+    private func setUp(_ issues: [GitHubIssue], probe: MockProbe?, preview: Bool = true) -> (BotStore, Bot, BotBrain) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "humancodereader", instructions: "Website")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        if preview { store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot) }
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: issues)
+        brain.layoutProbe = probe
+        return (store, bot, brain)
+    }
+
+    private func lastReply(_ store: BotStore, _ bot: Bot) -> String {
+        (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }
+            .last { $0.role == .assistant && $0.kind == .text }?.content ?? ""
+    }
+
+    @Test(arguments: ["fix #10", "any open issues?"])
+    func issueTenIsMeasuredAt820AndDesktopBeforeTheCard(message: String) async throws {
+        let probe = MockProbe([820: overflowingAt820(), 768: fitsAt(768), 1440: fitsAt(1440)])
+        let (store, bot, brain) = setUp([issueTen], probe: probe)
+        await brain.send(message, in: .bot(bot.id), store: store)
+        #expect(probe.asked.count == 1)
+        #expect(probe.asked.first?.widths == [820, 768, 1440])
+        #expect(probe.asked.first?.url.absoluteString == "http://127.0.0.1:5999/")
+        let run = try #require(bot.runs?.first)
+        #expect(run.phase == .proposed)
+        let brief = try #require(run.brief)
+        #expect(brief.contains("Measured in the preview:"), "\(brief)")
+        #expect(brief.contains("- At 820px: the page is 380px wider than the screen (scrollWidth 1200)."))
+        #expect(brief.contains("Likely file: inertia/css/app.css"))
+        #expect(brief.contains("Done when: at 820px nothing is wider than the screen, and 1440px looks the same as now."))
+        #expect(LayoutMeasure.measuredLines(in: brief).count >= 3, "the card shows them before Approve")
+    }
+
+    @Test func aNonVisualIssueIsNotMeasured() async throws {
+        let probe = MockProbe([:])
+        let typo = GitHubIssue(number: 2, title: "Typo in the README", body: "Open /about; `p.lead` says teh")
+        let (store, bot, brain) = setUp([typo], probe: probe)
+        await brain.send("fix #2", in: .bot(bot.id), store: store)
+        #expect(probe.asked.isEmpty)
+        #expect(bot.runs?.first?.brief?.contains("Measured") == false)
+    }
+
+    @Test func withoutAPreviewItSaysSoAndStillOffersTheRun() async throws {
+        let probe = MockProbe([:])
+        let (store, bot, brain) = setUp([issueTen], probe: probe, preview: false)
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        #expect(probe.asked.isEmpty)
+        let brief = try #require(bot.runs?.first?.brief)
+        #expect(brief.contains("Not measured: the preview isn't running."), "\(brief)")
+    }
+
+    @Test func nothingMeasuredWrongAndNoExpectedAsksOneQuestionFirst() async throws {
+        let vague = GitHubIssue(number: 12, title: "Tablet layout looks off", body: "**What's wrong**\nlooks off\n\n**Steps**\n1. Open / at 820px wide\n2. Look at `section.hero`")
+        let probe = MockProbe([820: fitsAt(820), 1440: fitsAt(1440)])   // no 768: no switch to report
+        let (store, bot, brain) = setUp([vague], probe: probe)
+        await brain.send("fix #12", in: .bot(bot.id), store: store)
+        #expect(bot.runs?.isEmpty ?? true, "asks first")
+        let question = lastReply(store, bot)
+        #expect(question.contains("At 820px I measured nothing wider than the screen"), "\(question)")
+        #expect(question.hasSuffix("What should change?"))
+        await brain.send("stack the hero into one column", in: .bot(bot.id), store: store)
+        let run = try #require(bot.runs?.first)
+        #expect(run.task == "Fix #12: Tablet layout looks off (kstrat2001/hcr)")
+        #expect(run.brief?.contains("What should change: stack the hero into one column") == true, "\(run.brief ?? "")")
+        #expect(run.brief?.contains("Measured in the preview:") == true)
+    }
+}
+
+/// The real probe, offscreen, on a page given as HTML (no network).
+@Suite(.serialized) @MainActor
+struct WebLayoutProbeTests {
+    let html = """
+        <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+        body { margin: 0 }
+        .hero { display: grid; grid-template-columns: 1fr 1fr; width: 1200px; padding: 0 20px; font-size: 16px }
+        @media (max-width: 768px) { .hero { display: block; width: auto } }
+        </style></head><body><main><section class="hero"><div>left</div><div>right</div></section></main></body></html>
+        """
+
+    @Test func readsOverflowGridAndMediaRulesAtTheGivenWidth() async throws {
+        let probe = WebLayoutProbe()
+        let wide = try #require(await probe.measure(html: html, width: 820))
+        #expect(wide.viewport == 820)
+        #expect(wide.scrollWidth >= 1240, "\(wide.scrollWidth)")
+        #expect(wide.wide.first?.selector == "section.hero", "\(wide)")
+        #expect(wide.media.count == 1)
+        #expect(wide.media.first?.matches == false)
+        #expect(wide.sections.first { $0.selector == "section.hero" }?.columns == 2)
+        let phone = try #require(await probe.measure(html: html, width: 390))
+        #expect(phone.media.first?.matches == true)
+        #expect(phone.scrollWidth <= 390, "\(phone.scrollWidth)")
+    }
+
+    /// One probe measuring twice at once (the brain shares one): each call
+    /// gets its own page's numbers, and neither waits forever.
+    @Test(.timeLimit(.minutes(1))) func overlappingMeasurementsEachGetTheirOwnPage() async throws {
+        let probe = WebLayoutProbe()
+        async let wide = probe.measure(html: html, width: 820)
+        async let phone = probe.measure(html: html, width: 390)
+        let (w, p) = await (wide, phone)
+        #expect(w?.viewport == 820)
+        #expect(p?.viewport == 390)
+        #expect(p?.media.first?.matches == true)
+    }
+
+    /// A page that never finishes loading gives up after the timeout, once.
+    @Test(.timeLimit(.minutes(1))) func aLoadThatNeverFinishesTimesOut() async {
+        let probe = WebLayoutProbe()
+        probe.loadTimeout = .milliseconds(300)
+        let start = ContinuousClock.now
+        let facts = await probe.measure(width: 400) { _ in }
+        #expect(facts == nil)
+        #expect(ContinuousClock.now - start < .seconds(10))
+        // Still usable after a timeout.
+        #expect(await probe.measure(html: html, width: 390)?.viewport == 390)
+    }
+}
+
+
+/// hcr's hero as measured on 2026-11-07: a row at 820px, a column at 768px
+/// (its only @media rule stops at 768px).
+func heroAt(_ width: Int) -> LayoutFacts {
+    let row = width > 768
+    return LayoutFacts(viewport: width, scrollWidth: width, clientWidth: width, wide: [],
+                       media: [.init(media: "(max-width: 768px)", matches: !row, selectors: [".hero"], source: "/inertia/css/app.css")],
+                       sections: [.init(selector: "section.hero.container.flex", width: width, left: 0, display: "flex", columns: nil,
+                                        paddingLeft: "20px", paddingRight: "20px", fontSize: "16px", maxWidth: "1200px",
+                                        textLeft: 20, textRight: width - 20, flexDirection: row ? "row" : "column",
+                                        children: row ? [402, 378] : [728, 260])])
+}
+
+struct LayoutSwitchTests {
+    @Test func theHeroSwitchingBetween820And768IsReportedWithItsRule() {
+        let m = LayoutMeasure.summarize([heroAt(820), heroAt(768), heroAt(1440)], focus: 820)
+        #expect(m.lines.contains("At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."), "\(m.lines)")
+        #expect(m.doneWhen == "from 769px to 1024px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now.")
+        #expect(m.targetRange == "769–1024px")
+        #expect(m.switchRule == "@media (max-width: 768px) in inertia/css/app.css")
+        #expect(m.likelyFile == "inertia/css/app.css")
+        #expect(m.layoutSwitch != nil)
+    }
+
+    @Test func noSwitchNoLine() {
+        let m = LayoutMeasure.summarize([heroAt(1024), heroAt(820)], focus: 1024)
+        #expect(m.layoutSwitch == nil, "\(m.lines)")
+        #expect(!m.lines.contains { $0.contains("at 820px it's") })
+    }
+}
+
+/// A re-run or a reply to an issue run is rebuilt from the issue (body and
+/// measurements) plus what you said, never "Earlier task: <title>" (Fix #10,
+/// 2026-11-07: Coder got only the title and looped on grep).
+@Suite(.serialized) @MainActor
+struct IssueRerunTests {
+    let kains = "the 820 wide tablet size preview reveals the problem at that size. smaller at 768 changes the layout"
+
+    private func setUp() -> (BotStore, Bot, BotBrain, BotRun) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
+        // The run as it was: a bare title, then stopped.
+        let old = store.proposeRun(task: "Fix #10: Tablet sizing looks off (kstrat2001/hcr)", crew: .coder, on: bot)
+        store.apply(.cancel, to: old)
+        return (store, bot, brain, old)
+    }
+
+    @Test func theRebuiltBriefCarriesTheIssueTheMeasurementsAndYourWords() async throws {
+        let (_, _, brain, old) = setUp()
+        let brief = try #require(await brain.rerunBrief(for: old, change: kains))
+        #expect(brief.contains("Page: / (at 820px wide)"), "\(brief)")
+        #expect(brief.contains("Element: div#app > div.layout > main > section.hero.container:nth-of-type(1)"))
+        #expect(brief.contains("- At 820px section.hero.container.flex is a row (402px and 378px side by side); at 768px it's a column, from @media (max-width: 768px) in inertia/css/app.css."))
+        #expect(brief.contains("Likely file: inertia/css/app.css"))
+        #expect(brief.contains("Done when: from 769px to 1024px section.hero.container.flex is a column, as at 768px, and 1440px looks the same as now."))
+        #expect(brief.hasSuffix("What should change: \(kains)"))
+        #expect(!brief.contains("Earlier task:"))
+    }
+
+    @Test func runningAStoppedIssueRunAgainUsesTheRebuiltBrief() async throws {
+        let (store, bot, brain, old) = setUp()
+        await brain.rerun(old, change: kains, store: store)
+        let again = try #require((bot.runs ?? []).first { $0.id != old.id })
+        #expect(again.brief?.contains("Measured in the preview:") == true, "\(again.brief ?? "")")
+        #expect(again.brief?.hasSuffix("What should change: \(kains)") == true)
+    }
+
+    @Test func continuingAFinishedIssueRunUsesTheRebuiltBrief() async throws {
+        let (store, bot, brain, _) = setUp()
+        let done = store.proposeRun(task: "Fix #10: Tablet sizing looks off (kstrat2001/hcr)", crew: .coder, on: bot)
+        store.apply(.approve, to: done)
+        store.apply(.finish(summary: "Changed nothing."), to: done)
+        await brain.rerun(done, change: kains, store: store)
+        let message = try #require(brain.runs.lastTweakMessage)
+        #expect(message.contains("Measured in the preview:"), "\(message)")
+        #expect(message.hasSuffix("What should change: \(kains)"))
+    }
+
+    @Test func aRunThatIsntAnIssueKeepsTheEarlierTask() async {
+        let (store, bot, brain, _) = setUp()
+        let plain = store.proposeRun(task: "Tighten the footer", crew: .coder, on: bot)
+        #expect(await brain.rerunBrief(for: plain, change: "less") == nil)
+    }
+}
+
+
+/// When measuring finds the rule that switches the layout, the brief leads
+/// with it: the file, the rule, the range to change. The issue's own
+/// "Expected" stays, labeled as secondary (Fix #10, 2026-11-07: both models
+/// followed "adjust the animation timing" into the animation code first).
+@Suite(.serialized) @MainActor
+struct MeasuredBriefLeadTests {
+    private func brief() async throws -> String {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        return try #require(bot.runs?.first?.brief)
+    }
+
+    @Test func theMeasuredSwitchComesFirst() async throws {
+        let lines = try await brief().components(separatedBy: "\n")
+        #expect(lines[0] == "Fix GitHub issue #10 in kstrat2001/hcr: Tablet sizing looks off.")
+        #expect(lines[1] == "Start here (measured in the preview; this decides the change): @media (max-width: 768px) in inertia/css/app.css switches section.hero.container.flex to a column at 768px, but it's a row at 820px. Make it a column from 769px to 1024px too.", "\(lines)")
+    }
+
+    @Test func theIssuesOwnExpectedIsSecondary() async throws {
+        let text = try await brief()
+        #expect(!text.contains("\nExpected: Adjust the animation timing"), "\(text)")
+        #expect(text.contains("The issue also says (secondary; the measurement above decides): Adjust the animation timing"))
+    }
+
+    @Test func withoutASwitchTheIssuesExpectedStays() async throws {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe([820: overflowingAt820(), 1440: fitsAt(1440)])
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        let text = try #require(bot.runs?.first?.brief)
+        #expect(text.contains("\nExpected: Adjust the animation timing"), "\(text)")
+        #expect(!text.contains("Start here"))
+    }
+}
+
+
+/// With a switching CSS rule found, the stylesheet is the file to check
+/// first; the recipe's page file is only "Also look at" (the 5-minute
+/// replay of #10 still read home.tsx twice because it was listed first).
+@Suite(.serialized) @MainActor
+struct LikelyFileOrderTests {
+    private func brief(_ facts: [Int: LayoutFacts]) async throws -> String {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "hcr", instructions: "Site")
+        store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
+        store.addResource(.previewURL, "http://127.0.0.1:5999/", to: bot)
+        let brain = BotBrain()
+        brain.useOnDeviceModel = false
+        brain.github = MockGitHub(issues: [issueTen])
+        brain.layoutProbe = MockProbe(facts)
+        brain.runs.recipes.recipes["kstrat2001/hcr"] = .ready(PreviewManifest(command: "npm run dev", pageFile: "inertia/pages/{page}.tsx"), fromLocalCopy: false)
+        await brain.send("fix #10", in: .bot(bot.id), store: store)
+        return try #require(bot.runs?.first?.brief)
+    }
+
+    @Test func aSwitchingRuleMakesTheStylesheetTheLikelyFile() async throws {
+        let lines = try await brief([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)]).components(separatedBy: "\n")
+        let likely = try #require(lines.firstIndex(of: "Likely file: inertia/css/app.css (check it first)"), "\(lines)")
+        let also = try #require(lines.firstIndex(of: "Also look at: inertia/pages/home.tsx"))
+        #expect(likely < also)
+        #expect(!lines.contains { $0.hasPrefix("Likely file: inertia/pages/home.tsx") })
+        #expect(!lines.contains { $0.hasPrefix("Also likely:") })
+    }
+
+    @Test func withoutASwitchThePageFileStaysFirst() async throws {
+        let text = try await brief([820: overflowingAt820(), 1440: fitsAt(1440)])
+        #expect(text.contains("Likely file: inertia/pages/home.tsx (check it first)"), "\(text)")
+        #expect(text.contains("Also likely: inertia/css/app.css (its @media rules)"))
+    }
+}

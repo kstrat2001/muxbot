@@ -82,6 +82,22 @@ protocol GitHubClient: Sendable {
     func issue(repo: String, number: Int) async throws -> GitHubIssue?
     /// A file on the default branch, or nil if it doesn't exist.
     func file(repo: String, path: String) async throws -> Data?
+    /// A pull request's title, state and changed files; nil if there's no
+    /// pull request with that number.
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo?
+}
+
+/// What a pull request was: enough to brief a follow-up run on it.
+struct PullRequestInfo: Sendable, Equatable {
+    var number: Int
+    var title: String
+    var merged: Bool
+    /// "open" or "closed".
+    var state: String
+    /// Changed file paths, as GitHub lists them (the first 100).
+    var files: [String]
+
+    var status: String { merged ? "merged" : state }
 }
 
 /// A repo's darkmux preview recipe, `.darkmux/preview.json`. Draft format.
@@ -111,10 +127,13 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
     }
 }
 
-/// Unauthenticated GitHub REST API: public repos only, 60 requests an hour
-/// per IP. A GitHub sign-in comes later.
+/// GitHub's REST API: with your sign-in, every read carries the token
+/// (private repos, 5,000 requests an hour); without it, public repos only,
+/// 60 requests an hour per IP.
 struct RESTGitHubClient: GitHubClient {
     var session: URLSession = .shared
+    /// Your GitHub sign-in, when there is one (private repos, higher limits).
+    var token: @Sendable () async -> String? = { KeychainHelper().get(key: GitHubAuth.tokenKey) }
     /// Responses by URL with their ETag: a 304 reply (unchanged) doesn't
     /// count against the 60-an-hour limit.
     private let cache = ETagCache()
@@ -130,6 +149,7 @@ struct RESTGitHubClient: GitHubClient {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+        if let token = await token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let cached = cache[url]
         if let etag = cached?.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)
@@ -150,11 +170,10 @@ struct RESTGitHubClient: GitHubClient {
         }
         var found = try JSONDecoder().decode(GitHubIssue.self, from: data)
         // The issues endpoint doesn't say whether a PR merged; the pulls one does.
+        // Through `get`, so a private repo's PR is read with your sign-in.
         if found.isPullRequest, found.state == "closed",
            let prURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)") {
-            var pr = URLRequest(url: prURL)
-            pr.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
-            if let (prData, _) = try? await session.data(for: pr),
+            if let prData = try? await get(prURL),
                let marker = try? JSONDecoder().decode(GitHubIssue.PullRequestMarker.self, from: prData) {
                 found.pullRequest = marker
             }
@@ -164,15 +183,51 @@ struct RESTGitHubClient: GitHubClient {
 }
 
 extension RESTGitHubClient {
-    /// Raw file from the default branch (raw.githubusercontent.com, which
-    /// doesn't count against the API rate limit).
+    /// Raw file from the default branch. Signed in, through the contents
+    /// API with your token (private repos); signed out, from
+    /// raw.githubusercontent.com, which doesn't count against the API rate
+    /// limit.
     func file(repo: String, path: String) async throws -> Data? {
-        guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
-        let (data, response) = try await session.data(from: url)
+        let request: URLRequest
+        if let token = await token() {
+            guard let url = URL(string: "https://api.github.com/repos/\(repo)/contents/\(path)") else { return nil }
+            var signed = URLRequest(url: url)
+            signed.setValue("application/vnd.github.raw+json", forHTTPHeaderField: "Accept")
+            signed.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+            signed.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request = signed
+        } else {
+            guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
+            request = URLRequest(url: url)
+        }
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard status == 200 else { throw GitHubError(status: status) }
         return data
+    }
+}
+
+extension RESTGitHubClient {
+    func pullRequest(repo: String, number: Int) async throws -> PullRequestInfo? {
+        guard let url = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)"),
+              let filesURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)/files?per_page=100") else { return nil }
+        struct Pull: Decodable {
+            var title: String
+            var state: String
+            var mergedAt: String?
+            enum CodingKeys: String, CodingKey { case title, state, mergedAt = "merged_at" }
+        }
+        struct File: Decodable { var filename: String }
+        let pull: Pull
+        do {
+            pull = try JSONDecoder().decode(Pull.self, from: try await get(url))
+        } catch let error as GitHubError where error.status == 404 {
+            return nil   // no such PR (or it's an issue)
+        }
+        let files = try JSONDecoder().decode([File].self, from: try await get(filesURL))
+        return PullRequestInfo(number: number, title: pull.title, merged: pull.mergedAt != nil,
+                               state: pull.state, files: files.map(\.filename))
     }
 }
 
@@ -190,7 +245,7 @@ struct GitHubError: LocalizedError {
     var errorDescription: String? {
         switch status {
         case 403, 429: "GitHub's rate limit for unsigned-in requests is used up (60 an hour)."
-        case 404: "GitHub can't find that repo, or it's private (sign-in isn't supported yet)."
+        case 404: "GitHub can't find that repo. If it's private, sign in with GitHub (Settings › GitHub) and install Mux Bot on it."
         default: "GitHub answered with status \(status)."
         }
     }

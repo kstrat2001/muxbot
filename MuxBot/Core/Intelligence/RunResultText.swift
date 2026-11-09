@@ -17,6 +17,18 @@ enum RunResultText {
         return "I can't open pull requests from the app yet (no GitHub sign-in). The change is committed on \(branch) on this Mac: push that branch and open a PR on GitHub, or pass it to Mux Bot."
     }
 
+    /// darkmux refusing an Undo, in plain words: a later run that changed
+    /// the same files is named by its task.
+    @MainActor
+    static func undoRefusal(_ error: String, runs: [BotRun]) -> String {
+        if let range = error.range(of: #"run (w-[0-9A-Za-z]+) changed the same files later"#, options: .regularExpression) {
+            let id = error[range].split(separator: " ")[1]
+            let task = runs.first { $0.darkmuxWorkId == String(id) }?.task ?? "A later run"
+            return "“\(task)” changed the same files later. Undo that first."
+        }
+        return "Couldn't undo it: \(error)\(error.hasSuffix(".") ? "" : ".")"
+    }
+
     /// What Keep did: "Committed pricing.tsx to mux/x (abc1234)."
     static func kept(files: [String], branch: String, commit: String) -> String {
         let what = files.count == 1 ? ((files[0] as NSString).lastPathComponent) : "\(files.count) files"
@@ -60,6 +72,27 @@ enum RunResultText {
         return .failed(String(short.trimmingCharacters(in: .whitespaces).prefix(140)))
     }
 
+    /// "Coder said it changed inertia/css/app.css, but no files changed.":
+    /// a run's text claims an edit while darkmux saw no changed files. nil
+    /// when files changed or nothing claims one.
+    static func unbackedClaim(in texts: [String], crew: String, changedFiles: [String]) -> String? {
+        guard changedFiles.isEmpty else { return nil }
+        let verbs = #"\b(added|changed|edited|updated|modified|created|wrote|rewrote|fixed|replaced|removed|inserted|adjusted)\b"#
+        let negations = ["didn't", "did not", "no files", "not ", "nothing", "without", "stopped", "couldn't", "could not", "won't", "would "]
+        let file = #"[\w./-]+\.(css|scss|sass|less|tsx?|jsx?|mjs|swift|rs|py|html?|json|md|ya?ml|go|rb|vue|svelte|edge|toml)\b"#
+        for text in texts {
+            let sentences = plain(text).components(separatedBy: CharacterSet(charactersIn: "\n")).flatMap { $0.components(separatedBy: ". ") }
+            for sentence in sentences {
+                let lower = sentence.lowercased()
+                guard let verb = lower.range(of: verbs, options: .regularExpression),
+                      !negations.contains(where: { lower[..<verb.lowerBound].contains($0) }) else { continue }
+                let named = sentence.range(of: file, options: .regularExpression).map { String(sentence[$0]) }
+                return "\(crew) said it changed \(named ?? "the code"), but no files changed."
+            }
+        }
+        return nil
+    }
+
     /// The bot's own short line when the on-device model can't write one.
     static func fallbackSummary(report: String, files: [String]) -> String {
         let text = plain(report)
@@ -68,7 +101,7 @@ enum RunResultText {
             .first { $0.count > 12 } ?? ""
         let cleaned = first.replacingOccurrences(of: #"^[A-Z][a-z]+:\s*"#, with: "", options: .regularExpression)
         let names = files.map { ($0 as NSString).lastPathComponent }
-        var line = "Done." + (cleaned.isEmpty ? "" : " " + String(cleaned.prefix(200)) + ".")
+        var line = (names.isEmpty ? "Changed nothing." : "Done.") + (cleaned.isEmpty ? "" : " " + String(cleaned.prefix(200)) + ".")
         if !names.isEmpty { line += " Changed \(names.joined(separator: ", "))." }
         return line
     }
