@@ -1,20 +1,27 @@
 # Playbook: a website
 
-schema: 1
+schema: 2
 title: Build a website
 icon: globe
 pitch: A one-page site you can grow: say what it should look like and what it needs, and see it change in the preview.
 animal: fox
 colors: 0e9f8e, ffffff
 crew: coder
+page_file: src/pages/{page}.tsx
+pages: /
+viewports: desktop, phone
 
-This file is the recipe Mux Bot reads when someone starts a website from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 1). The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, its first run (written from your answers; a line whose answer you left blank is left out), and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
+This file is the recipe Mux Bot reads when someone starts a website from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 2). The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, its first run (written from your answers; a line whose answer you left blank is left out), and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
 
 ## Questions
 
 - What's the site called?
 - What is it for, in a sentence? (A portfolio, a small business, an event, a project.)
 - How should it feel? (For example: calm and minimal, bold and colorful, warm and friendly.)
+
+## Conventions
+
+Vite + React + TypeScript, plain CSS. Each page is a component in src/pages/, registered in src/App.tsx and in the menu in src/site.ts; shared parts (header, footer, sections) are in src/components/; the look (colors, fonts, spacing) is the CSS variables at the top of src/styles.css.
 
 ## Persona
 

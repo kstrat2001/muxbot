@@ -21,7 +21,7 @@ struct PreviewSetupFileTests {
         #expect(Set(recipe.keys) == ["schema_version", "command", "env", "ready", "install", "env_from_source"])
         #expect(recipe["schema_version"] as? String == "1.0")
         #expect(recipe["command"] as? String == "npm run dev")
-        #expect(recipe["env"] as? [String: String] == ["PORT": "{port}", "HOST": "127.0.0.1"])
+        #expect(recipe["env"] as? [String: String] == ["PORT": "{port}", "HOST": "0.0.0.0"])
         #expect((recipe["ready"] as? [String: String]) == ["http": "/"])
         #expect((recipe["install"] as? [String: String]) == ["command": "npm ci --no-audit --no-fund", "unless_exists": "node_modules"])
         #expect(recipe["env_from_source"] as? [String] == [".env"])

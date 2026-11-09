@@ -120,11 +120,34 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
         case pageFile = "page_file"
     }
 
+    /// With the hints a playbook gives (template schema 2 keeps them out of
+    /// darkmux's recipe): each fills only what the recipe left blank.
+    func with(_ hints: RepoHints?) -> PreviewManifest {
+        guard let hints else { return self }
+        var m = self
+        m.conventions = m.conventions ?? hints.conventions
+        m.pageFile = m.pageFile ?? hints.pageFile
+        m.pages = m.pages ?? hints.pages
+        m.viewports = m.viewports ?? hints.viewports
+        return m
+    }
+
     var summary: String {
         var parts = ["\(command)\(port.map { " on port \($0)" } ?? "")"]
         if let pages, !pages.isEmpty { parts.append("pages \(pages.joined(separator: ", "))") }
         return parts.joined(separator: " · ")
     }
+}
+
+/// What the app knows about a repo's layout, for run briefs and checks:
+/// from its PLAYBOOK.md (template schema 2), not darkmux's recipe.
+struct RepoHints: Codable, Equatable, Sendable {
+    var conventions: String?
+    var pageFile: String?
+    var pages: [String]?
+    var viewports: [String]?
+
+    var isEmpty: Bool { conventions == nil && pageFile == nil && pages == nil && viewports == nil }
 }
 
 /// GitHub's REST API: with your sign-in, every read carries the token

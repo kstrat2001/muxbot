@@ -259,14 +259,14 @@ struct TemplateSchemaTests {
     }
 
     @Test func aNewerSchemaIsRefusedByName() {
-        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 2")
-        #expect(throws: Playbook.ParseError.newerSchema(2)) { try Playbook.parse(playbook) }
-        #expect(Playbook.ParseError.newerSchema(2).message.hasPrefix("This template needs a newer Mux Bot"))
-        #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 2)) {
-            try TemplateSchema.checkPreview(Data(#"{"schema":2,"command":"x"}"#.utf8))
+        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 3")
+        #expect(throws: Playbook.ParseError.newerSchema(3)) { try Playbook.parse(playbook) }
+        #expect(Playbook.ParseError.newerSchema(3).message.hasPrefix("This template needs a newer Mux Bot"))
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 3)) {
+            try TemplateSchema.checkPreview(Data(#"{"schema":3,"command":"x"}"#.utf8))
         }
-        #expect(throws: TemplateSchema.Problem.newerSchema(file: "templates.json", 2)) {
-            try TemplateRegistry.decode(Data(#"{"schema":2,"templates":[]}"#.utf8))
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: "templates.json", 3)) {
+            try TemplateRegistry.decode(Data(#"{"schema":3,"templates":[]}"#.utf8))
         }
     }
 

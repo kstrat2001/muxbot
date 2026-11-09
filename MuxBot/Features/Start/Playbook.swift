@@ -23,6 +23,11 @@ struct Playbook: Equatable, Sendable {
     var skills: [BotSkill]
     /// `## First run`: lines with `{name}`, `{purpose}` and `{feel}`.
     var firstRun: String? = nil
+    /// The schema the file follows.
+    var schema: Int = TemplateSchema.supported
+    /// Schema 2: `page_file`, `pages`, `viewports` and `## Conventions`, the
+    /// app's hints about the repo (darkmux's recipe holds none of them).
+    var hints = RepoHints()
 
     enum ParseError: Error, Equatable {
         case missing(String)
@@ -92,10 +97,21 @@ struct Playbook: Equatable, Sendable {
         let hex = colors.map { isHex($0) ? $0 : nil }
         let crew = (header["crew"] ?? "").split(separator: ",")
             .compactMap { CrewRole(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
+        let schema = Int(header["schema"] ?? "") ?? TemplateSchema.supported
+        // The hint keys arrived with schema 2.
+        if schema < 2, let key = hintKeys.first(where: { header[$0] != nil }) {
+            throw ParseError.unknownKey(key, closest: TemplateSchema.closest(to: key, in: schemaOneKeys))
+        }
+        let list: (String) -> [String]? = { key in
+            header[key].map { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+        }
         var playbook = Playbook(title: title, icon: header["icon"] ?? "", pitch: header["pitch"] ?? "",
                                 animal: header["animal"].flatMap(BotAnimal.init(rawValue:)),
                                 bodyHex: hex.first ?? nil, eyeHex: hex.dropFirst().first ?? nil,
                                 crew: crew.isEmpty ? [.coder] : crew, questions: [], persona: "", skills: [])
+        playbook.schema = schema
+        playbook.hints = RepoHints(pageFile: header["page_file"].flatMap { $0.isEmpty ? nil : $0 },
+                                   pages: list("pages"), viewports: list("viewports"))
         for (heading, body) in sections {
             if heading == "Questions" {
                 playbook.questions = body.split(separator: "\n")
@@ -104,6 +120,8 @@ struct Playbook: Equatable, Sendable {
                     .map { String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) }
             } else if heading == "Persona" {
                 playbook.persona = body
+            } else if heading == "Conventions", schema >= 2 {
+                playbook.hints.conventions = body.isEmpty ? nil : body
             } else if heading == "First run" {
                 playbook.firstRun = body.isEmpty ? nil : body
             } else if heading.hasPrefix("Skill:") {
@@ -135,7 +153,9 @@ struct Playbook: Equatable, Sendable {
         return (header, sections.map { ($0.0, $0.1.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)) })
     }
 
-    private static let keys = ["schema", "title", "icon", "pitch", "animal", "colors", "crew"]
+    private static let schemaOneKeys = ["schema", "title", "icon", "pitch", "animal", "colors", "crew"]
+    private static let hintKeys = ["page_file", "pages", "viewports"]
+    private static let keys = schemaOneKeys + hintKeys
 
     /// A header key is a lowercase word at the start of the line, a colon,
     /// then the value; other prose is ignored. An unknown key is refused.

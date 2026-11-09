@@ -14,7 +14,7 @@ struct ProjectSetupDetectorTests {
         #expect(d.command?.source.contains("node ace serve --hmr") == true)
         #expect(d.install?.value == "npm ci --no-audit --no-fund")
         #expect(d.install?.source.contains("package-lock.json") == true)
-        #expect(d.port?.value == .env(["PORT": "{port}", "HOST": "127.0.0.1"]))
+        #expect(d.port?.value == .env(["PORT": "{port}", "HOST": "0.0.0.0"]))
         #expect(d.hotReload?.value == true)
         #expect(d.ready?.value == "/")
         #expect(d.envFromSource?.value == [".env"])
@@ -23,7 +23,7 @@ struct ProjectSetupDetectorTests {
     @Test func aViteAppTakesItsPortAsAFlag() throws {
         let d = ProjectSetupDetector.detect(packageJSON: #"{"scripts":{"dev":"vite"}}"#, files: ["pnpm-lock.yaml"])
         #expect(d.framework?.value == "Vite")
-        #expect(d.command?.value == "pnpm dev --port $PORT --strictPort --host 127.0.0.1")
+        #expect(d.command?.value == "pnpm dev --port $PORT --strictPort --host 0.0.0.0")
         #expect(d.install?.value == "pnpm install --frozen-lockfile")
         let data = try #require(PreviewSetup(d, folderName: "site").recipeData)
         let recipe = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -34,7 +34,7 @@ struct ProjectSetupDetectorTests {
     @Test func npmPassesFlagsAfterADoubleDash() {
         let d = ProjectSetupDetector.detect(packageJSON: #"{"scripts":{"dev":"next dev"}}"#, files: ["package-lock.json"])
         #expect(d.framework?.value == "Next.js")
-        #expect(d.command?.value == "npm run dev -- -p $PORT -H 127.0.0.1")
+        #expect(d.command?.value == "npm run dev -- -p $PORT -H 0.0.0.0")
     }
 
     @Test(arguments: [("yarn.lock", Set<String>(), "yarn install --frozen-lockfile"),

@@ -1,9 +1,9 @@
 {
-  "schema": 1,
+  "schema_version": "1.0",
   "command": "npm run dev",
   "env": {
     "PORT": "{port}",
-    "HOST": "127.0.0.1",
+    "HOST": "0.0.0.0",
     "VITE_HMR_PORT": "{hmrPort}"
   },
   "ready": {
@@ -12,14 +12,5 @@
   "install": {
     "command": "npm ci --no-audit --no-fund",
     "unless_exists": "node_modules"
-  },
-  "conventions": "Vite + React + TypeScript, plain CSS. Each page is a component in src/pages/, registered in src/App.tsx and in the menu in src/site.ts; shared parts (header, footer, sections) are in src/components/; the look (colors, fonts, spacing) is the CSS variables at the top of src/styles.css.",
-  "page_file": "src/pages/{page}.tsx",
-  "pages": [
-    "/"
-  ],
-  "viewports": [
-    "desktop",
-    "phone"
-  ]
+  }
 }

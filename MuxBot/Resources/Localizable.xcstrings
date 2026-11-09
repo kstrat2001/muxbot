@@ -1669,6 +1669,12 @@
     "Your project stays on this Mac. You can put it on GitHub later from its info." : {
 
     },
+    "a schema 2 template's preview.json is darkmux's recipe: write “schema_version”: “%@” and keep the app's hints in PLAYBOOK.md." : {
+
+    },
+    "a template has no checkout to copy files from." : {
+
+    },
     "darkmux" : {
 
     },
@@ -1722,6 +1728,9 @@
 
     },
     "darkmux on this Mac decides which models apps may use." : {
+
+    },
+    "darkmux reads “%@”." : {
 
     },
     "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update." : {

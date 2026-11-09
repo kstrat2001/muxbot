@@ -58,13 +58,13 @@ struct PlaybookSetup: Codable, Equatable, Sendable {
         var out = """
             # Playbook: \(line(name))
 
-            schema: 1
+            schema: 2
             title: \(line(name))
             icon: \(ExistingProject.icon)
             pitch: \(pitch)
             crew: coder
 
-            This file is the recipe Mux Bot reads for this project, in Mux Bot's template schema (schema 1): what it asks first, the bot's persona, and its skills (when each applies, what to do, the files and conventions, and when it's done).
+            This file is the recipe Mux Bot reads for this project, in Mux Bot's template schema (schema 2): what it asks first, the bot's persona, and its skills (when each applies, what to do, the files and conventions, and when it's done).
 
             ## Questions
 

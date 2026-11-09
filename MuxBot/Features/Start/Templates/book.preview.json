@@ -1,9 +1,9 @@
 {
-  "schema": 1,
+  "schema_version": "1.0",
   "command": "npm run dev",
   "env": {
     "PORT": "{port}",
-    "HOST": "127.0.0.1",
+    "HOST": "0.0.0.0",
     "VITE_HMR_PORT": "{hmrPort}"
   },
   "ready": {
@@ -12,16 +12,5 @@
   "install": {
     "command": "npm ci --no-audit --no-fund",
     "unless_exists": "node_modules"
-  },
-  "conventions": "A book manuscript in Markdown. Each piece is a file in manuscript/front/, manuscript/chapters/ or manuscript/back/ with a front matter block (title, status, drafted_by, optional part); book.json holds the title, author, publishing details and the reading order, and the title page, copyright page and contents are built from it. Notes the book needs are in notes/. The reader app is in src/; the book's typography is the variables at the top of src/styles.css.",
-  "page_file": "manuscript/chapters/{page}.md",
-  "pages": [
-    "/",
-    "/desk",
-    "/notes"
-  ],
-  "viewports": [
-    "desktop",
-    "phone"
-  ]
+  }
 }

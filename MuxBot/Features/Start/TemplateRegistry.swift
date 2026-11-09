@@ -79,8 +79,10 @@ final class TemplateRegistry: Sendable {
 
     static func check(playbook: Data, preview: Data) -> TemplateDetails {
         do {
-            try TemplateSchema.checkPreview(preview)
-            return .ready(try Playbook.parse(String(decoding: playbook, as: UTF8.self)))
+            let parsed = try Playbook.parse(String(decoding: playbook, as: UTF8.self))
+            // Schema 2: the preview is darkmux's own recipe.
+            try TemplateSchema.checkPreview(preview, darkmuxShape: parsed.schema >= 2)
+            return .ready(parsed)
         } catch let error as Playbook.ParseError {
             return .refused(error.message)
         } catch let error as TemplateSchema.Problem {

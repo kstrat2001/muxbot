@@ -174,6 +174,32 @@ struct OwnRepoTests {
         #expect(pushed?.1?.head == "mux/tides")
     }
 
+    @Test func theBackupNeverWaitsOnTheNotificationPrompt() async throws {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        let bot = store.add(name: "Tides", instructions: "")
+        store.addResource(.repo, "https://github.com/kain/tides", to: bot)
+        bot.workspaceName = "tides-1"
+        bot.githubStart = GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides")
+        brain.runs.githubToken = { "ghu_abc" }
+        brain.runs.changesFetcher = { _ in
+            DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
+                                  files: [.init(path: "a.txt", mode: "100644", content: "YQo=", deleted: nil)])
+        }
+        let pushed = Counter()
+        brain.runs.prPusher = { _, _, _, _, _ in pushed.add(); return GitHubPR.Pushed(commit: "c1") }
+        // macOS's "allow notifications?" prompt that nobody answers.
+        brain.runs.noticePoster = { _, _ in try? await Task.sleep(for: .seconds(3600)) }
+        let run = store.proposeRun(task: "Fix it", crew: .coder, on: bot)
+        store.apply(.approve, to: run)
+        let finishing = Task { await brain.runs.finishRun(run, status: try! JSONDecoder().decode(DarkmuxClient.WorkStatus.self,
+            from: Data(#"{"status":"done","result":{"final_assistant":"done"},"changes":{"files":[{"path":"a.txt","added":1,"removed":0}]},"commit":"abc1234","branch":"main"}"#.utf8)),
+                                                               store: store) }
+        for _ in 0..<50 where pushed.count == 0 { try await Task.sleep(for: .milliseconds(100)) }
+        finishing.cancel()
+        #expect(pushed.count == 1, "backed up while the prompt waits")
+    }
+
     @Test func thePushBuildsOnTheGitHubStartAndGoesToTheBotsBranch() async throws {
         GitHubStub.reset()
         GitHubStub.on("POST /repos/kain/tides/git/blobs", 201, #"{"sha":"b1"}"#)
