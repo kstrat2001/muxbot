@@ -67,6 +67,21 @@ protocol PageInspecting: AnyObject {
 }
 
 /// A bug report drafted from what the user described, plus page facts.
+extension BugReport {
+    /// What the bot says when you report something cut off or off the
+    /// screen and the page fits at every width it measured.
+    static let pageFitsText = "The page itself fits at every width I checked. If the preview looks cut off, it may be the preview panel."
+
+    /// A complaint about the page running past the screen's edge.
+    static func isOverflowComplaint(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let phrases = ["off the screen", "off screen", "off-screen", "offscreen", "cut off", "cut-off", "overflow",
+                       "sideways", "horizontal scroll", "scrolls horizontally", "wider than", "clipped", "off the edge",
+                       "past the edge", "off the side", "spills"]
+        return phrases.contains { lower.contains($0) }
+    }
+}
+
 struct BugDraft: Sendable, Equatable, Codable {
     var title: String
     var described: String
@@ -81,6 +96,19 @@ struct BugDraft: Sendable, Equatable, Codable {
     var expected: String? = nil
     /// The file and rule the measurement points at.
     var likelyPlace: String? = nil
+    /// The card's one plain sentence: what the measurement found, without
+    /// rules, files or selectors.
+    var plain: String? = nil
+
+    /// The card's main text.
+    var headline: String {
+        if let plain, !plain.isEmpty { return plain }
+        return facts.isEmpty ? "Drafted from your description." : "Drafted from your description; the measurements are in the details."
+    }
+
+    /// Every measurement, behind the card's Show details (the issue and the
+    /// brief to Coder carry them all in `body`).
+    var details: String { facts.joined(separator: "\n") }
 
     var body: String {
         var lines = [

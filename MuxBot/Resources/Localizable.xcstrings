@@ -1167,6 +1167,9 @@
     "Reinstalls the project's packages, then starts the preview again. Your files aren't touched." : {
 
     },
+    "Reload the preview" : {
+
+    },
     "Remove" : {
 
     },
