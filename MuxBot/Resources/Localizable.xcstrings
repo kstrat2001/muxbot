@@ -184,6 +184,9 @@
     "Add folder…" : {
 
     },
+    "Added %@, which you approved, to the pull request." : {
+
+    },
     "Adds “%@” to your answer" : {
 
     },
@@ -220,11 +223,24 @@
     "Approve" : {
 
     },
+    "Approve it in Mux Bot on your Mac." : {
+
+    },
     "Approve on GitHub" : {
 
     },
     "Approve this app on your Mac" : {
 
+    },
+    "Approve writes %@ into your folder %@, uncommitted, and adds it to this bot's next pull request. It never replaces a file that's already there." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Approve writes %1$@ into your folder %2$@, uncommitted, and adds it to this bot's next pull request. It never replaces a file that's already there."
+          }
+        }
+      }
     },
     "Approved" : {
 
@@ -319,6 +335,16 @@
     "Checking the done-when in the preview…" : {
 
     },
+    "Choose %@ to let Mux Bot write %@ into it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Choose %1$@ to let Mux Bot write %2$@ into it."
+          }
+        }
+      }
+    },
     "Choosing the model" : {
 
     },
@@ -346,6 +372,9 @@
     "Coming soon: a bot drafts the recipe for you to approve." : {
 
     },
+    "Command" : {
+
+    },
     "Committed to %@ (%@)" : {
       "localizations" : {
         "en" : {
@@ -370,6 +399,9 @@
 
     },
     "Copied" : {
+
+    },
+    "Copies %@ from your checkout into darkmux's copy (never committed)." : {
 
     },
     "Copy" : {
@@ -413,6 +445,9 @@
           }
         }
       }
+    },
+    "Couldn't write it: %@" : {
+
     },
     "Create" : {
 
@@ -484,6 +519,9 @@
           }
         }
       }
+    },
+    "Environment" : {
+
     },
     "Every run uses %@. If it isn't running, the card says so." : {
 
@@ -584,6 +622,9 @@
     "Hide this here (and its badge) until something new needs you; it stays in Activity" : {
 
     },
+    "Hot reload" : {
+
+    },
     "How does this work?" : {
 
     },
@@ -602,6 +643,9 @@
     "Idle" : {
 
     },
+    "Install" : {
+
+    },
     "Install LM Studio and download a model, or open it and turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
       "localizations" : {
         "en" : {
@@ -613,6 +657,9 @@
       }
     },
     "Install it in Terminal with Homebrew (skip this if you have it). Mux Bot can't tell until darkmux's app connection runs." : {
+
+    },
+    "Its .darkmux folder is a link, so I won't write through it." : {
 
     },
     "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
@@ -628,6 +675,12 @@
 
     },
     "LM Studio has %lld models." : {
+
+    },
+    "Left out %@ you approved: the bot's changes already have one, and I don't write over it." : {
+
+    },
+    "Left out %@ you approved: the repo already has one, and I don't write over it." : {
 
     },
     "Live" : {
@@ -767,6 +820,12 @@
 
     },
     "Not available: %@." : {
+
+    },
+    "Not found in the project's files." : {
+
+    },
+    "Not found: fill it in" : {
 
     },
     "Not known yet" : {
@@ -967,6 +1026,9 @@
     "Ready on %@" : {
 
     },
+    "Ready when this page answers" : {
+
+    },
     "Remove" : {
 
     },
@@ -1060,6 +1122,12 @@
 
     },
     "Set up now" : {
+
+    },
+    "Set up the preview" : {
+
+    },
+    "Set up the preview (%@)" : {
 
     },
     "Set when the app is built." : {
@@ -1180,6 +1248,9 @@
     "Tell me when a run has a result or didn't finish" : {
 
     },
+    "That isn't this bot's checkout. Choose %@." : {
+
+    },
     "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
 
     },
@@ -1198,6 +1269,21 @@
     "The messages go; runs stay in Activity." : {
 
     },
+    "The preview didn't start from the new recipe: %@. Fix the file in your checkout and open the preview again." : {
+
+    },
+    "The preview started from the new recipe." : {
+
+    },
+    "There's already a .darkmux/preview.json there; I never overwrite it." : {
+
+    },
+    "There's no preview yet, and I couldn't work out how to run this project from its files (no package.json with a dev, start or serve script). Add .darkmux/preview.json to your checkout to get one." : {
+
+    },
+    "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info." : {
+
+    },
     "Thinking" : {
 
     },
@@ -1211,6 +1297,9 @@
 
     },
     "This project has no PLAYBOOK.md, so the bot starts with general skills." : {
+
+    },
+    "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout." : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -1386,6 +1475,22 @@
     "Works on %@." : {
 
     },
+    "Write here" : {
+
+    },
+    "Written into %@" : {
+
+    },
+    "Wrote %@ into %@, uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Wrote %1$@ into %2$@, uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…"
+          }
+        }
+      }
+    },
     "You can also revoke it in Terminal:" : {
 
     },
@@ -1408,6 +1513,9 @@
 
     },
     "darkmux didn't list its models: %@" : {
+
+    },
+    "darkmux didn't start the preview from it: %@. Open the preview to try again." : {
 
     },
     "darkmux has models ready." : {
@@ -1486,13 +1594,25 @@
     "it isn't a JSON object." : {
 
     },
+    "it isn't ready yet" : {
+
+    },
     "it needs the command that starts the preview." : {
+
+    },
+    "it still finds no recipe in your checkout" : {
 
     },
     "its template (%@) isn't in the template list anymore" : {
 
     },
+    "no" : {
+
+    },
     "this Mac" : {
+
+    },
+    "yes" : {
 
     },
     "·" : {

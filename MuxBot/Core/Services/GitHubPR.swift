@@ -5,7 +5,21 @@ import Foundation
 /// the blobs, a tree on the base commit, a commit and the branch ref through
 /// GitHub's Git Data API, then the PR. darkmux never authors PRs.
 struct GitHubPR: Sendable {
-    struct PR: Equatable, Sendable { var number: Int; var url: URL }
+    struct PR: Equatable, Sendable {
+        var number: Int
+        var url: URL
+        /// Approved files (`extraFiles`) this commit added.
+        var added: [String] = []
+        /// Approved files left out, and why (never written over).
+        var skipped: [String: Skip] = [:]
+    }
+
+    enum Skip: Equatable, Sendable {
+        /// The bot's own changes already have this path.
+        case inChanges
+        /// The base branch already has it: it's in the repo now.
+        case inBase
+    }
 
     enum Failure: Error, Equatable, LocalizedError {
         /// The Mux Bot GitHub App can't write to this repo (not installed there).
@@ -27,7 +41,8 @@ struct GitHubPR: Sendable {
     /// Where this Mac keeps the commit it last wrote to each bot branch.
     var local: LocalBotState = .shared
 
-    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String, bot: UUID) async throws -> PR {
+    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String, bot: UUID,
+              extraFiles: [String: Data] = [:]) async throws -> PR {
         let api = "https://api.github.com/repos/\(repo)"
         struct SHA: Decodable { var sha: String }
         struct Commit: Decodable { struct Tree: Decodable { var sha: String }; var tree: Tree }
@@ -52,6 +67,19 @@ struct GitHubPR: Sendable {
                 entries.append(["path": file.path, "mode": file.mode ?? "100644", "type": "blob", "sha": blob.sha])
             }
         }
+        // Files you approved for the PR (a preview recipe): exactly those
+        // bytes, never over the bot's own change or one the base has.
+        var added: [String] = []
+        var skipped: [String: Skip] = [:]
+        for (path, data) in extraFiles.sorted(by: { $0.key < $1.key }) {
+            if changes.files.contains(where: { $0.path == path }) { skipped[path] = .inChanges; continue }
+            let encoded = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+            let existing: [String: AnyCodable]? = try await sendOptional("GET", "\(api)/contents/\(encoded)?ref=\(changes.base)", repo: repo)
+            if existing != nil { skipped[path] = .inBase; continue }
+            let blob: SHA = try await send("POST", "\(api)/git/blobs", ["content": data.base64EncodedString(), "encoding": "base64"], repo: repo)
+            entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blob.sha])
+            added.append(path)
+        }
         let base: Commit = try await send("GET", "\(api)/git/commits/\(changes.base)", nil, repo: repo)
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
         let parent = remote?.object.sha ?? changes.base
@@ -72,13 +100,13 @@ struct GitHubPR: Sendable {
         struct Pull: Decodable { var number: Int; var html_url: String }
         do {
             let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": changes.branch, "base": changes.baseBranch, "body": body], repo: repo)
-            return PR(number: pull.number, url: URL(string: pull.html_url)!)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
         } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
             // The PR is already open for this branch; it now shows the new commit.
             let owner = repo.split(separator: "/").first.map(String.init) ?? ""
             let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(changes.branch)&state=open", nil, repo: repo)
             guard let pull = open.first else { throw Failure.github(why) }
-            return PR(number: pull.number, url: URL(string: pull.html_url)!)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
         }
     }
 

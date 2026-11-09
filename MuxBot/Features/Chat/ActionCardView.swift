@@ -27,9 +27,14 @@ struct ActionCardView: View {
                 case let .tweak(_, change)?:
                     Label("Tweak the last run", systemImage: "pencil").font(AppFont.headline())
                     Text(change).font(AppFont.body())
+                case let .setUpPreview(setup)?:
+                    PreviewSetupCardView(message: message, setup: setup)
                 case nil:
                     Text(message.content).font(AppFont.body())
                 }
+                if case .setUpPreview? = message.action {
+                    // Its own buttons: Approve needs your folder first.
+                } else {
                 switch message.actionState {
                 case .waiting:
                     HStack {
@@ -41,6 +46,7 @@ struct ActionCardView: View {
                     Label("Approved", systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 case .canceled:
                     Label("Canceled", systemImage: "xmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

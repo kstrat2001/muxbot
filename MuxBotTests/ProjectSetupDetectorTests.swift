@@ -25,7 +25,8 @@ struct ProjectSetupDetectorTests {
         #expect(d.framework?.value == "Vite")
         #expect(d.command?.value == "pnpm dev --port $PORT --strictPort --host 127.0.0.1")
         #expect(d.install?.value == "pnpm install --frozen-lockfile")
-        let recipe = try #require(ProjectSetupDetector.recipe(d))
+        let data = try #require(PreviewSetup(d, folderName: "site").recipeData)
+        let recipe = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(recipe["schema_version"] as? String == "1.0")
         #expect((recipe["env"] as? [String: String]) == ["PORT": "{port}"], "darkmux substitutes {port} only in env")
     }
@@ -58,7 +59,7 @@ struct ProjectSetupDetectorTests {
         #expect(ProjectSetupDetector.detect(packageJSON: nil, files: ["Cargo.toml"]).isEmpty)
         #expect(ProjectSetupDetector.detect(packageJSON: #"{"scripts":{"test":"jest"}}"#, files: []).isEmpty)
         #expect(ProjectSetupDetector.detect(packageJSON: "not json", files: []).isEmpty)
-        #expect(ProjectSetupDetector.recipe(ProjectSetupDetector.detect(packageJSON: nil, files: [])) == nil)
+        #expect(PreviewSetup(ProjectSetupDetector.detect(packageJSON: nil, files: []), folderName: "x").recipeData == nil)
     }
 
     @Test func watchWithoutHMRSaysSo() {

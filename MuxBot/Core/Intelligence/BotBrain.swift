@@ -54,6 +54,8 @@ enum BotAction: Sendable, Equatable, Codable {
     case addResource(kind: ResourceKind, value: String)
     /// Continue a run that just finished with a follow-up (a Tweak).
     case tweak(runId: UUID, change: String)
+    /// Write a preview recipe into your own checkout and the next PR.
+    case setUpPreview(PreviewSetup)
 }
 
 /// One bot turn: what it says, and what it proposes to do.
@@ -307,6 +309,10 @@ final class BotBrain {
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
     /// Runs, work copies and previews.
     let runs = RunCoordinator()
+    /// Your checkout of a bot's repo (tests); else its bookmark.
+    @ObservationIgnored var checkoutFolder: ((Bot) -> URL?)?
+    /// Reads a checkout's package.json and root names (tests); else the disk.
+    @ObservationIgnored var checkoutReader: ((URL) -> (packageJSON: String?, files: Set<String>))?
     /// Mux Bot as a guide, in its own thread.
     let guide = LeadGuide()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
@@ -994,6 +1000,16 @@ final class BotBrain {
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             store.addResource(kind, value, to: bot)
             note = "Added \(kind.label.lowercased()): \(value)"
+        case let .setUpPreview(setup):
+            // The card wrote the file into your checkout before approving
+            // (it needed your OK on the folder); here it's kept for the PR
+            // and the preview starts from it once, to check it.
+            guard let bot = chat.botId.flatMap(store.bot(id:)), let data = setup.recipeData else { return }
+            LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PreviewSetup.path: data]) { $1 } }
+            store.append(.system, String(localized: "Wrote \(PreviewSetup.path) into \(setup.folderName), uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…"),
+                         to: store.conversation(for: chat))
+            Task { await checkPreview(bot, store: store) }
+            return
         case let .tweak(runId, change):
             guard let run = store.run(id: runId) else { return }
             // A finished run continues as a Tweak; one that was stopped or
@@ -1003,6 +1019,43 @@ final class BotBrain {
             return
         }
         store.append(.system, note, to: store.conversation(for: chat))
+    }
+
+    /// After a recipe is written: start the preview once and say how it went.
+    func checkPreview(_ bot: Bot, store: BotStore) async {
+        runs.livePreviews[bot.id] = nil
+        runs.noRecipe.remove(bot.id)
+        await runs.ensurePreview(for: bot)
+        let thread = store.conversation(for: .bot(bot.id))
+        switch runs.livePreviews[bot.id]?.status {
+        case .ready?: store.append(.system, String(localized: "The preview started from the new recipe."), to: thread)
+        case let .failed(why)?: store.append(.system, String(localized: "The preview didn't start from the new recipe: \(why). Fix the file in your checkout and open the preview again."), to: thread)
+        default: store.append(.system, String(localized: "darkmux didn't start the preview from it: \(runs.noRecipe.contains(bot.id) ? String(localized: "it still finds no recipe in your checkout") : String(localized: "it isn't ready yet")). Open the preview to try again."), to: thread)
+        }
+    }
+
+    /// The project has no preview recipe: offer one worked out from its own
+    /// files (an Approve card), or say a clone needs your checkout. Once per
+    /// thread.
+    func offerPreviewSetup(for bot: Bot, store: BotStore) {
+        let thread = store.conversation(for: .bot(bot.id))
+        let messages = thread.messages ?? []
+        if messages.contains(where: { if case .setUpPreview? = $0.action { true } else { false } }) { return }
+        let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
+        guard let folder else {
+            let note = String(localized: "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info.")
+            if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
+            return
+        }
+        let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
+        let draft = ProjectSetupDetector.detect(packageJSON: files.packageJSON, files: files.files)
+        guard !draft.isEmpty else {
+            let note = String(localized: "There's no preview yet, and I couldn't work out how to run this project from its files (no package.json with a dev, start or serve script). Add .darkmux/preview.json to your checkout to get one.")
+            if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
+            return
+        }
+        store.append(.assistant, String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
+        store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
     }
 
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],

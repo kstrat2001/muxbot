@@ -373,6 +373,7 @@ final class RunCoordinator {
         } catch let error as DarkmuxClient.ClientError where error.status == 404 {
             Self.previewLog.info("preview \(name, privacy: .public): the repo has no preview recipe")
             livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
+            noRecipe.insert(bot.id)      // the thread offers to set one up
         } catch {
             Self.previewLog.error("preview \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
@@ -473,6 +474,8 @@ final class RunCoordinator {
     var workUndoer: ((String) async throws -> DarkmuxClient.UndoResult)?
 
     /// Tests answer workspace requests here; nil asks darkmux.
+    /// Bots whose project has no preview recipe darkmux will run (its 404).
+    var noRecipe: Set<UUID> = []
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
     /// Finds a use case's template by id (tests); else the template registry.
     var templateSource: ((String) async -> TemplateEntry?)?
@@ -754,8 +757,20 @@ final class RunCoordinator {
             }
             let runs = unshippedRuns(bot, store: store)
             let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
-            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id)
+            let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
+            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
+                                                           extraFiles: approved)
             store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
+            for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
+            for (path, why) in pr.skipped.sorted(by: { $0.key < $1.key }) {
+                switch why {
+                case .inChanges: store.append(.system, String(localized: "Left out \(path) you approved: the bot's changes already have one, and I don't write over it."), to: thread)
+                case .inBase:
+                    // It's in the repo now: nothing more to carry.
+                    LocalBotState.shared.update(bot.id) { $0.prFiles?[path] = nil }
+                    store.append(.system, String(localized: "Left out \(path) you approved: the repo already has one, and I don't write over it."), to: thread)
+                }
+            }
         } catch GitHubPR.Failure.cantWrite(let repo) {
             let install = await github.installState(for: repo)
             if case let .notInstalled(url) = install {
