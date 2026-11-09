@@ -35,16 +35,7 @@ struct AvatarPickerTests {
     /// The picker as it looks at phone width, for review.
     @MainActor @Test func renderThePicker() throws {
         let view = AvatarPickerSnapshot().frame(width: 390).background(Color.white)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        #if os(macOS)
-        let image = try #require(renderer.nsImage)
-        let tiff = try #require(image.tiffRepresentation)
-        let bitmap = try #require(NSBitmapImageRep(data: tiff))
-        let png = try #require(bitmap.representation(using: .png, properties: [:]))
-        #else
-        let png = try #require(renderer.uiImage?.pngData())
-        #endif
+        let png = try renderPNG(view)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("avatar-picker.png")
         try png.write(to: url)
         #expect(png.count > 10_000)

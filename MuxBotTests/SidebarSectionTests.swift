@@ -27,14 +27,9 @@ struct SidebarSectionTests {
             let view = LeadBotTile(selected: true)
                 .frame(width: 240)
                 .padding(16)
-                .background(scheme == .dark ? Color(nsColor: NSColor(hex: "1e1e1e")) : .white)
+                .background(scheme == .dark ? Color(hex: "1e1e1e") : .white)
                 .environment(\.colorScheme, scheme)
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            let image = try #require(renderer.nsImage)
-            let tiff = try #require(image.tiffRepresentation)
-            let bitmap = try #require(NSBitmapImageRep(data: tiff))
-            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            let png = try renderPNG(view)
             try png.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("lead-tile-\(scheme == .dark ? "dark" : "light").png"))
         }
     }

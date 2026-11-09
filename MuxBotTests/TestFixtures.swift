@@ -1,5 +1,25 @@
 import Foundation
+import SwiftUI
+import Testing
+#if os(macOS)
+import AppKit
+#endif
 @testable import MuxBot
+
+/// A view rendered to PNG, on either platform (render tests).
+@MainActor
+func renderPNG(_ view: some View, scale: CGFloat = 2) throws -> Data {
+    let renderer = ImageRenderer(content: view)
+    renderer.scale = scale
+    #if os(macOS)
+    let image = try #require(renderer.nsImage)
+    let tiff = try #require(image.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: tiff))
+    return try #require(bitmap.representation(using: .png, properties: [:]))
+    #else
+    return try #require(renderer.uiImage?.pngData())
+    #endif
+}
 
 /// Bots the routing tests use (formerly the app's personal starter bots).
 enum Fixtures {

@@ -1,7 +1,14 @@
 import Foundation
-import AppKit
 import Testing
+import WebKit
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 @testable import MuxBot
+
+#if os(macOS)
 
 /// Copy puts real, readable types on the macOS pasteboard: an image as TIFF
 /// (what Finder's Show Clipboard, Preview and most apps read) and PNG,
@@ -45,8 +52,7 @@ struct ClipboardTests {
         #expect(board.data(forType: .tiff) == nil, "the old contents are cleared")
     }
 }
-
-import WebKit
+#endif
 
 /// What the preview's screenshot export actually hands back, so the copy
 /// path decodes it rather than labeling it PNG blindly.
@@ -58,9 +64,15 @@ struct PreviewExportFormatTests {
         for _ in 0..<100 where page.isLoading { try await Task.sleep(for: .milliseconds(50)) }
         let data = try await page.exported(as: .image())
         #expect(data.prefix(4) == Data([0x89, 0x50, 0x4e, 0x47]), "WebPage exports PNG")
+        #if os(macOS)
         let board = NSPasteboard(name: NSPasteboard.Name("com.darklyenergized.muxbot.tests"))
         #expect(Clipboard.copyImage(data, to: board))
         #expect(board.data(forType: .tiff) != nil && board.data(forType: .png) != nil)
+        #else
+        // iOS copies only to the general pasteboard, which tests never touch:
+        // check the decode the copy path relies on.
+        #expect(UIImage(data: data)?.pngData() != nil)
+        #endif
     }
 
     /// The visible-region capture, exactly as the preview's camera does it.
@@ -71,8 +83,12 @@ struct PreviewExportFormatTests {
         let json = try await page.callJavaScript("return JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])") as? String
         let v = try #require(json.flatMap { try? JSONDecoder().decode([Double].self, from: Data($0.utf8)) })
         let data = try await page.exported(as: .image(region: .rect(CGRect(x: v[0], y: v[1], width: v[2], height: v[3]))))
+        #if os(macOS)
         let board = NSPasteboard(name: NSPasteboard.Name("com.darklyenergized.muxbot.tests"))
         #expect(Clipboard.copyImage(data, to: board))
         #expect(NSImage(pasteboard: board) != nil)
+        #else
+        #expect(UIImage(data: data) != nil)
+        #endif
     }
 }
