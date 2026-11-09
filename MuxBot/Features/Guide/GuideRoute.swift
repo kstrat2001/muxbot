@@ -36,7 +36,9 @@ enum GuideRoute: Equatable, Sendable {
         guard !lower.isEmpty, Intent.issueNumber(in: text) == nil, !WorkStatus.isWorkQuestion(lower),
               Intent.parse(text).0 == nil else { return nil }
         if setupPhrases.contains(where: lower.contains) { return .setup }
-        let resource = repoOrFolder(in: text)
+        // A path in a question ("What does /client/profiles do?") is
+        // something to explain, not a folder to make a bot for.
+        let resource = repoLink(in: text) ?? (isQuestion(lower) ? nil : folderPath(in: text))
         if resource != nil || firstBotPhrases.contains(where: lower.contains) {
             return .firstBot(resource: resource)
         }
@@ -53,13 +55,18 @@ enum GuideRoute: Equatable, Sendable {
         lower.hasSuffix("?") || questionStarts.contains { lower == $0 || lower.hasPrefix($0 + " ") || lower.hasPrefix($0 + "'") }
     }
 
-    /// A GitHub repo link or a folder path in the message.
-    static func repoOrFolder(in text: String) -> String? {
-        for word in text.split(whereSeparator: \.isWhitespace).map(String.init) {
-            let trimmed = word.trimmingCharacters(in: CharacterSet(charactersIn: "<>()[],.;\"'"))
-            if GitHubIssue.repoSlug(from: trimmed) != nil, trimmed.contains("github.com") { return trimmed }
-            if trimmed.hasPrefix("/") || trimmed.hasPrefix("~/") { return trimmed }
-        }
-        return nil
+    private static func words(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isWhitespace).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "<>()[],.;:?!\"'")) }
+    }
+
+    /// A GitHub repo link in the message.
+    static func repoLink(in text: String) -> String? {
+        words(text).first { GitHubIssue.repoSlug(from: $0) != nil && $0.contains("github.com") }
+    }
+
+    /// A path that looks like a folder on this Mac (under /Users or ~), not
+    /// an endpoint like /client/profiles.
+    static func folderPath(in text: String) -> String? {
+        words(text).first { ($0.hasPrefix("/Users/") || $0.hasPrefix("~/")) && $0.count > 2 }
     }
 }

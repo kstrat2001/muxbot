@@ -18,6 +18,21 @@ struct GuideRouteTests {
         #expect(GuideRoute.route("let's make my first bot") == .firstBot(resource: nil))
     }
 
+    /// A path in a question is something to explain, not a folder to make a
+    /// bot for.
+    @Test(arguments: ["What does /client/profiles do?", "what is ~/Library/Containers for", "why does /Users/kain/hcr fail?"])
+    func aPathInAQuestionIsHelp(text: String) {
+        #expect(GuideRoute.route(text) == .help)
+    }
+
+    @Test func aFolderPathMakesTheFirstBotOnlyWhenItLooksLikeAFolder() {
+        #expect(GuideRoute.route("make a bot for ~/code/hcr") == .firstBot(resource: "~/code/hcr"))
+        #expect(GuideRoute.route("/Users/kain/code/hcr") == .firstBot(resource: "/Users/kain/code/hcr"))
+        #expect(GuideRoute.route("/client/profiles") == nil, "an endpoint, not a folder")
+        #expect(GuideRoute.route("can you make a bot for https://github.com/kstrat2001/hcr?")
+                == .firstBot(resource: "https://github.com/kstrat2001/hcr"), "a repo link still works in a question")
+    }
+
     @Test func settingsAreNamedByWhatTheyDo() {
         #expect(GuideRoute.route("switch the model choice to always ask") == .setting(.modelMode))
         #expect(GuideRoute.route("what does Always ask do?") == .setting(.modelMode))
@@ -188,6 +203,18 @@ struct LeadGuideFlowTests {
         let bot = try #require(store.allBots().first)
         #expect(bot.name == "hcr")
         #expect(bot.repoSlugs == ["kstrat2001/hcr"])
+    }
+
+    /// Folders come only from Add folder (a security-scoped bookmark, kept on
+    /// this Mac): a pasted path never becomes a synced resource.
+    @Test func aFolderPathGoesToNewBotNotACard() async throws {
+        let (store, brain) = setUp()
+        await brain.send("make a bot for /Users/kain/code/hcr", in: .lead, store: store)
+        let messages = store.conversation(for: .lead).messages ?? []
+        #expect(!messages.contains { $0.kind == .actionCard }, "no createBot card with a path")
+        #expect(lastGuideCard(store) == .firstBot)
+        #expect(messages.contains { $0.role == .assistant && $0.content.contains("Add folder") })
+        #expect(store.allBots().isEmpty)
     }
 
     @Test func noLinkYetOffersNewBot() async {

@@ -21,7 +21,13 @@ final class LeadGuide {
             store.append(.assistant, String(localized: "Here's what Mux Bot needs. Each step ticks itself off once it's working."), to: thread)
             store.postGuideCard(.setup, summary: String(localized: "Setup check"))
         case let .firstBot(resource?):
-            let draft = Self.draft(for: resource)
+            guard let draft = Self.draft(for: resource) else {
+                // Folders come only from Add folder (a bookmark kept on this
+                // Mac): a typed path would be saved in synced data.
+                store.append(.assistant, String(localized: "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it."), to: thread)
+                store.postGuideCard(.firstBot, summary: String(localized: "Make your first bot"))
+                return
+            }
             store.append(.assistant, String(localized: "I can make \(draft.name) for that. Approve to add it."), to: thread)
             store.proposeAction(.createBot(draft), in: .lead)
         case .firstBot(nil):
@@ -39,10 +45,10 @@ final class LeadGuide {
         }
     }
 
-    /// A bot for a repo link or folder path, named after it.
-    static func draft(for resource: String) -> BotDraft {
-        let name = GitHubIssue.repoSlug(from: resource).map { String($0.split(separator: "/").last ?? "") }
-            ?? URL(fileURLWithPath: (resource as NSString).expandingTildeInPath).lastPathComponent
+    /// A bot for a repo link, named after it; nil for anything else (a
+    /// folder goes through New bot's Add folder).
+    static func draft(for resource: String) -> BotDraft? {
+        guard let name = GitHubIssue.repoSlug(from: resource).map({ String($0.split(separator: "/").last ?? "") }) else { return nil }
         return BotDraft(name: name.isEmpty ? String(localized: "New bot") : name,
                         instructions: String(localized: "Works on \(resource)."), resource: resource)
     }
