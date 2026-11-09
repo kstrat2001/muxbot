@@ -23,7 +23,9 @@ env:
     MUXBOT_ENTITLEMENTS_IOS=MuxBot.entitlements
 
 jobs:
-  build-and-test:
+  # Two jobs in parallel: each is a full compile on a 3-core runner (~2 to
+  # 2.5 minutes), and the tests themselves take under 30 seconds.
+  ios-build:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -43,8 +45,22 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -quiet CODE_SIGNING_ALLOWED=NO $NO_ICLOUD
 
-      # The scheme also lists the iOS-only UI test target, so iOS products
-      # get built here too: sign ad hoc on macOS only, not at all for iOS.
+  macos-test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse a local signing/iCloud config
+        run: test ! -e Config/Local.xcconfig
+
+      - name: Generate the Xcode project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+
+      # Sign ad hoc on macOS only, and never for iOS (the scheme also lists
+      # the iOS-only UI test target).
       - name: Unit tests on macOS
         run: |
           xcodebuild test -project MuxBot.xcodeproj -scheme MuxBot \
