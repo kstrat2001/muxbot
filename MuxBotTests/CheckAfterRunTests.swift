@@ -65,6 +65,28 @@ struct LayoutCheckTests {
         #expect(!LayoutCheck.evaluate(s, after: [overflowingAt820(), fitsAt(1440)]).met)
     }
 
+    /// A page whose section text touches the edges at 390px (0px side
+    /// padding), nothing wider than the screen.
+    func edgesAt390(padded: Bool) -> LayoutFacts {
+        LayoutFacts(viewport: 390, scrollWidth: 390, clientWidth: 390, wide: [], media: [],
+                    sections: [.init(selector: "section.pricing", width: 390, left: 0, display: "block", columns: nil,
+                                     paddingLeft: padded ? "16px" : "0px", paddingRight: padded ? "16px" : "0px",
+                                     fontSize: "16px", maxWidth: "none", textLeft: padded ? 16 : 0, textRight: padded ? 374 : 390)])
+    }
+
+    @Test func anEdgesSpecChecksThePaddingAgain() throws {
+        let before = [edgesAt390(padded: false), fitsAt(1440)]
+        let m = LayoutMeasure.summarize(before, focus: 390)
+        #expect(m.doneWhen == "at 390px section.pricing keeps side padding, and 1440px looks the same as now.", "\(m.doneWhen ?? "")")
+        let s = try #require(LayoutCheck.spec(from: m, before: before, focus: 390, page: URL(string: "http://x/")!))
+        #expect(s.widths.contains(390))
+        let still = LayoutCheck.evaluate(s, after: [edgesAt390(padded: false), fitsAt(1440)])
+        #expect(!still.met, "still 0px padding is not met")
+        #expect(still.failures == ["At 390px section.pricing's text still touches the page edges (0px side padding)."], "\(still.failures)")
+        let fixed = LayoutCheck.evaluate(s, after: [edgesAt390(padded: true), fitsAt(1440)])
+        #expect(fixed.met, "\(fixed.failures)")
+    }
+
     @Test func theRerunMessageCarriesTheNewNumbers() {
         let text = LayoutCheck.rerunChange(LayoutCheck.Result(met: false, failures: ["At 1024px section.hero.container.flex is a row, not a column."]))
         #expect(text == "Not done yet. Measured in the preview after your change: At 1024px section.hero.container.flex is a row, not a column. Fix that, keeping everything else as it is now.")

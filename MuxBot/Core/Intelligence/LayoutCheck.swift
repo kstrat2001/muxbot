@@ -16,10 +16,13 @@ enum LayoutCheck {
         var unchanged: [Int: String] = [:]
         /// Widths where nothing may be wider than the screen.
         var overflowWidths: [Int] = []
+        /// Sections whose text touched the page edges, by width: they
+        /// should keep side padding there now.
+        var edges: [Int: [String]] = [:]
 
         var widths: [Int] {
             var out = rangeWidths + unchanged.keys.sorted()
-            for w in overflowWidths where !out.contains(w) { out.append(w) }
+            for w in overflowWidths + edges.keys.sorted() where !out.contains(w) { out.append(w) }
             return out
         }
     }
@@ -32,16 +35,21 @@ enum LayoutCheck {
     /// What to check after the run, from the measurement the brief was
     /// built on; nil when that measurement found nothing to fix.
     static func spec(from m: LayoutMeasure.Measured, before: [LayoutFacts], focus: Int, page: URL) -> Spec? {
+        var edges: [Int: [String]] = [:]
+        for f in before {
+            let touching = f.sections.filter { LayoutMeasure.touchesEdges($0, viewport: f.viewport) }.map(\.selector)
+            if !touching.isEmpty { edges[f.viewport] = touching }
+        }
         if let sel = m.switchSelector, let wanted = m.switchWanted, let below = m.switchBelow, let high = m.switchHigh {
             let range = Set(LayoutMeasure.presets.filter { $0 > below && $0 <= high } + [focus]).sorted()
             var unchanged: [Int: String] = [:]
             for f in before where f.viewport == below || f.viewport == LayoutMeasure.desktop {
                 if let s = f.sections.first(where: { $0.selector == sel }) { unchanged[f.viewport] = s.arrangementText }
             }
-            return Spec(page: page, selector: sel, wanted: wanted, rangeWidths: range, unchanged: unchanged, overflowWidths: range)
+            return Spec(page: page, selector: sel, wanted: wanted, rangeWidths: range, unchanged: unchanged, overflowWidths: range, edges: edges)
         }
         guard m.foundProblem else { return nil }
-        return Spec(page: page, overflowWidths: [focus])
+        return Spec(page: page, overflowWidths: [focus], edges: edges)
     }
 
     static func evaluate(_ spec: Spec, after: [LayoutFacts]) -> Result {
@@ -68,6 +76,20 @@ enum LayoutCheck {
                 failures.append("At \(w)px the page is \(over)px wider than the screen.")
             } else if let first = f.wide.first(where: { $0.width > f.viewport || $0.right > f.viewport }) {
                 failures.append("At \(w)px \(first.selector) is wider than the screen.")
+            }
+        }
+        // The "keeps side padding" done-when: each section that touched the
+        // edges, measured again at its width.
+        for (w, selectors) in spec.edges.sorted(by: { $0.key < $1.key }) {
+            guard let f = facts(w) else {
+                if !spec.overflowWidths.contains(w) && !spec.rangeWidths.contains(w) { failures.append("At \(w)px the page didn't load.") }
+                continue
+            }
+            for sel in selectors {
+                guard let s = f.sections.first(where: { $0.selector == sel }) else { failures.append("At \(w)px \(sel) wasn't found."); continue }
+                if LayoutMeasure.touchesEdges(s, viewport: w) {
+                    failures.append("At \(w)px \(sel)'s text still touches the page edges (0px side padding).")
+                }
             }
         }
         return Result(met: failures.isEmpty, failures: failures)

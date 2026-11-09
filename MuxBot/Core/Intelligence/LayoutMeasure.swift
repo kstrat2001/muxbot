@@ -141,10 +141,7 @@ enum LayoutMeasure {
             let at = "At \(f.viewport)px:"
             let over = f.scrollWidth - f.clientWidth
             let wide = f.wide.filter { $0.width > f.viewport || $0.right > f.viewport }
-            let edges = f.sections.filter { s in
-                guard px(s.paddingLeft) == 0 || px(s.paddingRight) == 0 else { return false }
-                return (s.textLeft.map { $0 <= 1 } ?? false) || (s.textRight.map { $0 >= f.viewport - 1 } ?? false)
-            }
+            let edges = f.sections.filter { touchesEdges($0, viewport: f.viewport) }
             if over > 0 {
                 lines.append("\(at) the page is \(over)px wider than the screen (scrollWidth \(f.scrollWidth)).")
             }
@@ -258,6 +255,13 @@ enum LayoutMeasure {
     }
 
     /// "16px" → 16.
+    /// A section whose text runs to the page's edge with 0px side padding
+    /// (an inner container keeping the text in is fine).
+    static func touchesEdges(_ s: LayoutFacts.Section, viewport: Int) -> Bool {
+        guard px(s.paddingLeft) == 0 || px(s.paddingRight) == 0 else { return false }
+        return (s.textLeft.map { $0 <= 1 } ?? false) || (s.textRight.map { $0 >= viewport - 1 } ?? false)
+    }
+
     private static func px(_ value: String) -> Double { Double(value.replacingOccurrences(of: "px", with: "")) ?? -1 }
 
     /// "/inertia/css/app.css?t=1" → "inertia/css/app.css"; nil for inline styles.
