@@ -32,12 +32,11 @@ struct AvatarPickerTests {
         #expect(preview.look == BotLook(animal: .owl, bodyHex: "0e9f8e", eyeHex: "ffffff"), "only the animal changes")
     }
 
-    /// The picker as it looks at phone width, for review.
+    /// The picker as it looks at phone width (MUXBOT_SHOTS for a look).
     @MainActor @Test func renderThePicker() throws {
         let view = AvatarPickerSnapshot().frame(width: 390).background(Color.white)
         let png = try renderPNG(view)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("avatar-picker.png")
-        try png.write(to: url)
+        try withShotsDirectory { try png.write(to: $0.appendingPathComponent("avatar-picker.png")) }
         #expect(png.count > 10_000)
     }
 }

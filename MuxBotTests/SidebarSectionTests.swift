@@ -21,7 +21,7 @@ struct SidebarSectionTests {
         #expect(LeadBotTile.accessibilityName == "Mux Bot, your guide")
     }
 
-    /// The tile, light and dark, for review.
+    /// The tile, light and dark (MUXBOT_SHOTS for a look).
     @MainActor @Test func renderTheTile() throws {
         for scheme in [ColorScheme.light, .dark] {
             let view = LeadBotTile(selected: true)
@@ -30,7 +30,7 @@ struct SidebarSectionTests {
                 .background(scheme == .dark ? Color(hex: "1e1e1e") : .white)
                 .environment(\.colorScheme, scheme)
             let png = try renderPNG(view)
-            try png.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("lead-tile-\(scheme == .dark ? "dark" : "light").png"))
+            try withShotsDirectory { try png.write(to: $0.appendingPathComponent("lead-tile-\(scheme == .dark ? "dark" : "light").png")) }
         }
     }
 }
