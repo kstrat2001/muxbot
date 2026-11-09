@@ -76,13 +76,15 @@ final class StoreLoader {
     static var isTestHost: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
     /// UI tests launch the app with `-uiTesting`: an in-memory store with one
     /// bot whose preview is a blank page, never the real store.
-    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") }
+    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") || isUITestingEmpty }
+    /// `-uiTestingEmpty`: the same in-memory store with no bots (first launch).
+    static var isUITestingEmpty: Bool { ProcessInfo.processInfo.arguments.contains("-uiTestingEmpty") }
 
     func load() {
         do {
             let inMemory = Self.isTestHost || Self.isUITesting
             let opened = inMemory ? try SharedModelContainer.inMemory() : try SharedModelContainer.create()
-            if Self.isUITesting {
+            if Self.isUITesting, !Self.isUITestingEmpty {
                 let store = BotStore(context: opened.mainContext)
                 let bot = store.addExample()
                 store.addResource(.previewURL, "about:blank", to: bot)
