@@ -131,7 +131,11 @@ struct BotThreadView: View {
                 }
             }
         }
-        .onAppear { markRead() }
+        .onAppear {
+            markRead()
+            // Back within the grace period: the preview keeps running.
+            if let bot { brain.runs.returnToPreview(for: bot) }
+        }
         .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
             // darkmux runs the preview from the repo's recipe when you open it
             // (again once the darkmux connection is ready at launch).
@@ -141,8 +145,10 @@ struct BotThreadView: View {
             }
         }
         .onDisappear {
-            // Leaving the bot stops its dev server, so none keep running unseen.
-            if let bot { Task { await brain.runs.stopPreview(for: bot) } }
+            // Leaving the bot stops its dev server after a grace period (so
+            // coming straight back doesn't restart it), so none keep running
+            // unseen. Quitting stops them at once.
+            if let bot { brain.runs.leavePreview(for: bot) }
         }
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         #if DEBUG

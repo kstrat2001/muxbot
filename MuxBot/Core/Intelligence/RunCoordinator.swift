@@ -454,6 +454,8 @@ final class RunCoordinator {
         }
         waitingPreviews[bot.id] = nil
         previewWorkspaces[bot.id] = name
+        // Opening it again calls off a stop waiting out its grace period.
+        returnToPreview(for: bot)
         if let status = livePreviews[bot.id]?.status, !status.canRetry {
             Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
             return
@@ -529,12 +531,43 @@ final class RunCoordinator {
         }
     }
 
+    /// How long a preview keeps running after you leave its bot's thread.
+    /// Coming back (or SwiftUI rebuilding the view) within it sends darkmux
+    /// nothing, rather than a stop and then a new start.
+    static let previewStopGrace: Duration = .seconds(30)
+    /// The grace period's clock; tests move it themselves.
+    var previewGraceSleep: (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    /// Stops waiting out their grace period, by bot.
+    private var pendingStops: [UUID: Task<Void, Never>] = [:]
+
+    /// You left the bot's thread: its preview stops after
+    /// `previewStopGrace`, unless you come back first.
+    func leavePreview(for bot: Bot) {
+        guard bot.workspaceName != nil else { return }
+        pendingStops[bot.id]?.cancel()
+        pendingStops[bot.id] = Task { [weak self] in
+            guard let self else { return }
+            await self.previewGraceSleep(Self.previewStopGrace)
+            guard !Task.isCancelled else { return }
+            self.pendingStops[bot.id] = nil
+            await self.stopPreview(for: bot)
+        }
+    }
+
+    /// You're back in the bot's thread: a stop still waiting is called off.
+    func returnToPreview(for bot: Bot) {
+        pendingStops.removeValue(forKey: bot.id)?.cancel()
+    }
+
+    /// Stops the bot's preview now (the Stop button, a grace period that
+    /// ran out).
     func stopPreview(for bot: Bot) async {
         guard let name = bot.workspaceName else { return }
         await stopPreview(bot.id, workspace: name)
     }
 
     private func stopPreview(_ id: UUID, workspace name: String) async {
+        pendingStops.removeValue(forKey: id)?.cancel()
         // One that was waiting for the connection must not start later, unseen.
         if waitingPreviews.removeValue(forKey: id) != nil { livePreviews[id] = LivePreview(status: .stopped) }
         guard let status = livePreviews[id]?.status, status != .stopped, !status.isFailed else { return }
