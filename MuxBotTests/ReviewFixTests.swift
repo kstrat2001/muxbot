@@ -414,9 +414,12 @@ struct PreviewStartTests {
         brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: Self.noRecipe, status: 404) }
         await brain.runs.ensurePreview(for: bot)
         #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.noRecipe))
+        #expect(brain.runs.noRecipe.contains(bot.id), "the thread offers to set one up")
+        brain.runs.noRecipe.remove(bot.id)
         brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: Self.cloned, status: 404) }
         await brain.runs.ensurePreview(for: bot)
         #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.notYourCheckout))
+        #expect(!brain.runs.noRecipe.contains(bot.id), "a clone has no checkout to write a recipe into")
         bot.useCaseId = "website"
         await brain.runs.ensurePreview(for: bot)
         #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.newProject), "a template's project has no checkout of yours")

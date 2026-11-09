@@ -207,5 +207,7 @@ struct ExistingProjectView: View {
             router.showPreview = true
             await brain.runs.ensurePreview(for: bot)
         }
+        // No PLAYBOOK.md of its own: offer one for your checkout.
+        if projectPlaybook == nil { await brain.offerPlaybookSetup(for: bot, purpose: purpose, store: BotStore(context: context)) }
     }
 }
