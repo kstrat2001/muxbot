@@ -107,7 +107,7 @@ struct BotInfoView: View {
             Section("Preview") {
                 if bot.workspaceName != nil, let live = brain.runs.livePreviews[bot.id] {
                     HStack {
-                        Label(live.status.text, systemImage: live.status == .ready ? "play.circle.fill" : live.status.isFailed ? "exclamationmark.triangle" : "circle.dotted")
+                        Label(live.status.text, systemImage: live.status == .ready ? "play.circle.fill" : live.status.isFailed ? "exclamationmark.triangle" : live.status.isUnavailable ? "eye.slash" : "circle.dotted")
                         Spacer()
                         if live.status == .ready || live.status == .starting || live.status == .installing {
                             Button("Stop", systemImage: "stop.circle") { Task { await brain.runs.stopPreview(for: bot) } }

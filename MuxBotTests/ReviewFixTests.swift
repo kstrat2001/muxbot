@@ -393,6 +393,48 @@ struct PreviewStartTests {
         #expect(brain.runs.livePreviews[bot.id]?.status.isFailed != true)
     }
 
+    /// darkmux's own refusals (darkmux #3451), word for word at their start.
+    private static let off = "previews are off on this machine: a preview runs the workspace's own code (its package.json scripts and whatever they call, which a model may have written) on this machine as you, outside the sandbox. To allow it: `darkmux config set clients.preview.enabled true`"
+    private static let cloned = "workspace site-1 was not made from a checkout of yours (it was cloned), so it has no preview: a preview runs only from .darkmux/preview.json in your own checkout."
+    private static let noRecipe = "no .darkmux/preview.json in your checkout /Users/me/site: add .darkmux/preview.json to your own checkout of me/site (a copy in the workspace is never read)"
+
+    @Test func previewsOffOnThisMacSaysSoAndCanBeRetried() async {
+        let (_, bot, brain) = setUp()
+        brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: Self.off, status: 403) }
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.previewsOff))
+        // Turned on in Terminal: Try again starts it.
+        brain.runs.previewFetcher = { _ in LivePreview(status: .ready, url: URL(string: "http://127.0.0.1:5173")) }
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .ready)
+    }
+
+    @Test func aMissingSetupSaysWhichOne() async {
+        let (_, bot, brain) = setUp()
+        brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: Self.noRecipe, status: 404) }
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.noRecipe))
+        brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: Self.cloned, status: 404) }
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.notYourCheckout))
+        bot.useCaseId = "website"
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .unavailable(.newProject), "a template's project has no checkout of yours")
+    }
+
+    @Test func anyOtherRefusalIsAFailureInDarkmuxsWords() async {
+        let (_, bot, brain) = setUp()
+        brain.runs.previewFetcher = { _ in throw DarkmuxClient.ClientError(message: "config.json does not parse", status: 503) }
+        await brain.runs.ensurePreview(for: bot)
+        #expect(brain.runs.livePreviews[bot.id]?.status == .failed("config.json does not parse"))
+    }
+
+    @Test func aPreviewLinkIsStillShownWhenDarkmuxWontRunOne() {
+        let link = URL(string: "https://example.com")!
+        #expect(LivePreview.url(darkmux: LivePreview(status: .unavailable(.previewsOff)), resource: link) == link)
+        #expect(LivePreview.url(darkmux: LivePreview(status: .unavailable(.noRecipe)), resource: nil) == nil)
+    }
+
     @Test func pairingStartsTheWaitingPreviews() async {
         let store = TestStore.fresh()
         let bot = store.add(name: "site", instructions: "")

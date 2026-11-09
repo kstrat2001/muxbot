@@ -65,7 +65,7 @@ struct BotThreadView: View {
                             router.previewFullScreen = false
                         }
                     } else if let pending = pendingPreview, let bot {
-                        PreviewStatusView(preview: pending, retry: { Task { await brain.runs.ensurePreview(for: bot) } })
+                        PreviewStatusView(preview: pending, bot: bot, retry: { Task { await brain.runs.ensurePreview(for: bot) } })
                     }
                 }
                 .safeAreaInset(edge: .bottom) { if full { BotBar() } }
