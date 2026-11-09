@@ -24,11 +24,24 @@ struct GitHubPR: Sendable {
 
     var session: URLSession = .shared
     let token: String
+    /// Where this Mac keeps the commit it last wrote to each bot branch.
+    var local: LocalBotState = .shared
 
-    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String) async throws -> PR {
+    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String, bot: UUID) async throws -> PR {
         let api = "https://api.github.com/repos/\(repo)"
         struct SHA: Decodable { var sha: String }
         struct Commit: Decodable { struct Tree: Decodable { var sha: String }; var tree: Tree }
+
+        // The tree is the branch's full current state (the base plus every
+        // change), so the new commit may go on top of the branch only where
+        // this Mac left it (an earlier PR). Anything else there is someone
+        // else's work our tree would drop: stop before writing anything.
+        // Never a force push.
+        struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
+        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(changes.branch)", repo: repo)
+        if let remote, remote.object.sha != local[bot]?.pushedHeads?[changes.branch] {
+            throw Failure.branchMoved(changes.branch)
+        }
 
         var entries: [[String: Any]] = []
         for file in changes.files {
@@ -40,12 +53,6 @@ struct GitHubPR: Sendable {
             }
         }
         let base: Commit = try await send("GET", "\(api)/git/commits/\(changes.base)", nil, repo: repo)
-        // The tree is the branch's full current state (the base plus every
-        // change). If the branch is already on GitHub (an earlier PR), the new
-        // commit goes on top of its head and the ref moves forward; never a
-        // force push.
-        struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
-        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(changes.branch)", repo: repo)
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
         let parent = remote?.object.sha ?? changes.base
         let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": title, "tree": tree.sha, "parents": [parent]], repo: repo)
@@ -54,10 +61,14 @@ struct GitHubPR: Sendable {
         } else {
             do {
                 let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(changes.branch)", ["sha": commit.sha, "force": false], repo: repo)
-            } catch Failure.github {
+            } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("not a fast forward") {
+                // Someone pushed between our look and the move.
                 throw Failure.branchMoved(changes.branch)
             }
         }
+        // Remembered before the PR, which can still fail: the branch is ours
+        // at this commit either way.
+        local.update(bot) { $0.pushedHeads = ($0.pushedHeads ?? [:]).merging([changes.branch: commit.sha]) { $1 } }
         struct Pull: Decodable { var number: Int; var html_url: String }
         do {
             let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": changes.branch, "base": changes.baseBranch, "body": body], repo: repo)

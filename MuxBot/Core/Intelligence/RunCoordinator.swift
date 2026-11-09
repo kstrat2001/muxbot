@@ -736,7 +736,7 @@ final class RunCoordinator {
             }
             let runs = unshippedRuns(bot, store: store)
             let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
-            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body)
+            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id)
             store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
         } catch GitHubPR.Failure.cantWrite(let repo) {
             let install = await github.installState(for: repo)
