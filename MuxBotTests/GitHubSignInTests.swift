@@ -186,4 +186,50 @@ struct GitHubSignInTests {
         #expect(a.state == .signedOut, "Cancel is not a failed sign-in")
         #expect(keychain.items[GitHubAuth.tokenKey] == nil)
     }
+
+    private func signedIn() -> GitHubAuth {
+        let keychain = MemoryKeychain(); keychain.items[GitHubAuth.tokenKey] = "ghu_abc"
+        return auth(keychain)
+    }
+
+    private func next(_ path: String, page: Int) -> [String: String] {
+        ["Link": "<https://api.github.com\(path)?per_page=100&page=\(page)>; rel=\"next\", <https://api.github.com\(path)?per_page=100&page=99>; rel=\"last\""]
+    }
+
+    @Test func theInstallCheckReadsEveryPage() async {
+        GitHubStub.reset()
+        GitHubStub.on("GET /user/installations", 200, #"{"installations":[{"id":7,"app_slug":"mux-bot-app"}]}"#, headers: next("/user/installations", page: 2))
+        GitHubStub.on("GET /user/installations", 200, #"{"installations":[{"id":8,"app_slug":"mux-bot-app"}]}"#)
+        GitHubStub.on("GET /user/installations/7/repositories", 200, #"{"repositories":[{"full_name":"kstrat2001/darkmux"}]}"#, headers: next("/user/installations/7/repositories", page: 2))
+        GitHubStub.on("GET /user/installations/7/repositories", 200, #"{"repositories":[{"full_name":"kstrat2001/other"}]}"#)
+        GitHubStub.on("GET /user/installations/8/repositories", 200, #"{"repositories":[{"full_name":"kstrat2001/muxbot"}]}"#, headers: next("/user/installations/8/repositories", page: 2))
+        GitHubStub.on("GET /user/installations/8/repositories", 200, #"{"repositories":[{"full_name":"kstrat2001/hcr"}]}"#, headers: next("/user/installations/8/repositories", page: 3))
+        let a = signedIn()
+        #expect(await a.installState(for: "kstrat2001/hcr") == .installed, "on the second page of the second installation")
+        let asked = GitHubStub.seen.map { "\($0.path)?\($0.query ?? "")" }
+        #expect(asked.contains("/user/installations?per_page=100&page=2"))
+        #expect(asked.contains("/user/installations/8/repositories?per_page=100&page=2"))
+        #expect(!asked.contains("/user/installations/8/repositories?per_page=100&page=3"), "stops once it's found")
+        #expect(GitHubStub.seen.allSatisfy { $0.auth == "Bearer ghu_abc" })
+    }
+
+    @Test func theInstallCheckStopsAtAPageCapAndDoesntGuess() async {
+        GitHubStub.reset()
+        GitHubStub.on("GET /user/installations", 200, #"{"installations":[{"id":7,"app_slug":"mux-bot-app"}]}"#)
+        for page in 1...(GitHubAuth.installPageCap + 2) {
+            GitHubStub.on("GET /user/installations/7/repositories", 200, "{\"repositories\":[{\"full_name\":\"kstrat2001/r\(page)\"}]}",
+                          headers: next("/user/installations/7/repositories", page: page + 1))
+        }
+        let state = await signedIn().installState(for: "kstrat2001/hcr")
+        guard case .unknown = state else { Issue.record("expected unknown, not \(state)"); return }
+        #expect(GitHubStub.seen.filter { $0.path == "/user/installations/7/repositories" }.count == GitHubAuth.installPageCap)
+    }
+
+    @Test func theTokenOnlyFollowsNextPagesOnGitHubsAPI() {
+        #expect(GitHubAuth.nextPage(#"<https://api.github.com/user/installations?page=2>; rel="next""#) == "https://api.github.com/user/installations?page=2")
+        #expect(GitHubAuth.nextPage(#"<https://example.com/steal?page=2>; rel="next""#) == nil)
+        #expect(GitHubAuth.nextPage(#"<http://api.github.com/user/installations?page=2>; rel="next""#) == nil)
+        #expect(GitHubAuth.nextPage(#"<https://api.github.com/user/installations?page=1>; rel="prev""#) == nil)
+        #expect(GitHubAuth.nextPage(nil) == nil)
+    }
 }

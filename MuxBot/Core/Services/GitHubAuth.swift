@@ -21,6 +21,9 @@ final class GitHubAuth {
     }
 
     nonisolated static let tokenKey = "github.user.token"
+    /// Pages of 100 read per list when checking an install (1,000 entries):
+    /// past that it says it couldn't tell rather than "not installed".
+    static let installPageCap = 10
     private static let loginKey = "github.user.login"
 
     private(set) var state: State = .signedOut
@@ -139,12 +142,29 @@ final class GitHubAuth {
         struct Installs: Decodable { struct I: Decodable { var id: Int; var app_slug: String }; var installations: [I] }
         struct Repos: Decodable { struct R: Decodable { var full_name: String }; var repositories: [R] }
         do {
-            let installs: Installs = try await get("https://api.github.com/user/installations", token: token)
-            for i in installs.installations {
-                let repos: Repos = try await get("https://api.github.com/user/installations/\(i.id)/repositories?per_page=100", token: token)
-                if repos.repositories.contains(where: { $0.full_name.caseInsensitiveCompare(repo) == .orderedSame }) { return .installed }
+            // Both lists are paged (GitHub's Link header, rel="next").
+            var installations: [Installs.I] = []
+            var truncated = false
+            var next: String? = "https://api.github.com/user/installations?per_page=100"
+            for _ in 0..<Self.installPageCap {
+                guard let url = next else { break }
+                let page: (Installs, String?) = try await getPage(url, token: token)
+                installations += page.0.installations
+                next = page.1
             }
-            let slug = installs.installations.first?.app_slug
+            if next != nil { truncated = true }
+            for i in installations {
+                var next: String? = "https://api.github.com/user/installations/\(i.id)/repositories?per_page=100"
+                for _ in 0..<Self.installPageCap {
+                    guard let url = next else { break }
+                    let page: (Repos, String?) = try await getPage(url, token: token)
+                    if page.0.repositories.contains(where: { $0.full_name.caseInsensitiveCompare(repo) == .orderedSame }) { return .installed }
+                    next = page.1
+                }
+                if next != nil { truncated = true }
+            }
+            if truncated { return .unknown("You have more GitHub App installations or repos than Mux Bot can check.") }
+            let slug = installations.first?.app_slug
                 ?? (Bundle.main.object(forInfoDictionaryKey: "MuxBotGitHubAppSlug") as? String).flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }
             return .notInstalled(URL(string: slug.map { "https://github.com/apps/\($0)/installations/new" } ?? "https://github.com/settings/installations")!)
         } catch {
@@ -165,12 +185,26 @@ final class GitHubAuth {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func get<T: Decodable>(_ url: String, token: String) async throws -> T {
-        var request = URLRequest(url: URL(string: url)!)
+    /// One page, and the next page's URL from the Link header, if any.
+    private func getPage<T: Decodable>(_ url: String, token: String) async throws -> (T, String?) {
+        guard let address = URL(string: url) else { throw GitHubError(status: 0) }
+        var request = URLRequest(url: address)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw GitHubError(status: (response as? HTTPURLResponse)?.statusCode ?? 0) }
-        return try JSONDecoder().decode(T.self, from: data)
+        let http = response as? HTTPURLResponse
+        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0) }
+        return (try JSONDecoder().decode(T.self, from: data), Self.nextPage(http?.value(forHTTPHeaderField: "Link")))
+    }
+
+    /// `<https://…&page=2>; rel="next", <…>; rel="last"` → the next URL.
+    /// Only back to api.github.com, since the request carries your token.
+    nonisolated static func nextPage(_ link: String?) -> String? {
+        for part in (link ?? "").split(separator: ",") where part.contains(#"rel="next""#) {
+            guard let open = part.firstIndex(of: "<"), let close = part.firstIndex(of: ">"), open < close else { continue }
+            let url = String(part[part.index(after: open)..<close])
+            return URLComponents(string: url).map { $0.scheme == "https" && $0.host == "api.github.com" } == true ? url : nil
+        }
+        return nil
     }
 }
