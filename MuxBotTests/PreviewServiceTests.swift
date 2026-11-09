@@ -81,7 +81,7 @@ struct PreviewWaitingTests {
 /// stops them, and the one on screen keeps telling darkmux it's wanted.
 @Suite(.serialized) @MainActor
 struct PreviewLifetimeTests {
-    private func setUp(_ name: String = "site") -> (TestStore, Bot, RunCoordinator) {
+    private func setUp(_ name: String = "site") -> (BotStore, Bot, RunCoordinator) {
         let store = TestStore.fresh()
         let bot = store.add(name: name, instructions: "")
         bot.workspaceName = "\(name)-1"

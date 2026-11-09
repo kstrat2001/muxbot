@@ -423,15 +423,16 @@ final class RunCoordinator {
             return status != .stopped && !status.isFailed
         }
         guard !running.isEmpty else { return }
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { @MainActor in
-                await withTaskGroup(of: Void.self) { stops in
-                    for (id, name) in running { stops.addTask { @MainActor in await self.stopPreview(id, workspace: name) } }
-                }
-            }
-            group.addTask { try? await Task.sleep(for: limit) }
-            await group.next()
-            group.cancelAll()
+        // Each stop marks its preview stopped at once, then asks darkmux; the
+        // wait below ends when they're all answered or at `limit`, whichever
+        // comes first (an unanswered stop is left to darkmux's idle timeout).
+        stopsLeft = running.count
+        for (id, name) in running {
+            Task { await self.stopPreview(id, workspace: name); self.stopsLeft -= 1 }
+        }
+        let deadline = ContinuousClock.now + limit
+        while stopsLeft > 0, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
@@ -459,6 +460,8 @@ final class RunCoordinator {
 
     /// How often a preview on screen tells darkmux it's still wanted.
     var previewHeartbeat: Duration = .seconds(60)
+    /// Quit's stops still waiting on darkmux.
+    private var stopsLeft = 0
     /// Workspace names of the previews this app asked for, by bot.
     private var previewWorkspaces: [UUID: String] = [:]
     /// Tests watch stops here; nil asks darkmux.
