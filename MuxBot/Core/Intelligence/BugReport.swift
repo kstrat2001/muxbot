@@ -212,6 +212,14 @@ enum BugReport {
               marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
               fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
           };
+          // Delete outside a text field would make WebKit go back a page:
+          // swallow it there; the page's own fields still get it.
+          document.addEventListener('keydown', e => {
+            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+            const t = e.target;
+            const editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+            if (!editable) e.preventDefault();
+          }, true);
           // While a pick's chip is in the bar, its element stays outlined
           // (`__muxMark`): redrawn when the page re-renders or resizes,
           // hidden when the element is gone, removed with `__muxUnmark`.
