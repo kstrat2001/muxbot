@@ -38,6 +38,20 @@ final class AppRouter {
     /// The bot whose info is open (macOS: a popover on its sidebar row).
     var infoBotId: UUID?
 
+    /// With no bots yet, the window opens on "What do you want to get
+    /// done?" (the sidebar's empty selection shows the chooser); Mux Bot's
+    /// row still opens the guide.
+    func openOnStart(botCount: Int) {
+        if usesSidebar, botCount == 0, sidebar == .lead, path.isEmpty { sidebar = nil }
+    }
+
+    /// Paired, with no bots yet: straight on to starting a project.
+    func continueAfterPairing(botCount: Int) {
+        guard botCount == 0 else { return }
+        path = []
+        if usesSidebar { sidebar = nil } else { tab = .bots }
+    }
+
     /// Whether the thread on screen is a bot's (the lead bot has no info).
     var canShowInfo: Bool { context.botId != nil }
 

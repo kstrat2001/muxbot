@@ -12,6 +12,38 @@ struct HomeView: View {
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
 
     var body: some View {
+        Group {
+            // No bots yet: start with what you want to get done.
+            if roles.isEmpty { StartProjectView(inline: true) } else { grid }
+        }
+        .safeAreaInset(edge: .bottom) { BotBar() }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                #if os(iOS)
+                // Runs start from the Mac app for now; this says where.
+                Button("darkmux", systemImage: "laptopcomputer") { router.showPairing = true }
+                    .labelStyle(.titleAndIcon)
+                    .accessibilityHint("How this app reaches darkmux")
+                #else
+                Button(connection.isPaired ? "darkmux: paired" : "Pair with darkmux",
+                       systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
+                    .labelStyle(.titleAndIcon)
+                    .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
+                #endif
+                if !roles.isEmpty {
+                    Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
+                }
+                Menu("More", systemImage: "ellipsis.circle") {
+                    Button("New bot", systemImage: "plus") { router.showNewBot = true }
+                    if roles.isEmpty {
+                        Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
+                    }
+                }
+            }
+        }
+    }
+
+    private var grid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
                 Button { router.navigate(to: .lead) } label: { LeadBotTile() }
@@ -42,37 +74,10 @@ struct HomeView: View {
                         }
                     }
                 }
-                if roles.isEmpty {
-                    EmptyStateView(systemImage: "person.3", title: "No bots yet",
-                                   message: "A bot is a project or theme you name, like your website. Tap + to add one, or paste a GitHub link to \(LeadBot.name) and it makes one.")
-                    Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
-                    Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
-                        .frame(maxWidth: .infinity)
-                }
             }
             .padding(Spacing.lg)
         }
         .navigationTitle("Your bots")
-        .safeAreaInset(edge: .bottom) { BotBar() }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                #if os(iOS)
-                // Runs start from the Mac app for now; this says where.
-                Button("darkmux", systemImage: "laptopcomputer") { router.showPairing = true }
-                    .labelStyle(.titleAndIcon)
-                    .accessibilityHint("How this app reaches darkmux")
-                #else
-                Button(connection.isPaired ? "darkmux: paired" : "Pair with darkmux",
-                       systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
-                    .labelStyle(.titleAndIcon)
-                    .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
-                #endif
-                Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
-                Button("New bot", systemImage: "plus") { router.showNewBot = true }
-            }
-        }
     }
 }
 

@@ -8,7 +8,7 @@ Pairing lets Mux Bot send work to darkmux on this Mac. You approve it once in Te
 2. In Mux Bot, choose Pair with darkmux. It shows a code.
 3. In another Terminal window, run darkmux client approve and check the code matches.
 
-Mux Bot keeps the pairing in this device's Keychain. It's never synced.
+Mux Bot keeps the pairing in this device's Keychain. It's never synced. If you have no bots yet, Mux Bot goes on to "What do you want to get done?" once it's paired.
 
 ## Unpairing
 

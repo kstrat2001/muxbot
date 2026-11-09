@@ -11,6 +11,12 @@ enum StartProject {
         var name: String
         var purpose: String = ""
         var style: String = ""
+
+        /// The first run is built from what it's for, so both are needed.
+        var canStart: Bool {
+            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     /// Makes the bot and asks darkmux for its workspace. The bot exists even
@@ -28,7 +34,14 @@ enum StartProject {
         bot.useCaseId = entry.id
         bot.skills = playbook.skills
         store.save()
+        // The bot says hello in its own words, then offers its first run,
+        // written from your answers, behind Approve.
+        let first = playbook.firstRunTask(name: name, purpose: answers.purpose, feel: answers.style)
+        store.append(.assistant, BotGreeting.started(name: name, hasFirstRun: first != nil),
+                     to: store.conversation(for: .bot(bot.id)))
+        let run = first.map { store.proposeRun(task: $0, crew: playbook.crew.first ?? .coder, on: bot) }
         await runs.setUpWorkCopy(for: bot, store: store, template: entry)
+        if let run { await runs.chooseProfile(for: run) }
         return bot
     }
 

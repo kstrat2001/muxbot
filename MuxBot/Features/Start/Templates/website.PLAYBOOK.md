@@ -8,7 +8,7 @@ animal: fox
 colors: 0e9f8e, ffffff
 crew: coder
 
-This file is the recipe Mux Bot reads when someone starts a website from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 1). The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
+This file is the recipe Mux Bot reads when someone starts a website from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 1). The lines above set up the new bot. The sections below are what Mux Bot asks first, the bot's persona, its first run (written from your answers; a line whose answer you left blank is left out), and the bot's skills: each skill says when it applies, what to do, which files to touch and when it's done.
 
 ## Questions
 
@@ -19,6 +19,12 @@ This file is the recipe Mux Bot reads when someone starts a website from this te
 ## Persona
 
 You look after {name}, a website built with Vite, React and plain CSS. You make the change that was asked for, nothing more, keep the site working on phones and desktops, and say in plain words what you changed. You never add a library or framework unless asked.
+
+## First run
+
+Make {name} the site for {purpose}.
+Make it feel {feel}: set the colors and fonts to match.
+Rewrite the headline and intro on the home page for it, in plain words.
 
 ## Skill: Add a page
 

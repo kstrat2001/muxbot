@@ -77,6 +77,8 @@ struct RunCardView: View {
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
+                } else if case .projectNotMade(_, here: true)? = brain.runs.blocker(for: run), let bot = run.bot {
+                    projectAsk(bot: bot, run: run)
                 } else if let reason = brain.runs.whyRunCannotStart(run) {
                     Text("Can't run yet: \(reason).").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     HStack {
@@ -367,6 +369,39 @@ struct RunCardView: View {
             Text("Set up \(what) on \(machine)? darkmux makes its own copy on a new branch, so your files aren't touched.")
                 .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             buttonsForSetup(bot: bot, run: run, retry: false)
+        }
+    }
+
+    /// A template bot whose project isn't on this Mac yet (it was made while
+    /// unpaired, or on iPhone): make it here from its template.
+    @ViewBuilder private func projectAsk(bot: Bot, run: BotRun) -> some View {
+        switch brain.runs.workCopySetup[bot.id] {
+        case .settingUp?:
+            HStack(spacing: Spacing.sm) {
+                ProgressView().controlSize(.small)
+                Text("Making \(bot.name)'s project on this Mac…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            }
+        case let .failed(why)?:
+            Label("Couldn't make \(bot.name)'s project: \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            buttonsForProject(bot: bot, run: run, retry: true)
+        case nil:
+            Text("\(bot.name)'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start.")
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            buttonsForProject(bot: bot, run: run, retry: false)
+        }
+    }
+
+    private func buttonsForProject(bot: Bot, run: BotRun, retry: Bool) -> some View {
+        HStack {
+            Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
+            Spacer()
+            Button(retry ? "Try again" : "Make the project") {
+                Task {
+                    await brain.runs.setUpWorkCopy(for: bot, store: store)
+                    if bot.workspaceName != nil { await brain.runs.ensurePreview(for: bot) }
+                }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 

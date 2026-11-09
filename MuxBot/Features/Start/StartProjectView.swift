@@ -10,6 +10,8 @@ struct StartProjectView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(FleetConnection.self) private var connection
     @Environment(AppRouter.self) private var router
+    /// Shown in place (Home or the window with no bots yet), not as a sheet.
+    var inline = false
 
     @State private var entries: [TemplateEntry] = []
     @State private var details: [String: TemplateDetails] = [:]
@@ -29,12 +31,12 @@ struct StartProjectView: View {
         .navigationTitle(picked.map(\.title) ?? String(localized: "Start a project"))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                if picked != nil { Button("Back") { picked = nil } } else { Button("Cancel") { dismiss() } }
+                if picked != nil { Button("Back") { picked = nil } } else if !inline { Button("Cancel") { dismiss() } }
             }
             if let picked, let playbook = playbooks[picked.id] {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") { Task { await start(picked, playbook) } }
-                        .disabled(answers.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || starting)
+                        .disabled(!answers.canStart || starting)
                 }
             }
         }
@@ -57,6 +59,13 @@ struct StartProjectView: View {
                 }
                 Text("Or make a bot for code you already have with New bot.")
                     .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                if inline {
+                    // Mux Bot, the guide, helps with setup first.
+                    Button { router.navigate(to: .lead) } label: {
+                        Label("Setting up darkmux? Ask \(LeadBot.name)", systemImage: "questionmark.bubble")
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
             .padding(Spacing.xl)
         }
@@ -94,11 +103,9 @@ struct StartProjectView: View {
                 }
             }
             Section {
-                TextField(label(playbook, 0, String(localized: "Name")), text: $answers.name)
-                TextField(label(playbook, 1, String(localized: "What is it for?")), text: $answers.purpose, axis: .vertical)
-                    .lineLimit(1...3)
-                TextField(label(playbook, 2, String(localized: "How should it feel?")), text: $answers.style, axis: .vertical)
-                    .lineLimit(1...3)
+                TextField(question(playbook, 0, String(localized: "Name")).label, text: $answers.name)
+                field(question(playbook, 1, String(localized: "What is it for?")), text: $answers.purpose)
+                field(question(playbook, 2, String(localized: "How should it feel?")), text: $answers.style)
             } footer: {
                 if connection.isPaired {
                     Text("darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub.")
@@ -113,9 +120,29 @@ struct StartProjectView: View {
         .formStyle(.grouped)
     }
 
-    /// The playbook's nth question as the field's label, else a plain one.
-    private func label(_ playbook: Playbook, _ index: Int, _ fallback: String) -> String {
-        playbook.questions.indices.contains(index) ? playbook.questions[index] : fallback
+    /// The playbook's nth question (its label and suggestions), else a plain one.
+    private func question(_ playbook: Playbook, _ index: Int, _ fallback: String) -> PlaybookQuestion {
+        PlaybookQuestion(playbook.questions.indices.contains(index) ? playbook.questions[index] : fallback)
+    }
+
+    /// A question's field, with its examples as suggestions you tap.
+    @ViewBuilder private func field(_ question: PlaybookQuestion, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            TextField(question.label, text: text, axis: .vertical)
+                .lineLimit(1...3)
+            if !question.suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Spacing.sm) {
+                        ForEach(question.suggestions, id: \.self) { suggestion in
+                            Button(suggestion) { text.wrappedValue = PlaybookQuestion.adding(suggestion, to: text.wrappedValue) }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .accessibilityHint("Adds “\(suggestion)” to your answer")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func look(_ playbook: Playbook) -> BotLook {
@@ -137,7 +164,7 @@ struct StartProjectView: View {
         let store = BotStore(context: context)
         let bot = await StartProject.start(entry, playbook: playbook, answers: answers, store: store, runs: brain.runs)
         starting = false
-        dismiss()
+        if inline { picked = nil } else { dismiss() }
         router.navigate(to: .bot(bot.id))
         if bot.workspaceName != nil {
             router.showPreview = true

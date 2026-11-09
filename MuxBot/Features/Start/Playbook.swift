@@ -3,8 +3,9 @@ import Foundation
 /// A template's PLAYBOOK.md: the recipe Mux Bot follows to make a bot for a
 /// project. Plain Markdown, readable on GitHub: a header of `key: value`
 /// lines (schema, title, icon, pitch, animal, colors, crew), then
-/// `## Questions` (what Mux Bot asks first), `## Persona`, and one
-/// `## Skill: <name>` section per skill, in the template schema
+/// `## Questions` (what Mux Bot asks first), `## Persona`, one
+/// `## Skill: <name>` section per skill, and optionally `## First run` (the
+/// new bot's first dispatch, from your answers), in the template schema
 /// (kstrat2001/muxbot-templates SCHEMA.md). Parsed by hand. A missing or
 /// newer schema, a missing required key or section, or an unknown header
 /// key is refused by name; an unknown `##` section is skipped.
@@ -20,6 +21,8 @@ struct Playbook: Equatable, Sendable {
     /// The bot's persona, with `{name}` for its name.
     var persona: String
     var skills: [BotSkill]
+    /// `## First run`: lines with `{name}`, `{purpose}` and `{feel}`.
+    var firstRun: String? = nil
 
     enum ParseError: Error, Equatable {
         case missing(String)
@@ -56,6 +59,28 @@ struct Playbook: Equatable, Sendable {
         persona.replacingOccurrences(of: "{name}", with: name)
     }
 
+    /// The first run's task from your answers: each line of `## First run`
+    /// with its placeholders filled in, and a line whose answer is blank left
+    /// out. nil when there's no section or nothing but blanks is left.
+    func firstRunTask(name: String, purpose: String, feel: String) -> String? {
+        guard let firstRun else { return nil }
+        let clean: (String) -> String = {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ".!"))
+        }
+        let answers = ["{name}": clean(name), "{purpose}": clean(purpose), "{feel}": clean(feel)]
+        var lines: [String] = []
+        var usedAnAnswer = false
+        for line in firstRun.split(separator: "\n").map({ $0.trimmingCharacters(in: .whitespaces) }) where !line.isEmpty {
+            let used = answers.filter { line.contains($0.key) }
+            if used.contains(where: { $0.value.isEmpty }) { continue }
+            if used.keys.contains(where: { $0 != "{name}" }) { usedAnAnswer = true }
+            lines.append(used.reduce(line) { $0.replacingOccurrences(of: $1.key, with: $1.value) })
+        }
+        let mentionsAnswers = answers.keys.contains { $0 != "{name}" && firstRun.contains($0) }
+        guard !lines.isEmpty, usedAnAnswer || !mentionsAnswers else { return nil }
+        return lines.joined(separator: " ")
+    }
+
     static func parse(_ text: String) throws -> Playbook {
         guard text.utf8.count <= maxBytes else { throw ParseError.tooLarge }
         let (header, sections) = try split(text)
@@ -79,6 +104,8 @@ struct Playbook: Equatable, Sendable {
                     .map { String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) }
             } else if heading == "Persona" {
                 playbook.persona = body
+            } else if heading == "First run" {
+                playbook.firstRun = body.isEmpty ? nil : body
             } else if heading.hasPrefix("Skill:") {
                 let name = heading.dropFirst("Skill:".count).trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty, !body.isEmpty { playbook.skills.append(BotSkill(name: name, body: body)) }
@@ -122,6 +149,47 @@ struct Playbook: Equatable, Sendable {
 
     private static func isHex(_ s: String) -> Bool {
         s.count == 6 && s.allSatisfy(\.isHexDigit)
+    }
+}
+
+/// A playbook question, with the examples in its trailing parentheses
+/// ("(For example: calm and minimal, bold and colorful.)") as suggestions
+/// you can tap.
+struct PlaybookQuestion: Equatable, Sendable {
+    var label: String
+    var suggestions: [String]
+
+    init(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasSuffix(")"), let open = trimmed.lastIndex(of: "(") else {
+            label = trimmed
+            suggestions = []
+            return
+        }
+        var inside = String(trimmed[trimmed.index(after: open)..<trimmed.index(before: trimmed.endIndex)])
+        for prefix in ["For example:", "for example:", "e.g.", "Like:"] where inside.hasPrefix(prefix) {
+            inside = String(inside.dropFirst(prefix.count))
+        }
+        let items = inside.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard items.count >= 2 else {
+            label = trimmed
+            suggestions = []
+            return
+        }
+        label = trimmed[..<open].trimmingCharacters(in: .whitespaces)
+        // "A portfolio, a small business": the same case for each.
+        suggestions = items.map { $0.prefix(1).lowercased() + $0.dropFirst() }
+    }
+
+    /// A tapped suggestion fills an empty answer, or is added to it once.
+    static func adding(_ suggestion: String, to text: String) -> String {
+        let current = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if current.isEmpty { return suggestion }
+        if current.localizedCaseInsensitiveContains(suggestion) { return current }
+        return current + ", " + suggestion
     }
 }
 

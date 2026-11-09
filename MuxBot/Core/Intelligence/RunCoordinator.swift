@@ -419,6 +419,18 @@ final class RunCoordinator {
             workCopySetup[bot.id] = .failed(RunBlocker.unpaired.message)
             return
         }
+        var template = template
+        // A template bot made while unpaired or on iPhone: its project is
+        // made here from the same template, at its pinned commit.
+        if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil, bot.repoSlugs.isEmpty {
+            workCopySetup[bot.id] = .settingUp
+            let id = bot.useCaseId
+            guard let entry = await (templateSource ?? Self.registryTemplate)(id) else {
+                workCopySetup[bot.id] = .failed(String(localized: "its template (\(id)) isn't in the template list anymore"))
+                return
+            }
+            template = entry
+        }
         let bodyAndAccess = template.map {
             (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: $0.repoURL, sourcePath: nil, bot: bot.name, template: true, ref: $0.ref)), release: {})
         } ?? sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
@@ -462,6 +474,12 @@ final class RunCoordinator {
 
     /// Tests answer workspace requests here; nil asks darkmux.
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
+    /// Finds a use case's template by id (tests); else the template registry.
+    var templateSource: ((String) async -> TemplateEntry?)?
+
+    private static func registryTemplate(_ id: String) async -> TemplateEntry? {
+        await TemplateRegistry.shared.templates().first { $0.id == id }
+    }
 
     /// The request for a bot's workspace, with folder access held until
     /// `release` (the picked folder is security-scoped).

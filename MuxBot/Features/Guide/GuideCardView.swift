@@ -46,6 +46,15 @@ struct SetupChecklistView: View {
                 Spacer()
                 if facts == nil { ProgressView().controlSize(.small) } else { Text(SetupCheck.summary(steps)).font(AppFont.footnote()).foregroundStyle(Color.secondaryText) }
             }
+            if let block = SetupCheck.setupBlock(steps) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("Everything to install, in one go").font(AppFont.body(.semibold))
+                    Text("Paste this into Terminal. It needs Homebrew (brew.sh). \(block.estimate)")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    CommandBox(command: block.command)
+                }
+            }
             ForEach(steps) { step in row(step) }
             #if os(iOS)
             ShareLink(item: SetupCheck.shareText(), subject: Text("Set up Mux Bot on your Mac")) {

@@ -161,6 +161,28 @@ enum SetupCheck {
         return steps
     }
 
+    /// The installs Terminal can do, as one block to copy, with a rough
+    /// time and download estimate. nil once they're done, or on a phone.
+    struct SetupBlock: Equatable, Sendable {
+        var command: String
+        var estimate: String
+    }
+
+    static func setupBlock(_ steps: [SetupStep]) -> SetupBlock? {
+        guard steps.state(.mac) != .needsMac else { return nil }
+        let open: (SetupStep.ID) -> Bool = { id in steps.state(id).map { $0 != .done && $0 != .later } ?? false }
+        let casks = [(SetupStep.ID.docker, "docker-desktop"), (.lmStudio, "lm-studio")].filter { open($0.0) }.map(\.1)
+        var lines: [String] = []
+        if !casks.isEmpty { lines.append("brew install --cask " + casks.joined(separator: " ")) }
+        if open(.darkmux) { lines.append(installCommand) }
+        guard !lines.isEmpty else { return nil }
+        // A rough guide, not a measurement: the model is the big download.
+        let estimate = open(.lmStudio)
+            ? String(localized: "Roughly 20 to 40 minutes and 10 to 25 GB of downloads on a fresh Mac; the model you pick in LM Studio is most of it.")
+            : String(localized: "Roughly 5 to 10 minutes and 2 to 3 GB of downloads.")
+        return SetupBlock(command: lines.joined(separator: "\n"), estimate: estimate)
+    }
+
     static func summary(_ steps: [SetupStep]) -> String {
         let done = steps.filter { $0.state == .done }.count
         return done == steps.count ? String(localized: "All set") : String(localized: "\(done) of \(steps.count) done")

@@ -53,6 +53,9 @@
         }
       }
     },
+    "%@'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start." : {
+
+    },
     "%@: %@" : {
       "localizations" : {
         "en" : {
@@ -161,6 +164,9 @@
 
     },
     "Add folder…" : {
+
+    },
+    "Adds “%@” to your answer" : {
 
     },
     "After an earlier step" : {
@@ -370,6 +376,16 @@
     "Couldn't get this Mac's models from darkmux: %@" : {
 
     },
+    "Couldn't make %@'s project: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Couldn't make %1$@'s project: %2$@"
+          }
+        }
+      }
+    },
     "Couldn't set up %@: %@" : {
       "localizations" : {
         "en" : {
@@ -454,6 +470,9 @@
     "Every run uses %@. If it isn't running, the card says so." : {
 
     },
+    "Everything to install, in one go" : {
+
+    },
     "Fastest first. A run whose done-when wasn't met moves to the next one." : {
 
     },
@@ -523,7 +542,16 @@
     "Here's what Mux Bot needs. Each step ticks itself off once it's working." : {
 
     },
+    "Hi, I'm %@." : {
+
+    },
+    "Hi, I'm %@. Here's a first change, made from what you told me. Tap Approve to see it in the preview, then tell me what to change or point at something on the page." : {
+
+    },
     "Hi, I'm %@. I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”." : {
+
+    },
+    "Hi, I'm %@. Tell me what to change, or point at something in the preview." : {
 
     },
     "Hide" : {
@@ -599,7 +627,13 @@
     "Machine" : {
 
     },
+    "Make the project" : {
+
+    },
     "Make your first bot" : {
+
+    },
+    "Making %@'s project on this Mac…" : {
 
     },
     "Measured in the preview" : {
@@ -640,6 +674,9 @@
 
     },
     "Models apps may use" : {
+
+    },
+    "More" : {
 
     },
     "Move down" : {
@@ -846,6 +883,9 @@
     "Pass to %@" : {
 
     },
+    "Paste this into Terminal. It needs Homebrew (brew.sh). %@" : {
+
+    },
     "Penguin" : {
 
     },
@@ -916,6 +956,12 @@
 
     },
     "Role" : {
+
+    },
+    "Roughly 20 to 40 minutes and 10 to 25 GB of downloads on a fresh Mac; the model you pick in LM Studio is most of it." : {
+
+    },
+    "Roughly 5 to 10 minutes and 2 to 3 GB of downloads." : {
 
     },
     "Run again on %@" : {
@@ -998,6 +1044,9 @@
           }
         }
       }
+    },
+    "Setting up darkmux? Ask %@" : {
+
     },
     "Setting up on %@…" : {
 
@@ -1084,6 +1133,12 @@
 
     },
     "Task" : {
+
+    },
+    "Tell me what needs doing; nothing runs until you approve it." : {
+
+    },
+    "Tell me what to change, or point at something in the preview." : {
 
     },
     "Tell me when a run has a result or didn't finish" : {
@@ -1334,6 +1389,9 @@
 
     },
     "it needs the command that starts the preview." : {
+
+    },
+    "its template (%@) isn't in the template list anymore" : {
 
     },
     "this Mac" : {

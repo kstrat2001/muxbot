@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 #if os(iOS)
 import UIKit
 #else
@@ -10,6 +11,8 @@ import AppKit
 struct FleetPairingView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
+    @Query private var bots: [Bot]
     @State private var justPaired = false
 
     var body: some View {
@@ -116,7 +119,12 @@ struct FleetPairingView: View {
         .onChange(of: connection.isPaired) {
             // Show the checkmark a moment, then close.
             guard connection.isPaired, justPaired else { return }
-            Task { try? await Task.sleep(for: .seconds(1.5)); dismiss() }
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                dismiss()
+                // Paired with no bots yet: on to "What do you want to get done?".
+                router.continueAfterPairing(botCount: bots.count)
+            }
         }
         .onChange(of: connection.state) {
             if case .waiting = connection.state { justPaired = true }
