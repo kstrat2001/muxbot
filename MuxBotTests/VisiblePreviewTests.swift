@@ -89,6 +89,9 @@ struct VisiblePreviewTests {
         let size = CGSize(width: 400, height: 600)
         let window = try await host(preview, size: size, scale: 1)
         defer { window.orderOut(nil) }
+        // The panel hands the controller its display's scale; do the same here,
+        // so the check holds on a 1x screen (CI) as well as a 2x one.
+        preview.displayScale = window.backingScaleFactor
         try await scroll(preview, to: 500)
         // Pick band 3 (600–800), as a click in Pick mode would.
         _ = try await preview.page.callJavaScript("window.__muxSend(window.__muxDescribe(document.body.children[3])); return true;")
