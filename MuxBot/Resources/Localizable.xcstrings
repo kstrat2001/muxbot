@@ -181,6 +181,9 @@
     "Always %@" : {
 
     },
+    "Always %@ (not on this Mac)" : {
+
+    },
     "Always ask" : {
 
     },
@@ -448,6 +451,9 @@
 
     },
     "Fixes run on darkmux after you approve." : {
+
+    },
+    "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it." : {
 
     },
     "For this bot" : {
