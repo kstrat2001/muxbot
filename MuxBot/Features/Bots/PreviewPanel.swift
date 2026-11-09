@@ -19,6 +19,8 @@ struct PreviewPanel: View {
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
+    /// Copies are made at this screen's scale.
+    @Environment(\.displayScale) private var displayScale
     @State private var copiedNote: String?
     /// The camera shows a checkmark for a moment after a copy.
     @State private var copied = false
@@ -78,6 +80,7 @@ struct PreviewPanel: View {
                 // isn't re-laid out on every frame (that flickered).
                 let layout = settled ?? currentViewport.layout(in: geometry.size)
                 WebView(preview.page)
+                    .task(id: displayScale) { preview.displayScale = displayScale }
                     .modifier(DeviceFrame(layout: layout, panel: geometry.size))
                     .onChange(of: geometry.size) { settle(for: geometry.size) }
                     .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }

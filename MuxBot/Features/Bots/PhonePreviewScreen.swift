@@ -12,10 +12,13 @@ struct PhonePreviewScreen: View {
 
     @Environment(PreviewController.self) private var preview
     @Environment(AppRouter.self) private var router
+    /// Copies are made at this screen's scale.
+    @Environment(\.displayScale) private var displayScale
     @State private var copied = false
 
     var body: some View {
         WebView(preview.page)
+            .task(id: displayScale) { preview.displayScale = displayScale }
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .bottomTrailing) { controls }
             .task(id: url) { preview.show(url) }
