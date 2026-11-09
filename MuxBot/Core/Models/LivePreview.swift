@@ -27,7 +27,8 @@ struct LivePreview: Equatable, Sendable {
             case .installing: "Installing the project's dependencies (first time only)…"
             case .ready: "Preview ready."
             case .stopped: "The preview is stopped."
-            case let .failed(why): "The preview didn't start: \(why)\(why.hasSuffix(".") ? "" : ".")"
+            // darkmux's own words go behind "Show details" (`PreviewFailure`).
+            case .failed: String(localized: "The preview couldn't start.")
             case let .unavailable(why): why.title
             }
         }
@@ -78,7 +79,7 @@ struct LivePreview: Equatable, Sendable {
             let repo = repo ?? String(localized: "this repo")
             switch self {
             case .previewsOff:
-                return String(localized: "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:")
+                return String(localized: "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:")
             case .notYourCheckout:
                 return String(localized: "darkmux cloned \(repo), and it runs a preview only from your own checkout, never from a copy a bot writes to. Add your checkout of \(repo) and the preview starts from it.")
             case .newProject:
@@ -104,6 +105,76 @@ struct LivePreview: Equatable, Sendable {
             default:
                 return nil
             }
+        }
+    }
+}
+
+/// A preview that didn't start, said in plain words: what happened and what
+/// to do. darkmux's reason and the dev server's output are the details, shown
+/// only when asked for (never paths, stack traces or exit codes up front).
+struct PreviewFailure: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        /// The project needs a newer Node than the preview has.
+        case nodeTooOld
+        /// Installing the project's packages didn't work.
+        case installFailed
+        /// Something else was using the preview's port.
+        case portInUse
+        /// The project's preview settings aren't in a form darkmux reads.
+        case settings
+        /// It didn't come up in time.
+        case tooSlow
+        /// The project's own server stopped right after starting.
+        case serverStopped
+        case other
+    }
+
+    let kind: Kind
+    let details: String
+
+    init(reason: String, log: String?) {
+        let log = log ?? ""
+        let all = (reason + "\n" + log).lowercased()
+        details = log.isEmpty ? reason : reason + "\n\n" + log
+        // The cause before its symptoms: a Node too old for the project makes
+        // npm skip packages, which then can't be found.
+        kind = if all.contains("ebadengine") || all.contains("unsupported engine") || all.contains("requires node") {
+            .nodeTooOld
+        } else if all.contains("eaddrinuse") || all.contains("address already in use") {
+            .portInUse
+        } else if all.contains("preview.json") || all.contains("schema_version") {
+            .settings
+        } else if all.contains("cannot find module") || all.contains("native binding") || all.contains("npm err")
+                    || all.contains("npm error") || all.contains("install failed") {
+            .installFailed
+        } else if all.contains("didn't start within") {
+            .tooSlow
+        } else if all.contains("dev server exited") {
+            .serverStopped
+        } else {
+            .other
+        }
+    }
+
+    var headline: String { String(localized: "The preview couldn't start.") }
+
+    /// One plain sentence on what happened and what to do.
+    var explanation: String {
+        switch kind {
+        case .nodeTooOld:
+            String(localized: "This project needs a newer version of Node than the preview has. darkmux needs an update for it.")
+        case .installFailed:
+            String(localized: "Installing the project's packages didn't work. Try again; if it keeps happening, ask the bot to fix it.")
+        case .portInUse:
+            String(localized: "Another program was using the preview's port. Try again.")
+        case .settings:
+            String(localized: "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them.")
+        case .tooSlow:
+            String(localized: "The preview took too long to start. Try again.")
+        case .serverStopped:
+            String(localized: "The project's own server stopped right after it started. Ask the bot to look at it, or try again.")
+        case .other:
+            String(localized: "Something went wrong while starting it. Try again.")
         }
     }
 }

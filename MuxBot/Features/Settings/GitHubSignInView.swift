@@ -16,6 +16,7 @@ struct GitHubSignInView: View {
                         .foregroundStyle(Color.secondaryText)
                     if case let .failed(why) = github.state {
                         Label(why, systemImage: "exclamationmark.triangle").foregroundStyle(Color.secondaryText)
+                        if let details = github.failureDetails { TechnicalDetails(text: details) }
                     }
                     Button("Sign in with GitHub", systemImage: "person.badge.key") { start() }
                         .disabled(!github.isConfigured)

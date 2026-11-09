@@ -27,6 +27,9 @@ final class GitHubAuth {
     private static let loginKey = "github.user.login"
 
     private(set) var state: State = .signedOut
+    /// What GitHub said when sign-in failed, for "Show details" (the state's
+    /// message is the plain sentence).
+    private(set) var failureDetails: String?
     let clientID: String?
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let keychain: any KeychainProviding
@@ -65,6 +68,7 @@ final class GitHubAuth {
     /// the code to type and where (the UI also opens the page).
     func signIn(showCode: @escaping (String, URL) -> Void = { _, _ in }) async {
         guard isConfigured, let clientID else { state = .failed("This build has no GitHub client ID."); return }
+        failureDetails = nil
         do {
             struct Code: Decodable { var device_code: String; var user_code: String; var verification_uri: String; var expires_in: Int; var interval: Int? }
             let code: Code = try await post("https://github.com/login/device/code", ["client_id": clientID])
@@ -94,7 +98,9 @@ final class GitHubAuth {
                 case "slow_down": interval = Double(p.interval ?? Int(interval) + 5)
                 case "access_denied": state = .failed("You declined the sign-in on GitHub."); return
                 case "expired_token": state = .failed("The code expired before it was approved. Try again."); return
-                case let other?: state = .failed("GitHub sign-in failed: \(other.replacingOccurrences(of: "_", with: " "))."); return
+                case let other?:
+                    failureDetails = "GitHub: \(other)"
+                    state = .failed(String(localized: "GitHub sign-in didn't work. Try again in a moment.")); return
                 case nil: continue
                 }
             }
@@ -102,7 +108,13 @@ final class GitHubAuth {
         } catch {
             // A canceled wait or request throws; that's Cancel, not a failure.
             if Task.isCancelled { return canceled() }
-            state = .failed("GitHub sign-in failed: \(error.localizedDescription)")
+            if let refused = error as? SignInRefusal {
+                failureDetails = refused.details
+                state = .failed(refused.message)
+            } else {
+                failureDetails = error.localizedDescription
+                state = .failed(String(localized: "GitHub sign-in didn't work. Try again in a moment."))
+            }
         }
     }
 
@@ -199,8 +211,36 @@ final class GitHubAuth {
         parts.queryItems = form.map { URLQueryItem(name: $0.key, value: $0.value) }
         request.httpBody = Data((parts.percentEncodedQuery ?? "").utf8)
         let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw GitHubError(status: (response as? HTTPURLResponse)?.statusCode ?? 0) }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            let body = try? JSONDecoder().decode(SignInRefusal.Body.self, from: data)
+            throw SignInRefusal(status: status, code: body?.error, description: body?.error_description ?? body?.message)
+        }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// GitHub refused a sign-in request: a plain sentence for the user, and
+    /// GitHub's own words for "Show details".
+    struct SignInRefusal: Error, Equatable {
+        struct Body: Decodable { var error: String?; var error_description: String?; var message: String? }
+        var status: Int
+        var code: String?
+        var description: String?
+
+        var message: String {
+            switch code {
+            case "device_flow_disabled":
+                String(localized: "Sign-in with GitHub is turned off for Mux Bot's GitHub App. Its owner needs to switch on Device Flow in the App's settings.")
+            case "incorrect_client_credentials", "unauthorized_client":
+                String(localized: "This Mux Bot build isn't set up to sign in with GitHub.")
+            default:
+                String(localized: "GitHub sign-in didn't work. Try again in a moment.")
+            }
+        }
+
+        var details: String {
+            ["GitHub answered \(status)", code, description].compactMap { $0 }.joined(separator: ": ")
+        }
     }
 
     /// One page, and the next page's URL from the Link header, if any.

@@ -20,19 +20,17 @@ struct PreviewStatusView: View {
             case .waiting, .starting, .installing:
                 ProgressView()
                 Text(preview.status.text).foregroundStyle(Color.secondaryText)
-            case .failed:
+            case let .failed(reason):
+                let failure = PreviewFailure(reason: reason, log: preview.log)
                 Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(Color.brandOrange)
-                Text(preview.status.text).multilineTextAlignment(.center)
-                if let log = preview.log, !log.isEmpty {
-                    ScrollView {
-                        Text(log).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 220)
-                    .padding(Spacing.sm)
-                    .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
-                }
+                    .accessibilityHidden(true)
+                Text(failure.headline).font(.headline).multilineTextAlignment(.center)
+                Text(failure.explanation).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.borderedProminent)
+                // What darkmux and the project's server said, only when asked.
+                TechnicalDetails(text: failure.details)
             case let .unavailable(why):
                 unavailable(why)
             case .ready, .stopped:
@@ -83,5 +81,35 @@ struct PreviewStatusView: View {
         case .newProject:
             EmptyView()
         }
+    }
+}
+
+/// Raw output (a log, a service's reply) for bug reports: closed by default,
+/// with Copy. Never the first thing anyone reads.
+struct TechnicalDetails: View {
+    let text: String
+    @State private var shown = false
+    @State private var copied = false
+
+    var body: some View {
+        DisclosureGroup("Show details", isExpanded: $shown) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                ScrollView {
+                    Text(text).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+                .padding(Spacing.sm)
+                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
+                Button(copied ? "Copied" : "Copy details", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    Clipboard.copy(text)
+                    copied = true
+                }
+                .controlSize(.small)
+            }
+        }
+        .font(AppFont.footnote())
+        .foregroundStyle(Color.secondaryText)
+        .frame(maxWidth: 480)
     }
 }
