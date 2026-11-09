@@ -10,6 +10,9 @@ struct MuxBotApp: App {
     @State private var notifications = NotificationService()
     @State private var store = StoreLoader()
     @State private var github = GitHubAuth()
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    #endif
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -28,6 +31,9 @@ struct MuxBotApp: App {
                         brain.connection = connection
                         brain.notifier = notifications
                         brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
+                        #if os(macOS)
+                        appDelegate.runs = brain.runs
+                        #endif
                     }
             } else {
                 StoreRecoveryView(loader: store)
@@ -59,6 +65,23 @@ struct MuxBotApp: App {
         #endif
     }
 }
+
+#if os(macOS)
+/// Quitting stops the previews this app started, so no dev server outlives it.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var runs: RunCoordinator?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let runs else { return .terminateNow }
+        Task { @MainActor in
+            await runs.stopAllPreviews()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
+#endif
 
 /// Opens the store (migrating it if needed). If it can't, the app shows
 /// why and offers to start fresh, with the old files kept, instead of

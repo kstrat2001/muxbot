@@ -137,7 +137,14 @@ struct BotThreadView: View {
         .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
             // darkmux runs the preview from the repo's recipe when you open it
             // (again once the darkmux connection is ready at launch).
-            if router.showPreview, let bot { await brain.runs.ensurePreview(for: bot) }
+            if router.showPreview, let bot {
+                await brain.runs.ensurePreview(for: bot)
+                await brain.runs.keepPreviewAlive(for: bot)
+            }
+        }
+        .onDisappear {
+            // Leaving the bot stops its dev server, so none keep running unseen.
+            if let bot { Task { await brain.runs.stopPreview(for: bot) } }
         }
         .onChange(of: conversations.first?.messages?.count) { markRead() }
         #if DEBUG

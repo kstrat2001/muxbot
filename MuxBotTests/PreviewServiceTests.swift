@@ -76,3 +76,84 @@ struct PreviewWaitingTests {
         #expect(runs.livePreviews[bot.id] == nil)
     }
 }
+
+/// Previews don't outlive what you're looking at: leaving a bot or quitting
+/// stops them, and the one on screen keeps telling darkmux it's wanted.
+@Suite(.serialized) @MainActor
+struct PreviewLifetimeTests {
+    private func setUp(_ name: String = "site") -> (TestStore, Bot, RunCoordinator) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: name, instructions: "")
+        bot.workspaceName = "\(name)-1"
+        let keychain = MemoryKeychain()
+        keychain.items["darkmux.client.token"] = "t0ken"
+        let defaults = UserDefaults(suiteName: "muxbot-tests-lifetime-\(UUID().uuidString)")!
+        defaults.set("Mux Bot", forKey: "darkmux.client.name")
+        let runs = RunCoordinator()
+        runs.connection = FleetConnection(keychain: keychain, defaults: defaults)
+        runs.previewFetcher = { _ in LivePreview(status: .ready, url: URL(string: "http://127.0.0.1:5000/")!) }
+        return (store, bot, runs)
+    }
+
+    @Test func quittingStopsEveryRunningPreview() async {
+        let (store, a, runs) = setUp()
+        let b = store.add(name: "blog", instructions: "")
+        b.workspaceName = "blog-1"
+        await runs.ensurePreview(for: a)
+        await runs.ensurePreview(for: b)
+        let stopped = Recorder()
+        runs.previewStopper = { stopped.add($0) }
+        await runs.stopAllPreviews()
+        #expect(Set(stopped.values) == ["site-1", "blog-1"])
+        #expect(runs.livePreviews[a.id]?.status == .stopped)
+        #expect(runs.livePreviews[b.id]?.status == .stopped)
+    }
+
+    @Test func quittingWithNothingRunningAsksDarkmuxNothing() async {
+        let (_, a, runs) = setUp()
+        await runs.ensurePreview(for: a)
+        let stopped = Recorder()
+        runs.previewStopper = { stopped.add($0) }
+        await runs.stopPreview(for: a)
+        await runs.stopAllPreviews()
+        #expect(stopped.values == ["site-1"], "only the one stop, from leaving the bot")
+    }
+
+    @Test func quittingNeverHangsOnASlowDarkmux() async {
+        let (_, a, runs) = setUp()
+        await runs.ensurePreview(for: a)
+        runs.previewStopper = { _ in try? await Task.sleep(for: .seconds(30)) }
+        let start = ContinuousClock.now
+        await runs.stopAllPreviews(limit: .milliseconds(200))
+        #expect(ContinuousClock.now - start < .seconds(5))
+    }
+
+    @Test func leavingABotWhileItWaitsMeansItNeverStartsLater() async {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "")
+        bot.workspaceName = "site-1"
+        let runs = RunCoordinator()
+        await runs.ensurePreview(for: bot)
+        #expect(runs.livePreviews[bot.id]?.status == .waiting)
+        await runs.stopPreview(for: bot)
+        var retried: [UUID] = []
+        runs.retryPreview = { retried.append($0.id) }
+        runs.connectionAttached()
+        #expect(retried.isEmpty)
+        #expect(runs.livePreviews[bot.id]?.status == .stopped)
+    }
+
+    @Test func thePreviewOnScreenFollowsDarkmux() async {
+        let (_, bot, runs) = setUp()
+        await runs.ensurePreview(for: bot)
+        runs.previewHeartbeat = .milliseconds(20)
+        let asked = Recorder()
+        runs.previewFetcher = { _ in asked.add("status"); return LivePreview(status: .stopped) }
+        let alive = Task { await runs.keepPreviewAlive(for: bot) }
+        try? await Task.sleep(for: .milliseconds(300))
+        alive.cancel()
+        await alive.value
+        #expect(!asked.values.isEmpty, "it asked darkmux while on screen")
+        #expect(runs.livePreviews[bot.id]?.status == .stopped, "darkmux stopped it (idle): the app shows that")
+    }
+}
