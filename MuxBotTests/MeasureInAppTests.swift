@@ -216,6 +216,30 @@ struct WebLayoutProbeTests {
         #expect(phone.media.first?.matches == true)
         #expect(phone.scrollWidth <= 390, "\(phone.scrollWidth)")
     }
+
+    /// One probe measuring twice at once (the brain shares one): each call
+    /// gets its own page's numbers, and neither waits forever.
+    @Test(.timeLimit(.minutes(1))) func overlappingMeasurementsEachGetTheirOwnPage() async throws {
+        let probe = WebLayoutProbe()
+        async let wide = probe.measure(html: html, width: 820)
+        async let phone = probe.measure(html: html, width: 390)
+        let (w, p) = await (wide, phone)
+        #expect(w?.viewport == 820)
+        #expect(p?.viewport == 390)
+        #expect(p?.media.first?.matches == true)
+    }
+
+    /// A page that never finishes loading gives up after the timeout, once.
+    @Test(.timeLimit(.minutes(1))) func aLoadThatNeverFinishesTimesOut() async {
+        let probe = WebLayoutProbe()
+        probe.loadTimeout = .milliseconds(300)
+        let start = ContinuousClock.now
+        let facts = await probe.measure(width: 400) { _ in }
+        #expect(facts == nil)
+        #expect(ContinuousClock.now - start < .seconds(10))
+        // Still usable after a timeout.
+        #expect(await probe.measure(html: html, width: 390)?.viewport == 390)
+    }
 }
 
 
