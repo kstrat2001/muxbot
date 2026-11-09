@@ -480,21 +480,27 @@ final class RunCoordinator {
     /// What this app may run Coder on here, and what answers now.
     func listedProfiles() async -> [DarkmuxClient.ProfileInfo] {
         if let profileSource { return await profileSource() }
-        guard let connection, let token = connection.token else { return [] }
-        return (try? await connection.client.profiles(token: token)) ?? []
+        guard let connection, let token = connection.token,
+              let list = try? await connection.client.profiles(token: token) else { return [] }
+        if let named = list.machine { machine = named }
+        return list.profiles
     }
 
-    /// The darkmux machine runs go to: its endpoint address until darkmux
-    /// names machines (one machine today).
+    /// The darkmux machine runs go to, as darkmux names it (`GET
+    /// /client/profiles`): the same id from every device.
+    var machine: DarkmuxClient.Machine?
+    /// Where model settings live (iCloud key-value when sync is on).
+    var settingsStore = ModelSettingsStore.shared
+
+    /// The machine's id; before darkmux has said, its endpoint.
     var machineKey: String {
+        if let machine { return machine.id }
         let url = connection?.client.baseURL ?? DarkmuxClient().baseURL
-        return "\(url.host() ?? "localhost"):\(url.port ?? 8767)"
+        return "endpoint:\(url.host() ?? "localhost"):\(url.port ?? 8767)"
     }
-    /// Settings › Models for this machine (tests set their own).
-    var modelSettings: (() -> ModelSettings)?
 
-    /// Settings › Models as they apply to runs here.
-    func currentModelSettings() -> ModelSettings { modelSettings?() ?? ModelSettings.load(machine: machineKey) }
+    /// Settings › Models as they apply to runs on this machine.
+    func currentModelSettings() -> ModelSettings { settingsStore.settings(machine: machineKey) }
     /// Why each run has its model, for the dispatch card.
     var runChoices: [UUID: ModelChoice] = [:]
     /// What darkmux listed last, for pickers.
@@ -507,7 +513,7 @@ final class RunCoordinator {
         let listed = await listedProfiles()
         lastListed = listed
         let settings = currentModelSettings()
-        let mode = settings.mode(forBot: run.bot.flatMap { LocalBotState.shared[$0.id]?.modelModes }, machine: machineKey)
+        let mode = settings.mode(forBot: run.bot.flatMap { settingsStore.botMode(bot: $0.id, machine: machineKey) })
         let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
                                          previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next)
         runChoices[run.id] = choice

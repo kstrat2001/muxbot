@@ -32,6 +32,8 @@
 	<string>$(MUXBOT_GITHUB_APP_SLUG)</string>
 	<key>MuxBotGitHubClientID</key>
 	<string>$(MUXBOT_GITHUB_CLIENT_ID)</string>
+	<key>MuxBotKeyValueSync</key>
+	<string>$(MUXBOT_CLOUD_SYNC)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -44,6 +44,9 @@ targets:
         # iCloud sync of bots, runs and threads: on only in builds that set
         # MUXBOT_CLOUD_SYNC = YES and the iCloud entitlements (Config/*.xcconfig).
         MuxBotCloudSync: $(MUXBOT_CLOUD_SYNC)
+        # Model settings sync through iCloud key-value storage with the same
+        # switch (the iCloud entitlements carry ubiquity-kvstore-identifier).
+        MuxBotKeyValueSync: $(MUXBOT_CLOUD_SYNC)
         MuxBotGitHubClientID: $(MUXBOT_GITHUB_CLIENT_ID)
         MuxBotGitHubAppSlug: $(MUXBOT_GITHUB_APP_SLUG)
         # Tailnet previews are plain http until tailnet HTTPS certificates

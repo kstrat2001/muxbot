@@ -57,7 +57,7 @@ struct BotInfoView: View {
                     }
                 }
             } header: {
-                Text("Model on this Mac")
+                Text(brain.runs.machine.map { "Model on \($0.name)" } ?? "Model on this Mac")
             }
             Section("Resources") {
                 ForEach(bot.sortedResources) { resource in
@@ -142,15 +142,12 @@ struct BotInfoView: View {
 
     /// Where darkmux works on this bot's code, on this Mac. Status only:
     /// darkmux owns the copy; the app knows its name, never a path.
-    /// This bot's model mode, kept on this Mac (`LocalBotState`).
+    /// This bot's model mode on this machine (shared with your other devices).
     private var modelModeBinding: Binding<String?> {
         let machine = brain.runs.machineKey
-        return Binding(get: { LocalBotState.shared[bot.id]?.modelModes?[machine] },
-                       set: { mode in LocalBotState.shared.update(bot.id) { entry in
-                           var modes = entry.modelModes ?? [:]
-                           modes[machine] = mode
-                           entry.modelModes = modes.isEmpty ? nil : modes
-                       } })
+        let store = brain.runs.settingsStore
+        return Binding(get: { store.botMode(bot: bot.id, machine: machine)?.stored },
+                       set: { store.setBotMode(ModelMode(stored: $0), bot: bot.id, machine: machine) })
     }
 
     private var workCopySection: some View {

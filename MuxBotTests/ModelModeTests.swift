@@ -84,27 +84,46 @@ struct ModelModeStorageTests {
         #expect(ModelMode(stored: mode.stored) == mode)
     }
 
-    @Test func theModeIsPerMachineAndTheOrderIsShared() throws {
-        let defaults = try #require(UserDefaults(suiteName: "muxbot-model-tests-\(UUID().uuidString)"))
-        var here = ModelSettings.load(from: defaults, machine: "127.0.0.1:8767")
+    @Test func theModeIsPerMachineAndTheOrderIsShared() {
+        let store = ModelSettingsStore(backing: MemoryBacking())
+        var here = store.settings(machine: "m-aaaa")
         #expect(here.mode == .auto)
         #expect(here.order == ModelSettings.defaultOrder)
         here.mode = .model("q38-27b-tensorfold")
         here.order = ["q38-27b-tensorfold", "flint-rec"]
-        here.save(to: defaults, machine: "127.0.0.1:8767")
-        let again = ModelSettings.load(from: defaults, machine: "127.0.0.1:8767")
-        #expect(again.mode == .model("q38-27b-tensorfold"))
-        let other = ModelSettings.load(from: defaults, machine: "studio.local:8767")
+        store.save(here, machine: "m-aaaa")
+        #expect(store.settings(machine: "m-aaaa").mode == .model("q38-27b-tensorfold"))
+        let other = store.settings(machine: "m-bbbb")
         #expect(other.mode == .auto, "another machine has its own models")
         #expect(other.order == ["q38-27b-tensorfold", "flint-rec"], "the Auto order is names, shared")
     }
 
-    @Test func aBotsOverrideWinsOverTheAppSettingOnItsMachine() {
+    @Test func aBotsOverrideIsPerBotAndMachine() {
+        let store = ModelSettingsStore(backing: MemoryBacking())
+        let bot = UUID()
+        store.setBotMode(.ask, bot: bot, machine: "m-aaaa")
+        #expect(store.botMode(bot: bot, machine: "m-aaaa") == .ask)
+        #expect(store.botMode(bot: bot, machine: "m-bbbb") == nil)
+        #expect(store.botMode(bot: UUID(), machine: "m-aaaa") == nil)
         let app = ModelSettings(mode: .auto, order: ModelSettings.defaultOrder)
-        let stored = ["127.0.0.1:8767": ModelMode.ask.stored]
-        #expect(app.mode(forBot: stored, machine: "127.0.0.1:8767") == .ask)
-        #expect(app.mode(forBot: stored, machine: "studio.local:8767") == .auto)
-        #expect(app.mode(forBot: nil, machine: "127.0.0.1:8767") == .auto)
+        #expect(app.mode(forBot: store.botMode(bot: bot, machine: "m-aaaa")) == .ask)
+        #expect(app.mode(forBot: nil) == .auto)
+        store.setBotMode(nil, bot: bot, machine: "m-aaaa")
+        #expect(store.botMode(bot: bot, machine: "m-aaaa") == nil, "back to Settings")
+    }
+
+    @Test func iCloudOnlyWhenSyncIsOn() {
+        #expect(ModelSettingsStore.usesICloud(cloudSync: true, hasKeyValueEntitlement: true))
+        #expect(!ModelSettingsStore.usesICloud(cloudSync: false, hasKeyValueEntitlement: true))
+        #expect(!ModelSettingsStore.usesICloud(cloudSync: true, hasKeyValueEntitlement: false))
+    }
+
+    @Test func darkmuxNamesTheMachine() throws {
+        let json = #"{"role":"coder","profiles":[],"machine":{"id":"m-0123456789abcdef","name":"studio"}}"#
+        let list = try JSONDecoder().decode(DarkmuxClient.ProfileList.self, from: Data(json.utf8))
+        #expect(list.machine?.id == "m-0123456789abcdef")
+        let older = try JSONDecoder().decode(DarkmuxClient.ProfileList.self, from: Data(#"{"role":"coder","profiles":[]}"#.utf8))
+        #expect(older.machine == nil)
     }
 }
 
@@ -123,7 +142,8 @@ struct ModelModeFlowTests {
         brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
         let listed = r.listed
         brain.runs.profileSource = { listed }
-        brain.runs.modelSettings = { settings }
+        brain.runs.settingsStore = ModelSettingsStore(backing: MemoryBacking())
+        brain.runs.settingsStore.save(settings, machine: brain.runs.machineKey)
         return (store, bot, brain)
     }
 
@@ -142,8 +162,7 @@ struct ModelModeFlowTests {
 
     @Test func aBotsOverrideAppliesToItsRuns() async throws {
         let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: ModelSettings.defaultOrder))
-        LocalBotState.shared.update(bot.id) { $0.modelModes = [brain.runs.machineKey: ModelMode.ask.stored] }
-        defer { LocalBotState.shared.update(bot.id) { $0.modelModes = nil } }
+        brain.runs.settingsStore.setBotMode(.ask, bot: bot.id, machine: brain.runs.machineKey)
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         #expect(brain.runs.runChoices[run.id]?.ask == true)
@@ -170,5 +189,30 @@ struct ModelModeFlowTests {
         #expect(brain.runs.profile(for: run) == "q38-27b-tensorfold")
         #expect(brain.runs.runChoices[run.id]?.reason == "chosen for this run")
         #expect(brain.runs.runChoices[run.id]?.unavailable == nil)
+    }
+}
+
+
+/// An in-memory backing for the settings store in tests.
+final class MemoryBacking: KeyValueBacking, @unchecked Sendable {
+    private var values: [String: Any] = [:]
+    func string(forKey key: String) -> String? { values[key] as? String }
+    func array(forKey key: String) -> [Any]? { values[key] as? [Any] }
+    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func removeObject(forKey key: String) { values[key] = nil }
+}
+
+@Suite(.serialized) @MainActor
+struct MachineKeyTests {
+    @Test func theMachineIdComesFromDarkmux() async {
+        let brain = BotBrain()
+        brain.runs.profileSource = { [] }
+        brain.runs.machine = DarkmuxClient.Machine(id: "m-0123456789abcdef", name: "studio")
+        #expect(brain.runs.machineKey == "m-0123456789abcdef")
+    }
+
+    @Test func beforeDarkmuxSaysItsTheEndpoint() {
+        let brain = BotBrain()
+        #expect(brain.runs.machineKey == "endpoint:127.0.0.1:8767")
     }
 }

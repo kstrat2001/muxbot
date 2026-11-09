@@ -32,9 +32,9 @@ enum ModelMode: Equatable, Hashable, Sendable {
     }
 }
 
-/// Settings › Models: the mode for one darkmux machine (its models differ
+/// Settings › Models for one darkmux machine: its mode (its models differ
 /// from another's) and the Auto order, shared (names; one a machine doesn't
-/// list is skipped).
+/// list is skipped). Kept in `ModelSettingsStore`.
 struct ModelSettings: Equatable, Sendable {
     var mode: ModelMode = .auto
     /// Coder's models by profile name, fastest first, then the stronger one
@@ -42,22 +42,79 @@ struct ModelSettings: Equatable, Sendable {
     var order: [String] = ModelSettings.defaultOrder
 
     static let defaultOrder = ["flint-rec", "q38-27b-tensorfold"]
-    private static let modeKey = "models.mode", orderKey = "models.order"
 
-    /// `machine`: the darkmux machine's identity (today its endpoint address).
-    static func load(from defaults: UserDefaults = .standard, machine: String) -> ModelSettings {
-        ModelSettings(mode: ModelMode(stored: defaults.string(forKey: "\(modeKey).\(machine)")) ?? .auto,
-                      order: defaults.stringArray(forKey: orderKey) ?? defaultOrder)
+    /// A bot's own mode when it has one, else the app's.
+    func mode(forBot botMode: ModelMode?) -> ModelMode { botMode ?? mode }
+}
+
+/// Where model settings live: they're about target machines, not this
+/// device, so the phone and the Mac share them. iCloud key-value storage
+/// when sync is on, this device's defaults otherwise.
+protocol KeyValueBacking: AnyObject {
+    func string(forKey key: String) -> String?
+    func array(forKey key: String) -> [Any]?
+    func set(_ value: Any?, forKey key: String)
+    func removeObject(forKey key: String)
+}
+
+extension UserDefaults: KeyValueBacking {}
+extension NSUbiquitousKeyValueStore: KeyValueBacking {}
+
+final class ModelSettingsStore: @unchecked Sendable {
+    let backing: any KeyValueBacking
+    private let isICloud: Bool
+
+    init(backing: any KeyValueBacking, isICloud: Bool = false) {
+        self.backing = backing
+        self.isICloud = isICloud
     }
 
-    func save(to defaults: UserDefaults = .standard, machine: String) {
-        defaults.set(mode.stored, forKey: "\(Self.modeKey).\(machine)")
-        defaults.set(order, forKey: Self.orderKey)
+    /// iCloud when sync is on (`MUXBOT_CLOUD_SYNC`) and the app has the
+    /// key-value entitlement (`com.apple.developer.ubiquity-kvstore-identifier`).
+    static func usesICloud(cloudSync: Bool, hasKeyValueEntitlement: Bool) -> Bool {
+        cloudSync && hasKeyValueEntitlement
     }
 
-    /// A bot's own mode on this machine when it has one, else the app's.
-    func mode(forBot stored: [String: String]?, machine: String) -> ModelMode {
-        ModelMode(stored: stored?[machine]) ?? mode
+    static let shared: ModelSettingsStore = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return ModelSettingsStore(backing: UserDefaults(suiteName: "muxbot-tests-models") ?? .standard)
+        }
+        let sync = (Bundle.main.object(forInfoDictionaryKey: "MuxBotCloudSync") as? String) == "YES"
+        let kvs = (Bundle.main.object(forInfoDictionaryKey: "MuxBotKeyValueSync") as? String) == "YES"
+        if usesICloud(cloudSync: sync, hasKeyValueEntitlement: kvs) {
+            NSUbiquitousKeyValueStore.default.synchronize()
+            return ModelSettingsStore(backing: NSUbiquitousKeyValueStore.default, isICloud: true)
+        }
+        return ModelSettingsStore(backing: UserDefaults.standard)
+    }()
+
+    private static let orderKey = "models.order"
+    private func modeKey(_ machine: String) -> String { "models.mode.\(machine)" }
+    private func botKey(_ bot: UUID, _ machine: String) -> String { "models.bot.\(bot.uuidString).\(machine)" }
+
+    func settings(machine: String) -> ModelSettings {
+        ModelSettings(mode: ModelMode(stored: backing.string(forKey: modeKey(machine))) ?? .auto,
+                      order: (backing.array(forKey: Self.orderKey) as? [String]) ?? ModelSettings.defaultOrder)
+    }
+
+    func save(_ settings: ModelSettings, machine: String) {
+        backing.set(settings.mode.stored, forKey: modeKey(machine))
+        backing.set(settings.order, forKey: Self.orderKey)
+        flush()
+    }
+
+    /// A bot's own mode on a machine; nil follows Settings.
+    func botMode(bot: UUID, machine: String) -> ModelMode? {
+        ModelMode(stored: backing.string(forKey: botKey(bot, machine)))
+    }
+
+    func setBotMode(_ mode: ModelMode?, bot: UUID, machine: String) {
+        if let mode { backing.set(mode.stored, forKey: botKey(bot, machine)) } else { backing.removeObject(forKey: botKey(bot, machine)) }
+        flush()
+    }
+
+    private func flush() {
+        if isICloud { NSUbiquitousKeyValueStore.default.synchronize() }
     }
 }
 

@@ -316,7 +316,7 @@
     "Each dispatch card asks, with Auto's pick ready." : {
 
     },
-    "Each machine has its own models, so this is set per machine." : {
+    "Each machine has its own models, so this is set per machine and shared with your other devices." : {
 
     },
     "Enter this code at %@%@:" : {
@@ -416,6 +416,9 @@
     "Model" : {
 
     },
+    "Model on %@" : {
+
+    },
     "Model on this Mac" : {
 
     },
@@ -492,7 +495,13 @@
     "Notifications" : {
 
     },
+    "On %@" : {
+
+    },
     "On iPhone and iPad, runs start from the Mac app for now." : {
+
+    },
+    "On this Mac" : {
 
     },
     "On-device model" : {
@@ -726,9 +735,6 @@
 
     },
     "The messages go; runs stay in Activity." : {
-
-    },
-    "This Mac" : {
 
     },
     "Try again" : {

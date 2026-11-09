@@ -18,9 +18,9 @@ struct ModelSettingsView: View {
                 }
                 Text(explanation).font(AppFont.footnote()).foregroundStyle(.secondary)
             } header: {
-                Text("This Mac")
+                Text(brain.runs.machine.map { "On \($0.name)" } ?? "On this Mac")
             } footer: {
-                Text("Each machine has its own models, so this is set per machine.").font(AppFont.caption())
+                Text("Each machine has its own models, so this is set per machine and shared with your other devices.").font(AppFont.caption())
             }
             Section("Auto order") {
                 List {
@@ -57,7 +57,7 @@ struct ModelSettingsView: View {
 
     private var names: [String] { listed.map(\.name) }
 
-    private func save() { settings.save(machine: brain.runs.machineKey) }
+    private func save() { brain.runs.settingsStore.save(settings, machine: brain.runs.machineKey) }
 
     private var modeBinding: Binding<ModelMode> {
         Binding(get: { settings.mode }, set: { settings.mode = $0; save() })

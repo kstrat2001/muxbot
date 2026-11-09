@@ -244,16 +244,24 @@ struct DarkmuxClient: Sendable {
         var error: String? = nil
     }
 
+    /// The darkmux machine: a stable id (the same from every device that
+    /// pairs with it) and its name. An older darkmux doesn't say.
+    struct Machine: Decodable, Sendable, Equatable {
+        var id: String
+        var name: String
+    }
+
     struct ProfileList: Decodable, Sendable {
         var role: String
         var profiles: [ProfileInfo]
+        var machine: Machine?
     }
 
     /// The profiles Coder may run on here, in the owner's grant order. An
     /// older darkmux without the route answers 404: no list.
-    func profiles(token: String) async throws -> [ProfileInfo] {
+    func profiles(token: String) async throws -> ProfileList {
         let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 5)
-        return try JSONDecoder().decode(ProfileList.self, from: data).profiles
+        return try JSONDecoder().decode(ProfileList.self, from: data)
     }
 
     func workStatus(token: String, workId: String) async throws -> WorkStatus {

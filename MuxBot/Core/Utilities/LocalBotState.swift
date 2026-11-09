@@ -18,13 +18,10 @@ final class LocalBotState: @unchecked Sendable {
         var previewViewport: String?
         /// Runs whose "needs you" you hid here (the banner's ×), by id.
         var dismissedRuns: [String]?
-        /// This bot's model mode by darkmux machine (`ModelMode.stored`); a
-        /// machine without one follows Settings.
-        var modelModes: [String: String]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
-                && (dismissedRuns ?? []).isEmpty && (modelModes ?? [:]).isEmpty
+                && (dismissedRuns ?? []).isEmpty
         }
     }
 
