@@ -7,8 +7,10 @@ struct MuxBotCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Bot…") { router.showNewBot = true }
+            Button("New Project…") { router.showStartProject = true }
                 .keyboardShortcut("n")
+            Button("New Bot…") { router.showNewBot = true }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         CommandGroup(after: .textEditing) {
             Button("Search Bots and Messages…") { router.showSearch = true }

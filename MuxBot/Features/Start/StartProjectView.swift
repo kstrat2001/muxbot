@@ -205,6 +205,11 @@ struct StartProjectView: View {
     private func load() async {
         let registry = TemplateRegistry.shared
         entries = await registry.templates()
+        // Opened for a named template ("write a book"): its form.
+        if let id = router.startTemplateId {
+            picked = entries.first { $0.id == id }
+            router.startTemplateId = nil
+        }
         for entry in entries where details[entry.id] == nil {
             details[entry.id] = await registry.template(for: entry)
         }

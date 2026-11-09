@@ -11,7 +11,7 @@ import FoundationModels
 enum LeadBot {
     static let name = "Mux Bot"
     static let systemImage = "crown"
-    static let persona = "You're the guide: you help people set up Mux Bot (darkmux, pairing, models, GitHub), make their first bot from a repo, and answer questions about Mux Bot and darkmux from its help. When the help doesn't say, you say you don't know. You don't start work yourself: work happens in a bot's thread. Short, friendly, plain."
+    static let persona = "You're the guide: you help people set up Mux Bot (darkmux, pairing, models, GitHub), start a project, and answer questions about Mux Bot and darkmux from its help. When the help doesn't say, you say you don't know. You don't start work yourself: work happens in a bot's thread. Short, friendly, plain."
 }
 
 /// Which conversation the user is in. Follows navigation.
@@ -340,6 +340,8 @@ final class BotBrain {
     @ObservationIgnored var checkoutReader: ((URL) -> (packageJSON: String?, files: Set<String>))?
     /// Mux Bot as a guide, in its own thread.
     let guide = LeadGuide()
+    /// Opens the Start chooser, or a template's form (set by the app).
+    var openStart: ((String?) -> Void)?
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection? {
@@ -730,6 +732,11 @@ final class BotBrain {
             : turnNote.map { "\($0) I used keyword matching for this message." }
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
         var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
+        // Mux Bot never improvises: what the guide and the hand-off, new-bot
+        // and work-status paths didn't take gets what he can do.
+        if speaker == nil, Guide.isEnabled, result.action == nil {
+            result.reply = LeadGuide.menuText
+        }
         if intent == .ask { result.action = nil }   // a question never proposes work
         // Never a dispatch built from a bare "Fix PR #9": issues are read first.
         if case let .dispatch(_, task)? = result.action, Self.isBareReference(task) {
