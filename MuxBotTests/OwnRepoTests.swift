@@ -101,7 +101,7 @@ struct OwnRepoTests {
         brain.runs.workspaceMaker = { _ in Issue.record("nothing local"); throw CancellationError() }
         let playbook = try #require(TemplateRegistry.bundledPlaybook(for: "book"))
         await #expect(throws: GitHubRepoMaker.Failure.cantCreate) {
-            _ = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter"),
+            _ = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter", backUpToGitHub: true),
                                              github: maker(), store: store, runs: brain.runs)
         }
         #expect(store.allBots().isEmpty)
@@ -117,7 +117,7 @@ struct OwnRepoTests {
         var asked: DarkmuxClient.WorkspaceBody?
         brain.runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", created: true) }
         let playbook = try #require(TemplateRegistry.bundledPlaybook(for: "book"))
-        let bot = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter"),
+        let bot = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter", backUpToGitHub: true),
                                                github: maker(), store: store, runs: brain.runs)
         #expect(bot.repoSlugs == ["kain/tides"])
         #expect(asked?.template == true)
@@ -125,6 +125,35 @@ struct OwnRepoTests {
         #expect(bot.githubStart == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"))
         #expect(GitHubStub.seen.first?.path == "/user", "GitHub first, then this Mac")
         #expect(body("POST", "/user/repos")["private"] as? Bool == true, "private unless you switch Public on")
+    }
+
+    @Test func switchedOffNothingGoesToGitHub() async throws {
+        GitHubStub.reset()
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        var asked: DarkmuxClient.WorkspaceBody?
+        brain.runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", created: true) }
+        let playbook = try #require(TemplateRegistry.bundledPlaybook(for: "book"))
+        #expect(StartProject.Answers(name: "Tides").backUpToGitHub, "on unless you switch it off")
+        let bot = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter", backUpToGitHub: false),
+                                               github: maker(), store: store, runs: brain.runs)
+        #expect(GitHubStub.seen.isEmpty, "no sign-in needed, nothing sent")
+        #expect(bot.repoSlugs.isEmpty)
+        #expect(bot.githubStart == nil)
+        #expect(asked?.template == true, "the local project is still made")
+    }
+
+    @Test func keepingItOnGitHubNeedsASignIn() async throws {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        brain.runs.workspaceMaker = { _ in Issue.record("nothing local"); throw CancellationError() }
+        let playbook = try #require(TemplateRegistry.bundledPlaybook(for: "book"))
+        await #expect(throws: GitHubRepoMaker.Failure.self) {
+            _ = try await StartProject.start(Self.template, playbook: playbook,
+                                             answers: .init(name: "Tides", purpose: "a winter", backUpToGitHub: true),
+                                             github: nil, store: store, runs: brain.runs)
+        }
+        #expect(store.allBots().isEmpty)
     }
 
     @Test func committedWorkIsBackedUpToTheBotsBranch() async throws {
@@ -161,5 +190,68 @@ struct OwnRepoTests {
         #expect(body("POST", "/git/commits")["parents"] as? [String] == ["start1"], "darkmux's local first commit isn't on GitHub")
         #expect(body("POST", "/git/refs")["ref"] as? String == "refs/heads/mux/tides", "never main")
         #expect(!GitHubStub.seen.contains { $0.path.hasSuffix("/pulls") }, "a backup opens no PR")
+    }
+}
+
+/// "Put it on GitHub" later, for a project that started on this Mac only.
+@Suite(.serialized) @MainActor
+struct PutOnGitHubTests {
+    private func localBot(_ store: BotStore) -> Bot {
+        let bot = store.add(name: "Tides", instructions: "")
+        bot.useCaseId = "book"
+        bot.workspaceName = "tides-1"
+        return bot
+    }
+
+    @Test func itsOfferedOnlyForALocalTemplateProject() {
+        let store = TestStore.fresh()
+        let bot = localBot(store)
+        #expect(PutOnGitHub.canPut(bot))
+        store.addResource(.repo, "https://github.com/kain/tides", to: bot)
+        #expect(!PutOnGitHub.canPut(bot), "already has a repo")
+        let notHere = store.add(name: "Elsewhere", instructions: "")
+        notHere.useCaseId = "book"
+        #expect(!PutOnGitHub.canPut(notHere), "no work copy on this Mac")
+    }
+
+    @Test func theRepoGetsTheTemplateThenTheProjectsWorkOnMain() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /user", 200, #"{"login":"kain"}"#)
+        GitHubStub.on("POST /user/repos", 201, #"{"full_name":"kain/tides","html_url":"https://github.com/kain/tides","default_branch":"main"}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4", 200,
+                      #"{"tree":[{"path":"book.json","mode":"100644","type":"blob","sha":"aaa"}]}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/blobs/aaa", 200, #"{"content":"e30K","encoding":"base64"}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/blobs", 201, #"{"sha":"n1"}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/trees", 201, #"{"sha":"t1"}"#)
+        GitHubStub.on("GET /repos/kain/tides/git/ref/heads/main", 200, #"{"object":{"sha":"init0"}}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/commits", 201, #"{"sha":"start1"}"#)
+        GitHubStub.on("PATCH /repos/kain/tides/git/refs/heads/main", 200, #"{"ref":"refs/heads/main"}"#)
+        // Then the project's own work, on top of the template's commit.
+        GitHubStub.on("GET /repos/kain/tides/git/ref/heads/main", 200, #"{"object":{"sha":"start1"}}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/blobs", 201, #"{"sha":"w1"}"#)
+        GitHubStub.on("GET /repos/kain/tides/git/commits/start1", 200, #"{"sha":"start1","tree":{"sha":"tree1"}}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/trees", 201, #"{"sha":"t2"}"#)
+        GitHubStub.on("POST /repos/kain/tides/git/commits", 201, #"{"sha":"work1"}"#)
+        GitHubStub.on("PATCH /repos/kain/tides/git/refs/heads/main", 200, #"{"ref":"refs/heads/main"}"#)
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        let bot = localBot(store)
+        brain.runs.templateSource = { _ in OwnRepoTests.template }
+        brain.runs.changesFetcher = { _ in
+            DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
+                                  files: [.init(path: "manuscript/chapters/01-start.md", mode: "100644", content: "SGkK", deleted: nil)])
+        }
+        let made = try await PutOnGitHub.run(bot, isPublic: false, github: GitHubRepoMaker(session: GitHubStub.session, token: "t"),
+                                             pr: GitHubPR(session: GitHubStub.session, token: "t", local: LocalBotState(fileURL: nil)),
+                                             store: store, runs: brain.runs)
+        #expect(made.repo == "kain/tides")
+        let create = GitHubStub.seen.first { $0.path == "/user/repos" }?.body ?? [:]
+        #expect(create["private"] as? Bool == true)
+        let commits = GitHubStub.seen.filter { $0.method == "POST" && $0.path.hasSuffix("/git/commits") }.compactMap { $0.body?["parents"] as? [String] }
+        #expect(commits == [["init0"], ["start1"]], "template first, then the work on top")
+        let moves = GitHubStub.seen.filter { $0.method == "PATCH" }.compactMap { $0.body?["sha"] as? String }
+        #expect(moves == ["start1", "work1"], "main ends at the project's latest work")
+        #expect(bot.repoSlugs == ["kain/tides"])
+        #expect(bot.githubStart == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"), "later backups go to mux/tides")
     }
 }

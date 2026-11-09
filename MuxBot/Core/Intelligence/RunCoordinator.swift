@@ -224,18 +224,30 @@ final class RunCoordinator {
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { await backUp(bot, store: store) }
     }
 
+    /// A use case's template, from the registry (or the test seam).
+    func template(for id: String) async -> TemplateEntry? {
+        await (templateSource ?? Self.registryTemplate)(id)
+    }
+
+    struct NotPaired: LocalizedError {
+        var errorDescription: String? { RunBlocker.unpaired.message }
+    }
+
+    /// darkmux's changes on a workspace's branch against its base.
+    func changes(for workspace: String) async throws -> DarkmuxClient.Changes {
+        if let changesFetcher { return try await changesFetcher(workspace) }
+        guard let connection, let darkmux = connection.token else { throw NotPaired() }
+        return try await connection.client.changes(token: darkmux, workspace: workspace)
+    }
+
     /// Pushes a GitHub-started project's committed work to its `mux/<bot>`
     /// branch on your repo, through the same path as Open PR. Says so only
     /// when it fails.
     func backUp(_ bot: Bot, store: BotStore) async {
         guard let start = bot.githubStart, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
-              let token = githubToken?() else { return }
+              let token = githubToken?(), changesFetcher != nil || connection?.token != nil else { return }
         do {
-            let changes: DarkmuxClient.Changes
-            if let changesFetcher { changes = try await changesFetcher(workspace) } else {
-                guard let connection, let darkmux = connection.token else { return }
-                changes = try await connection.client.changes(token: darkmux, workspace: workspace)
-            }
+            let changes = try await changes(for: workspace)
             guard !changes.files.isEmpty else { return }
             _ = try await (prPusher ?? { try await GitHubPR(token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) })(
                 changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, start)

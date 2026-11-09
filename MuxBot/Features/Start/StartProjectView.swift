@@ -49,7 +49,7 @@ struct StartProjectView: View {
             if let picked, let playbook = playbooks[picked.id] {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") { Task { await start(picked, playbook) } }
-                        .disabled(!answers.canStart || starting || github.token == nil)
+                        .disabled(!answers.canStart || starting || (answers.backUpToGitHub && github.token == nil))
                 }
             }
         }
@@ -150,8 +150,12 @@ struct StartProjectView: View {
                 }
             }
             Section {
-                if github.token == nil {
-                    Text("Your project gets its own repo in your GitHub account, so sign in first.")
+                Toggle("Back up to GitHub", isOn: $answers.backUpToGitHub)
+                if !answers.backUpToGitHub {
+                    Text("Your project stays on this Mac. You can put it on GitHub later from its info.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                } else if github.token == nil {
+                    Text("The project gets its own repo in your GitHub account, so sign in first.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     Button("Sign in with GitHub", systemImage: "person.badge.key") { signingIn = true }
                 } else {
@@ -208,13 +212,13 @@ struct StartProjectView: View {
     }
 
     private func start(_ entry: TemplateEntry, _ playbook: Playbook) async {
-        guard let token = github.token else { signingIn = true; return }
+        if answers.backUpToGitHub, github.token == nil { signingIn = true; return }
         starting = true
         problem = nil
         let store = BotStore(context: context)
         let bot: Bot
         do {
-            bot = try await StartProject.start(entry, playbook: playbook, answers: answers, github: GitHubRepoMaker(token: token),
+            bot = try await StartProject.start(entry, playbook: playbook, answers: answers, github: github.token.map { GitHubRepoMaker(token: $0) },
                                                store: store, runs: brain.runs)
         } catch {
             // Nothing was made on this Mac; the form says why.

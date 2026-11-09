@@ -68,6 +68,9 @@
     "%@'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start." : {
 
     },
+    "%@'s work so far" : {
+
+    },
     "%@: %@" : {
       "localizations" : {
         "en" : {
@@ -226,6 +229,9 @@
     "Any model that runs on this Mac" : {
 
     },
+    "Anyone can see a public repo." : {
+
+    },
     "Anyone can see a public repo. Mux Bot puts the template's files in it as the first commit." : {
 
     },
@@ -273,6 +279,9 @@
 
     },
     "Back up %@'s work" : {
+
+    },
+    "Back up to GitHub" : {
 
     },
     "Bear" : {
@@ -754,6 +763,9 @@
     "Make your first bot" : {
 
     },
+    "Makes a repo in your account with the template's files and this project's committed work, then backs up new work to it." : {
+
+    },
     "Making %@'s project on this Mac…" : {
 
     },
@@ -1082,6 +1094,9 @@
     "Private" : {
 
     },
+    "Private: only you can see it." : {
+
+    },
     "Private: only you can see it. Mux Bot puts the template's files in it as the first commit." : {
 
     },
@@ -1092,6 +1107,22 @@
 
     },
     "Pull request opened" : {
+
+    },
+    "Put it on GitHub" : {
+
+    },
+    "Put on GitHub: %@. New work is backed up to %@ there." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Put on GitHub: %1$@. New work is backed up to %2$@ there."
+          }
+        }
+      }
+    },
+    "Putting it on GitHub…" : {
 
     },
     "Rabbit" : {
@@ -1262,6 +1293,9 @@
     "Sign in with GitHub" : {
 
     },
+    "Sign in with GitHub to back the project up there, or switch Back up to GitHub off." : {
+
+    },
     "Sign out" : {
 
     },
@@ -1364,6 +1398,9 @@
     "The preview started from the new recipe." : {
 
     },
+    "The project gets its own repo in your GitHub account, so sign in first." : {
+
+    },
     "The template can't be copied: %@" : {
 
     },
@@ -1401,6 +1438,12 @@
 
     },
     "This project has no preview setup" : {
+
+    },
+    "This project is already on GitHub, or isn't on this Mac." : {
+
+    },
+    "This project is only on this Mac. Sign in with GitHub (Settings › GitHub) to put it there." : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -1621,6 +1664,9 @@
 
     },
     "Your project gets its own repo in your GitHub account, so sign in first." : {
+
+    },
+    "Your project stays on this Mac. You can put it on GitHub later from its info." : {
 
     },
     "darkmux" : {

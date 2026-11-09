@@ -11,6 +11,9 @@ enum StartProject {
         var name: String
         var purpose: String = ""
         var style: String = ""
+        /// On by default: the project gets its own GitHub repo too. Off, it
+        /// stays on this Mac.
+        var backUpToGitHub: Bool = true
         /// The new GitHub repo's name (from the project's when blank).
         var repoName: String = ""
         /// The repo is private unless you switch Public on.
@@ -23,13 +26,19 @@ enum StartProject {
         }
     }
 
-    /// Makes the project's own GitHub repo first (private unless you chose
-    /// public, filled with the template's files at its pinned commit), and
-    /// only then the bot and darkmux's local project from the same commit.
-    /// When the GitHub step fails nothing is made here, and the error says
-    /// why (naming a repo that was made but couldn't be filled).
-    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, github: GitHubRepoMaker,
+    /// With "Back up to GitHub" on (the default), the project's own GitHub
+    /// repo comes first
+    /// (private unless you chose public, filled with the template's files at
+    /// its pinned commit), and only then the bot and the local project from
+    /// the same commit. When the GitHub step fails nothing is made here, and
+    /// the error says why (naming a repo that was made but couldn't be
+    /// filled). Off, it's the bot and darkmux's local project only.
+    static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, github: GitHubRepoMaker?,
                       store: BotStore, runs: RunCoordinator) async throws -> Bot {
+        guard answers.backUpToGitHub else {
+            return await start(entry, playbook: playbook, answers: answers, store: store, runs: runs)
+        }
+        guard let github else { throw GitHubRepoMaker.Failure.github(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = try await github.login()
         let wanted = GitHubRepoMaker.slug(answers.repoName.isEmpty ? name : answers.repoName)
