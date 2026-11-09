@@ -12,6 +12,8 @@ enum ProjectSetupDetector {
         var source: String
     }
 
+    /// The dev server listens on 0.0.0.0: darkmux runs previews in a
+    /// container and publishes the ports on 127.0.0.1.
     /// How the dev server is told its port. darkmux substitutes `{port}`
     /// only in `env`, and runs the command through `sh`, so flags read the
     /// port from `$PORT`, which the recipe sets.
@@ -77,20 +79,20 @@ enum ProjectSetupDetector {
         let words = script.lowercased()
         let framework: (name: String, port: PortStyle?, hmr: Bool?, why: String)? =
             if words.contains("ace serve") {
-                ("AdonisJS", .env(["PORT": "{port}", "HOST": "127.0.0.1"]), words.contains("--hmr") ? true : (words.contains("--watch") ? false : nil),
+                ("AdonisJS", .env(["PORT": "{port}", "HOST": "0.0.0.0"]), words.contains("--hmr") ? true : (words.contains("--watch") ? false : nil),
                  found)
             } else if words.contains("next dev") {
-                ("Next.js", .flags("-p $PORT -H 127.0.0.1"), true, found)
+                ("Next.js", .flags("-p $PORT -H 0.0.0.0"), true, found)
             } else if words.contains("react-scripts start") {
-                ("Create React App", .env(["PORT": "{port}", "HOST": "127.0.0.1", "BROWSER": "none"]), true, found)
+                ("Create React App", .env(["PORT": "{port}", "HOST": "0.0.0.0", "BROWSER": "none"]), true, found)
             } else if words.contains("nuxt") {
-                ("Nuxt", .flags("--port $PORT --host 127.0.0.1"), true, found)
+                ("Nuxt", .flags("--port $PORT --host 0.0.0.0"), true, found)
             } else if words.contains("astro") {
-                ("Astro", .flags("--port $PORT --host 127.0.0.1"), true, found)
+                ("Astro", .flags("--port $PORT --host 0.0.0.0"), true, found)
             } else if words.contains("webpack serve") || words.contains("webpack-dev-server") {
-                ("webpack dev server", .flags("--port $PORT --host 127.0.0.1"), true, found)
+                ("webpack dev server", .flags("--port $PORT --host 0.0.0.0"), true, found)
             } else if words.contains("vite") {
-                ("Vite", .flags("--port $PORT --strictPort --host 127.0.0.1"), true, found)
+                ("Vite", .flags("--port $PORT --strictPort --host 0.0.0.0"), true, found)
             } else {
                 nil
             }

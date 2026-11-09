@@ -110,7 +110,7 @@ struct TemplateRegistryTests {
     @Test func theListDecodesAndSkipsUnpinnedEntries() throws {
         let json = #"""
         {"schema":1,"templates":[
-          {"id":"website","repo":"kstrat2001/muxbot-template-vite-react","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Build a website","icon":"globe","summary":"A site."},
+          {"id":"website","repo":"kstrat2001/muxbot-template-site","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Build a website","icon":"globe","summary":"A site."},
           {"id":"tagged","repo":"someone/thing","ref":"v1.0.0","title":"Tagged","icon":"star"},
           {"id":"loose","repo":"someone/thing","ref":"main","title":"Loose","icon":"star"},
           {"id":"bad","repo":"not a repo","ref":"1f1a5b5678e53642f702b0d176aaf2bbc8117f12","title":"Bad","icon":"star"},
@@ -139,7 +139,7 @@ struct TemplateRegistryTests {
         #expect(await laterOffline.templates().map(\.id) == ["docs"], "the last list fetched")
     }
 
-    static let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-vite-react",
+    static let entry = TemplateEntry(id: "website", repo: "kstrat2001/muxbot-template-site",
                                      ref: "1f1a5b5678e53642f702b0d176aaf2bbc8117f12", title: "Build a website", icon: "globe")
     static let preview = Data(#"{"schema":1,"command":"npm run dev"}"#.utf8)
 
@@ -152,8 +152,8 @@ struct TemplateRegistryTests {
         let details = await registry.template(for: Self.entry)
         #expect(details.playbook?.title == "X")
         #expect(seen.urls.map(\.absoluteString) == [
-            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-vite-react/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/PLAYBOOK.md",
-            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-vite-react/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/.darkmux/preview.json",
+            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-site/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/PLAYBOOK.md",
+            "https://raw.githubusercontent.com/kstrat2001/muxbot-template-site/1f1a5b5678e53642f702b0d176aaf2bbc8117f12/.darkmux/preview.json",
         ])
     }
 
@@ -229,7 +229,7 @@ struct StartProjectFlowTests {
         #expect(bot.instructions.contains("Warm and friendly"))
         #expect(bot.repoSlugs.isEmpty, "local only until GitHub")
         #expect(asked?.template == true)
-        #expect(asked?.repoURL == "https://github.com/kstrat2001/muxbot-template-vite-react")
+        #expect(asked?.repoURL == "https://github.com/kstrat2001/muxbot-template-site")
         #expect(asked?.ref == "1f1a5b5678e53642f702b0d176aaf2bbc8117f12")
         #expect(bot.workspaceName == "bakery-1a2b")
     }
@@ -259,14 +259,14 @@ struct TemplateSchemaTests {
     }
 
     @Test func aNewerSchemaIsRefusedByName() {
-        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 2")
-        #expect(throws: Playbook.ParseError.newerSchema(2)) { try Playbook.parse(playbook) }
-        #expect(Playbook.ParseError.newerSchema(2).message.hasPrefix("This template needs a newer Mux Bot"))
-        #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 2)) {
-            try TemplateSchema.checkPreview(Data(#"{"schema":2,"command":"x"}"#.utf8))
+        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 3")
+        #expect(throws: Playbook.ParseError.newerSchema(3)) { try Playbook.parse(playbook) }
+        #expect(Playbook.ParseError.newerSchema(3).message.hasPrefix("This template needs a newer Mux Bot"))
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 3)) {
+            try TemplateSchema.checkPreview(Data(#"{"schema":3,"command":"x"}"#.utf8))
         }
-        #expect(throws: TemplateSchema.Problem.newerSchema(file: "templates.json", 2)) {
-            try TemplateRegistry.decode(Data(#"{"schema":2,"templates":[]}"#.utf8))
+        #expect(throws: TemplateSchema.Problem.newerSchema(file: "templates.json", 3)) {
+            try TemplateRegistry.decode(Data(#"{"schema":3,"templates":[]}"#.utf8))
         }
     }
 

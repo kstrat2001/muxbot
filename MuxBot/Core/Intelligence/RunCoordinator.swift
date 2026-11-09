@@ -218,7 +218,13 @@ final class RunCoordinator {
             // Give the preview's hot reload a moment, then check.
             Task { try? await Task.sleep(for: .seconds(2)); await self.check(run) }
         }
-        if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
+        // The notice can wait on macOS's "allow notifications?" prompt, so it
+        // runs on its own and nothing after it waits for it.
+        if let notice = RunNotice.make(for: run) {
+            let post = noticePoster ?? { [notifier] in await notifier?.post($0, runId: $1) }
+            let runId = run.id
+            Task { await post(notice, runId) }
+        }
         // A project the app made on GitHub: its committed work is backed up
         // to the bot's branch there (no PR until you open one).
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { await backUp(bot, store: store) }
@@ -569,7 +575,7 @@ final class RunCoordinator {
             let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
             store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
             let key = RecipeStore.key(for: bot)
-            if let key { recipes.recipes[key] = nil; await recipes.load(for: key, workspace: made.workspace, connection: connection, github: github) }
+            if let key { recipes.recipes[key] = nil; await recipes.load(for: key, workspace: made.workspace, connection: connection, github: github, useCaseId: bot.useCaseId) }
         } catch {
             workCopySetup[bot.id] = .failed(error.localizedDescription)
         }
@@ -583,6 +589,8 @@ final class RunCoordinator {
     /// Tests answer workspace requests here; nil asks darkmux.
     /// Bots whose project has no preview recipe darkmux will run (its 404).
     var noRecipe: Set<UUID> = []
+    /// Posts a run's notice (tests); else the notification service.
+    var noticePoster: ((RunNotice, UUID) async -> Void)?
     /// Your GitHub sign-in's token, for backups (set by the app).
     var githubToken: (@MainActor () -> String?)?
     /// darkmux's branch changes for a workspace (tests); else darkmux.

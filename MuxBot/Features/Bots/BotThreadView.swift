@@ -43,10 +43,8 @@ struct BotThreadView: View {
 
     /// The viewports the bot's preview recipe lists, if it's loaded.
     private var recipeViewports: [String]? {
-        for repo in bot?.repoSlugs ?? [] {
-            if case let .ready(manifest, _)? = brain.runs.recipes.recipes[repo] { return manifest.viewports }
-        }
-        return nil
+        // The recipe plus the hints from the bot's playbook (template schema 2).
+        bot.flatMap(brain.runs.recipes.recipe(for:))?.viewports
     }
 
     var body: some View {
@@ -178,11 +176,13 @@ struct BotThreadView: View {
             }
             greetIfNew()
             for repo in bot?.repoSlugs ?? [] {
-                await brain.runs.recipes.load(for: repo, workspace: bot?.workspaceName, connection: brain.connection, github: brain.github)
+                await brain.runs.recipes.load(for: repo, workspace: bot?.workspaceName, connection: brain.connection, github: brain.github,
+                                              useCaseId: bot?.useCaseId ?? "")
             }
             // A project with no repo yet: its recipe is in its workspace.
             if let bot, bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
-                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github)
+                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github,
+                                              useCaseId: bot.useCaseId)
             }
         }
         #if os(iOS)

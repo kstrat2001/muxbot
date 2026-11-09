@@ -150,9 +150,9 @@ struct BotInfoView: View {
         .formStyle(.grouped)
         .task { if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() } }
         .task {
-            for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github) }
+            for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github, useCaseId: bot.useCaseId) }
             if bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
-                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github)
+                await brain.runs.recipes.load(for: key, workspace: bot.workspaceName, connection: brain.connection, github: brain.github, useCaseId: bot.useCaseId)
             }
             await refreshBranch()
         }

@@ -1,14 +1,17 @@
 # Playbook: a book
 
-schema: 1
+schema: 2
 title: Write a book
 icon: book.closed
 pitch: A book manuscript you write with help: see it as printed pages, keep the chapters moving, and export it as an ebook or a Word manuscript.
 animal: owl
 colors: 7a4a2a, ffd27a
 crew: coder
+page_file: manuscript/chapters/{page}.md
+pages: /, /desk, /notes
+viewports: desktop, phone
 
-This file is the recipe Mux Bot reads when someone starts a book from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 1). The lines above set up the new bot. The sections below are what Mux Bot asks first, the new bot's first run, its persona, and its skills: each skill says when it applies, what to do, which files to touch and when it's done.
+This file is the recipe Mux Bot reads when someone starts a book from this template, in the format of [Mux Bot's template schema](https://github.com/kstrat2001/muxbot-templates/blob/main/SCHEMA.md) (schema 2). The lines above set up the new bot. The sections below are what Mux Bot asks first, the new bot's first run, its persona, and its skills: each skill says when it applies, what to do, which files to touch and when it's done.
 
 ## Questions
 
@@ -21,6 +24,10 @@ This file is the recipe Mux Bot reads when someone starts a book from this templ
 Set the book's title in book.json to {name}.
 The book is about {purpose}: write that as a two or three sentence description in book.json, and start notes/outline.md with a short plan of chapters for it.
 It is written for, and should read as, {feel}: put that at the top of notes/style-sheet.md as the book's voice.
+
+## Conventions
+
+A book manuscript in Markdown. Each piece is a file in manuscript/front/, manuscript/chapters/ or manuscript/back/ with a front matter block (title, status, drafted_by, optional part); book.json holds the title, author, publishing details and the reading order, and the title page, copyright page and contents are built from it. Notes the book needs are in notes/. The reader app is in src/; the book's typography is the variables at the top of src/styles.css.
 
 ## Persona
 

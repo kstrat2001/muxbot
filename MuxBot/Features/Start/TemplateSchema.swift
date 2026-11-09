@@ -1,12 +1,15 @@
 import Foundation
 
 /// The template schema (kstrat2001/muxbot-templates SCHEMA.md): one version
-/// number for templates.json, PLAYBOOK.md and .darkmux/preview.json. An
+/// number for templates.json and PLAYBOOK.md. Since schema 2 a template's
+/// .darkmux/preview.json is darkmux's own recipe (`schema_version` "1.0",
+/// darkmux's keys only) and the app's hints live in PLAYBOOK.md; schema 1
+/// templates (hints in preview.json, `"schema": 1`) still read. An
 /// added optional key keeps the number; a new required key, or a renamed
 /// or removed one, is the next. Mux Bot refuses a missing schema, or one
 /// newer than it reads, by name, and never guesses.
 enum TemplateSchema {
-    static let supported = 1
+    static let supported = 2
 
     /// Checks a file's schema value: present, a number, and not newer.
     static func check<E: Error>(_ value: String?, missing: E, newer: (Int) -> E, notANumber: (String) -> E) throws {
@@ -61,13 +64,22 @@ enum TemplateSchema {
 
     static let previewKeys = ["schema", "command", "env", "ready", "install", "env_from_source",
                               "conventions", "page_file", "pages", "viewports"]
+    /// darkmux's recipe (its `client_preview` reader): `schema_version` and
+    /// these keys only, an unknown one refused. A template has no checkout
+    /// to copy files from, so no `env_from_source`.
+    static let recipeVersion = "1.0"
+    static let recipeKeys = ["schema_version", "command", "env", "ready", "install"]
 
-    /// A template's preview recipe, checked against the schema: its schema
-    /// number, a command, and no key the schema doesn't name.
-    static func checkPreview(_ data: Data) throws {
+    /// A template's preview recipe: darkmux's own (schema 2), or the schema 1
+    /// file with the app's hints in it. `darkmuxShape` requires the first.
+    static func checkPreview(_ data: Data, darkmuxShape: Bool = false) throws {
         let file = ".darkmux/preview.json"
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw Problem.invalid(file: file, key: "(file)", why: String(localized: "it isn't a JSON object."))
+        }
+        if object["schema_version"] != nil || darkmuxShape {
+            try checkRecipe(object, file: file)
+            return
         }
         for key in object.keys.sorted() where !previewKeys.contains(key) {
             throw Problem.unknownKey(file: file, key: key, closest: closest(to: key, in: previewKeys))
@@ -80,6 +92,25 @@ enum TemplateSchema {
         }
         try check(schema, missing: Problem.missingSchema(file: file),
                   newer: { Problem.newerSchema(file: file, $0) }, notANumber: { Problem.notASchema(file: file, $0) })
+        if schema == "2" {
+            throw Problem.invalid(file: file, key: "schema", why: String(localized: "a schema 2 template's preview.json is darkmux's recipe: write \u{201C}schema_version\u{201D}: \u{201C}\(recipeVersion)\u{201D} and keep the app's hints in PLAYBOOK.md."))
+        }
+        guard let command = object["command"] as? String, !command.isEmpty else {
+            throw Problem.invalid(file: file, key: "command", why: String(localized: "it needs the command that starts the preview."))
+        }
+    }
+
+    /// darkmux's recipe, checked the way darkmux checks it.
+    private static func checkRecipe(_ object: [String: Any], file: String) throws {
+        if object["env_from_source"] != nil {
+            throw Problem.invalid(file: file, key: "env_from_source", why: String(localized: "a template has no checkout to copy files from."))
+        }
+        for key in object.keys.sorted() where !recipeKeys.contains(key) {
+            throw Problem.unknownKey(file: file, key: key, closest: closest(to: key, in: recipeKeys))
+        }
+        guard object["schema_version"] as? String == recipeVersion else {
+            throw Problem.invalid(file: file, key: "schema_version", why: String(localized: "darkmux reads \u{201C}\(recipeVersion)\u{201D}."))
+        }
         guard let command = object["command"] as? String, !command.isEmpty else {
             throw Problem.invalid(file: file, key: "command", why: String(localized: "it needs the command that starts the preview."))
         }
