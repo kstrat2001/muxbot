@@ -266,6 +266,24 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(ProfileList.self, from: data)
     }
 
+    /// What this app may run here (`GET /client/whoami`): `profiles` is nil
+    /// for any local profile (darkmux's default), else the granted names.
+    struct Whoami: Decodable, Sendable, Equatable {
+        var profiles: [String]?
+        enum CodingKeys: String, CodingKey { case scopes }
+        enum ScopeKeys: String, CodingKey { case profiles }
+        init(profiles: [String]?) { self.profiles = profiles }
+        init(from decoder: any Decoder) throws {
+            let scopes = try decoder.container(keyedBy: CodingKeys.self).nestedContainer(keyedBy: ScopeKeys.self, forKey: .scopes)
+            profiles = try? scopes.decode([String].self, forKey: .profiles)
+        }
+    }
+
+    func whoami(token: String) async throws -> Whoami {
+        let data = try await send("GET", "/client/whoami", headers: ["Authorization": "Bearer \(token)"])
+        return try JSONDecoder().decode(Whoami.self, from: data)
+    }
+
     func workStatus(token: String, workId: String) async throws -> WorkStatus {
         let data = try await send("GET", "/client/work/\(workId)", headers: ["Authorization": "Bearer \(token)"])
         return try JSONDecoder().decode(WorkStatus.self, from: data)

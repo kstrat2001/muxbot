@@ -152,7 +152,7 @@ struct RunCardView: View {
             default:
                 Text("No pull request.").font(AppFont.footnote()).foregroundStyle(.secondary)
             }
-        case .text, .bugCard, .actionCard:
+        case .text, .bugCard, .actionCard, .guideCard:
             EmptyView()
         }
     }

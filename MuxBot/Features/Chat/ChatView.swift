@@ -21,6 +21,11 @@ struct ChatView: View {
         (conversation.messages ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
+    /// The newest setup check: the only one that keeps looking.
+    private var latestSetupId: UUID? {
+        messages.last { $0.guideCard == .setup }?.id
+    }
+
     /// The newest card of each kind for each run; older ones are history.
     private var latestCardIds: Set<UUID> {
         var latest: [String: ChatMessage] = [:]
@@ -42,6 +47,8 @@ struct ChatView: View {
                                 BugCardView(message: message)
                             } else if message.kind == .actionCard {
                                 ActionCardView(message: message)
+                            } else if message.kind == .guideCard {
+                                GuideCardView(message: message, isLatest: message.id == latestSetupId)
                             } else {
                                 RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
                                     .overlay {

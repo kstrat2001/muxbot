@@ -243,7 +243,9 @@ struct BotThreadView: View {
         let conversation = store.conversation(for: context)
         guard (conversation.messages ?? []).isEmpty else { return }
         let hello = bot.map { "Hi, I'm \($0.name). \($0.instructions)" }
-            ?? "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it."
+            ?? (Guide.isEnabled
+                ? String(localized: "Hi, I'm \(LeadBot.name). I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”.")
+                : "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it.")
         store.append(.assistant, hello, to: conversation)
     }
 }

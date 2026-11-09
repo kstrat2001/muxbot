@@ -5,12 +5,13 @@ import SwiftData
 import FoundationModels
 #endif
 
-/// The lead bot on Home that orchestrates the others. Placeholder name:
+/// The lead bot on Home: the guide (setup, first bot, help) that hands work
+/// to the right bot but never starts it. Placeholder name:
 /// rename it here and only here.
 enum LeadBot {
     static let name = "Mux Bot"
     static let systemImage = "crown"
-    static let persona = "You orchestrate the other bots, which are the user's projects and themes: hand work to the right bot, and set up new bots. Short, confident, friendly."
+    static let persona = "You're the guide: you help people set up Mux Bot (darkmux, pairing, models, GitHub), make their first bot from a repo, and answer questions about Mux Bot and darkmux from its help. When the help doesn't say, you say you don't know. You don't start work yourself: work happens in a bot's thread. Short, friendly, plain."
 }
 
 /// Which conversation the user is in. Follows navigation.
@@ -38,6 +39,8 @@ struct BotDraft: Sendable, Equatable, Codable {
     var name: String
     var instructions: String
     var systemImage: String = "sparkles"
+    /// A repo link or folder path the bot starts with.
+    var resource: String? = nil
 }
 
 /// Something a bot wants to do. Every action waits for Approve.
@@ -304,6 +307,8 @@ final class BotBrain {
     var github: any GitHubClient = RESTGitHubClient() { didSet { runs.github = github } }
     /// Runs, work copies and previews.
     let runs = RunCoordinator()
+    /// Mux Bot as a guide, in its own thread.
+    let guide = LeadGuide()
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection? {
@@ -331,7 +336,7 @@ final class BotBrain {
         let crewList = CrewRole.allCases.map(\.name).joined(separator: ", ")
         let identity = speaker.map {
             "You are \($0.name), a bot in Mux Bot. \($0.instructions.prefix(160))\nYour darkmux crew: \(crewList). Dispatch work to the crew role that fits."
-        } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) Route work to the bot whose theme or resources fit; you don't dispatch yourself."
+        } ?? "You are \(LeadBot.name), the lead bot in Mux Bot. \(LeadBot.persona) When the user wants work done, hand it to the bot whose theme or resources fit; you never dispatch it yourself."
         let rules = """
             Answer in plain words; propose an action only when the user wants something done. \
             You cannot see the website. Never say how something looks. \
@@ -490,6 +495,18 @@ final class BotBrain {
         let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
         message.intentRaw = intent?.rawValue
         store.save()
+
+        // Mux Bot's thread: the guide answers setup, first-bot, settings and
+        // help questions (`Guide.isEnabled` cuts it).
+        if speaker == nil, Guide.isEnabled, element == nil, explicit == nil || explicit == .ask,
+           intent == nil || intent == .ask, let route = GuideRoute.route(text),
+           // A question about one of your bots is the lead bot's, not the help's.
+           route != .help || !bots.contains(where: { text.lowercased().contains($0.name.lowercased()) }) {
+            isThinking = true
+            defer { isThinking = false }
+            await guide.respond(route, to: text, store: store, brain: self)
+            return
+        }
 
         isThinking = true
         defer { isThinking = false }
@@ -941,7 +958,12 @@ final class BotBrain {
             store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task)"
         case let .createBot(draft):
-            store.add(name: draft.name, instructions: draft.instructions, systemImage: draft.systemImage)
+            let bot = store.add(name: draft.name, instructions: draft.instructions, systemImage: draft.systemImage)
+            bot.look = BotLook.suggested(for: draft.name)
+            if let value = draft.resource {
+                let kind = ResourceKind.guess(for: value)
+                store.addResource(ResourceKind.addable.contains(kind) ? kind : .note, value, to: bot)
+            }
             note = "Added bot \(draft.name)."
         case let .dispatch(crew, task):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }

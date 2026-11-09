@@ -44,7 +44,7 @@ struct HomeView: View {
                 }
                 if roles.isEmpty {
                     EmptyStateView(systemImage: "person.3", title: "No bots yet",
-                                   message: "A bot is a project or theme you name, like your website. Tap + to add one, or ask \(LeadBot.name) to set one up.")
+                                   message: "A bot is a project or theme you name, like your website. Tap + to add one, or paste a GitHub link to \(LeadBot.name) and it makes one.")
                     Button("Add an example bot", systemImage: "sparkles") { BotStore(context: modelContext).addExample() }
                         .frame(maxWidth: .infinity)
                 }
@@ -158,7 +158,8 @@ struct LeadBotCard: View {
     private var latest: String {
         let messages = (threads.first?.messages ?? []).filter { $0.role == .assistant }
         return messages.max { $0.timestamp < $1.timestamp }?.content
-            ?? "Tell me what needs doing and I'll get the right bot on it."
+            ?? (Guide.isEnabled ? String(localized: "New here? Ask me to check your setup, or to make a bot from your repo.")
+                : "Tell me what needs doing and I'll get the right bot on it.")
     }
 
     var body: some View {

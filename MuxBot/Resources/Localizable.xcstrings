@@ -69,6 +69,26 @@
     "%lld bots" : {
 
     },
+    "%lld models, %lld ready now." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld models, %2$lld ready now."
+          }
+        }
+      }
+    },
+    "%lld of %lld done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld done"
+          }
+        }
+      }
+    },
     "%lld things need you" : {
 
     },
@@ -81,6 +101,21 @@
           }
         }
       }
+    },
+    "32 GB or less" : {
+
+    },
+    "33 to 64 GB" : {
+
+    },
+    "96 GB or more" : {
+
+    },
+    "A Mac with Apple silicon" : {
+
+    },
+    "A bot is a project you name. Paste its GitHub link here, or use New bot to add a folder from this Mac." : {
+
     },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
 
@@ -115,6 +150,18 @@
     "Add folder…" : {
 
     },
+    "After an earlier step" : {
+
+    },
+    "After darkmux's app connection is running." : {
+
+    },
+    "After pairing." : {
+
+    },
+    "All set" : {
+
+    },
     "Allow notifications" : {
 
     },
@@ -122,6 +169,9 @@
 
     },
     "Always ask" : {
+
+    },
+    "Any model that runs on this Mac" : {
 
     },
     "Apple Intelligence is ready. Bots answer on this device." : {
@@ -181,6 +231,9 @@
     "Bug: %@" : {
 
     },
+    "Can't reach darkmux" : {
+
+    },
     "Can't reach darkmux on this Mac. Still trying…" : {
 
     },
@@ -200,6 +253,12 @@
 
     },
     "Change folder…" : {
+
+    },
+    "Changed in darkmux on your Mac, not here." : {
+
+    },
+    "Check it yourself" : {
 
     },
     "Checking the done-when in the preview…" : {
@@ -298,6 +357,12 @@
     "Dispatch to %@" : {
 
     },
+    "Docker" : {
+
+    },
+    "Docker is running" : {
+
+    },
     "Don't have darkmux yet? Install it" : {
 
     },
@@ -309,6 +374,16 @@
     },
     "Done when: not met" : {
 
+    },
+    "Download a model in LM Studio. This Mac has %lld GB, so pick one darkmux's %@ settings fit; darkmux doctor checks it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Download a model in LM Studio. This Mac has %1$lld GB, so pick one darkmux's %2$@ settings fit; darkmux doctor checks it."
+          }
+        }
+      }
     },
     "Draft one" : {
 
@@ -350,6 +425,12 @@
     "For this bot" : {
 
     },
+    "From" : {
+
+    },
+    "From the help:" : {
+
+    },
     "From your folder %@" : {
 
     },
@@ -357,6 +438,9 @@
 
     },
     "GitHub" : {
+
+    },
+    "GitHub (optional)" : {
 
     },
     "GitHub URL or link (optional)" : {
@@ -369,6 +453,15 @@
 
     },
     "Hand to %@" : {
+
+    },
+    "Here's the switch. Changing it changes the setting right away." : {
+
+    },
+    "Here's what Mux Bot needs. Each step ticks itself off once it's working." : {
+
+    },
+    "Hi, I'm %@. I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”." : {
 
     },
     "Hide" : {
@@ -386,6 +479,25 @@
     "How this app reaches darkmux" : {
 
     },
+    "I can make %@ for that. Approve to add it." : {
+
+    },
+    "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
+
+    },
+    "Install LM Studio and download a model, or open it and turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Install LM Studio and download a model, or open it and turn on its local server. This Mac has %1$lld GB: darkmux's %2$@ settings fit it."
+          }
+        }
+      }
+    },
+    "Install it in Terminal with Homebrew (skip this if you have it). Mux Bot can't tell until darkmux's app connection runs." : {
+
+    },
     "Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
@@ -393,6 +505,12 @@
 
     },
     "Kind" : {
+
+    },
+    "LM Studio and a model" : {
+
+    },
+    "LM Studio has %lld models." : {
 
     },
     "Live" : {
@@ -408,6 +526,9 @@
 
     },
     "Machine" : {
+
+    },
+    "Make your first bot" : {
 
     },
     "Measured in the preview" : {
@@ -444,6 +565,12 @@
     "Models" : {
 
     },
+    "Models Mux Bot can use" : {
+
+    },
+    "Models apps may use" : {
+
+    },
     "Move down" : {
 
     },
@@ -453,7 +580,13 @@
     "Mux Bot couldn't open its data" : {
 
     },
+    "Mux Bot is paired with darkmux on this Mac." : {
+
+    },
     "Mux Bot isn't paired with darkmux." : {
+
+    },
+    "Mux Bot may use" : {
 
     },
     "Mux Bot picks: the first in the Auto order that's running." : {
@@ -463,6 +596,9 @@
 
     },
     "Name your bot" : {
+
+    },
+    "Needs a Mac" : {
 
     },
     "Needs you" : {
@@ -475,6 +611,12 @@
 
     },
     "New bot: %@" : {
+
+    },
+    "New bot…" : {
+
+    },
+    "New here? Ask me to check your setup, or to make a bot from your repo." : {
 
     },
     "Next" : {
@@ -493,6 +635,9 @@
 
     },
     "Not available: %@." : {
+
+    },
+    "Not known yet" : {
 
     },
     "Not now" : {
@@ -519,6 +664,18 @@
     "Notifications" : {
 
     },
+    "Notifications are off." : {
+
+    },
+    "Notifications are on." : {
+
+    },
+    "Off" : {
+
+    },
+    "On" : {
+
+    },
     "On %@" : {
 
     },
@@ -526,6 +683,9 @@
 
     },
     "On this Mac" : {
+
+    },
+    "On your Mac." : {
 
     },
     "On-device model" : {
@@ -561,7 +721,13 @@
     "PR #%@" : {
 
     },
+    "Pair Mux Bot" : {
+
+    },
     "Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later." : {
+
+    },
+    "Pair once, then approve it in Terminal." : {
 
     },
     "Pair with darkmux" : {
@@ -586,6 +752,9 @@
 
     },
     "Pass to %@" : {
+
+    },
+    "Paste a GitHub link in the bar below and I'll set it up, or start one yourself." : {
 
     },
     "Pick" : {
@@ -651,6 +820,12 @@
     "Running" : {
 
     },
+    "Running on this Mac." : {
+
+    },
+    "Runs happen on a Mac. Set up darkmux and Mux Bot there; your bots and threads sync here." : {
+
+    },
     "Same as Settings" : {
 
     },
@@ -669,6 +844,19 @@
     "Send" : {
 
     },
+    "Send the steps to your Mac" : {
+
+    },
+    "Set to %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Set to %1$@ on %2$@."
+          }
+        }
+      }
+    },
     "Set up %@ on %@? darkmux makes its own copy on a new branch, so your files aren't touched." : {
       "localizations" : {
         "en" : {
@@ -679,7 +867,13 @@
         }
       }
     },
+    "Set up Mux Bot on your Mac" : {
+
+    },
     "Set up now" : {
+
+    },
+    "Set when the app is built." : {
 
     },
     "Setting up %@ on %@…" : {
@@ -695,6 +889,9 @@
     "Setting up on %@…" : {
 
     },
+    "Setup check" : {
+
+    },
     "Show Preview" : {
 
     },
@@ -707,6 +904,9 @@
     "Sign in so bots can read your private repos and open pull requests. The sign-in stays on this device." : {
 
     },
+    "Sign in to read private repos and open pull requests." : {
+
+    },
     "Sign in with GitHub" : {
 
     },
@@ -716,6 +916,9 @@
     "Signed in as %@" : {
 
     },
+    "Signed in." : {
+
+    },
     "Start" : {
 
     },
@@ -723,6 +926,9 @@
 
     },
     "Start fresh keeps your old data: the files are renamed, not deleted, next to the new store." : {
+
+    },
+    "Start it in Terminal and leave it running. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one." : {
 
     },
     "Started" : {
@@ -752,6 +958,9 @@
     "Tell me when a run has a result or didn't finish" : {
 
     },
+    "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
+
+    },
     "The Dock icon shows how many runs are waiting on you." : {
 
     },
@@ -759,6 +968,15 @@
 
     },
     "The messages go; runs stay in Activity." : {
+
+    },
+    "This Mac has Apple silicon." : {
+
+    },
+    "This one is changed in darkmux on your Mac; here's its value." : {
+
+    },
+    "To do" : {
 
     },
     "Try again" : {
@@ -819,7 +1037,13 @@
     "Work copy" : {
 
     },
+    "Works on %@." : {
+
+    },
     "You can also revoke it in Terminal:" : {
+
+    },
+    "You said Docker is running." : {
 
     },
     "Your bots" : {
@@ -831,10 +1055,34 @@
     "darkmux" : {
 
     },
+    "darkmux didn't list its models: %@" : {
+
+    },
+    "darkmux has models ready." : {
+
+    },
+    "darkmux installed" : {
+
+    },
+    "darkmux is answering on this Mac." : {
+
+    },
+    "darkmux is built for Apple silicon Macs; this Mac has an Intel chip, which darkmux hasn't been tested on." : {
+
+    },
+    "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
+
+    },
     "darkmux on this Mac decides which models apps may use." : {
 
     },
+    "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does." : {
+
+    },
     "darkmux says there's nothing to approve?" : {
+
+    },
+    "darkmux's app connection" : {
 
     },
     "darkmux's app connection has to be running on this Mac (the command above starts it)." : {
@@ -844,6 +1092,12 @@
 
     },
     "darkmux: paired" : {
+
+    },
+    "iCloud sync" : {
+
+    },
+    "this Mac" : {
 
     },
     "·" : {
