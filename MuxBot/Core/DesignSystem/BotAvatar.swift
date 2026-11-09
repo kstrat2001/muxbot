@@ -8,13 +8,45 @@ enum BotAnimal: String, Codable, CaseIterable, Sendable, Identifiable {
     case octopus, fox, otter, beaver, owl, cat, bear, rabbit, panda, raccoon, penguin, frog, dog, squirrel
 
     var id: String { rawValue }
-    var name: String { rawValue.capitalized }
+
+    /// The animal's name, shown under it in the picker.
+    var name: String {
+        switch self {
+        case .octopus: String(localized: "Octopus")
+        case .fox: String(localized: "Fox")
+        case .otter: String(localized: "Otter")
+        case .beaver: String(localized: "Beaver")
+        case .owl: String(localized: "Owl")
+        case .cat: String(localized: "Cat")
+        case .bear: String(localized: "Bear")
+        case .rabbit: String(localized: "Rabbit")
+        case .panda: String(localized: "Panda")
+        case .raccoon: String(localized: "Raccoon")
+        case .penguin: String(localized: "Penguin")
+        case .frog: String(localized: "Frog")
+        case .dog: String(localized: "Dog")
+        case .squirrel: String(localized: "Squirrel")
+        }
+    }
 }
 
 /// What a bot's avatar is showing. Status is told by the face and motion,
 /// never by words (words live in the accessibility label).
-enum AvatarMood: CaseIterable, Sendable {
+enum AvatarMood: CaseIterable, Sendable, Identifiable {
     case idle, thinking, running, needsYou, done
+
+    var id: Self { self }
+
+    /// The state's name, for the picker's preview row.
+    var name: String {
+        switch self {
+        case .idle: String(localized: "Idle")
+        case .thinking: String(localized: "Thinking")
+        case .running: String(localized: "Working")
+        case .needsYou: String(localized: "Needs you")
+        case .done: String(localized: "Done")
+        }
+    }
 
     init(_ state: BotState) {
         switch state {
@@ -478,28 +510,50 @@ struct AvatarPainter {
 // MARK: - Picker
 
 /// Choose a bot's animal, main color and eye color, with a live preview.
+/// The face being previewed in the picker: the look, and the state shown.
+/// The state is for trying faces out only; it's never saved on the bot.
+struct AvatarPreview: Equatable {
+    var look: BotLook
+    var mood: AvatarMood = .idle
+
+    /// Another animal, in the same state, so animals compare side by side.
+    mutating func pick(_ animal: BotAnimal) { look.animal = animal }
+    mutating func show(_ mood: AvatarMood) { self.mood = mood }
+}
+
 struct BotLookPicker: View {
     @Binding var look: BotLook
+    /// The state the big face previews (New bot shows its own big face).
+    @Binding var mood: AvatarMood
     /// Off when the screen shows its own big preview (New bot).
     var showsPreview = true
-    private let columns = [GridItem(.adaptive(minimum: 52), spacing: Spacing.sm)]
+    private let columns = [GridItem(.adaptive(minimum: 64), spacing: Spacing.sm)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             if showsPreview {
                 HStack {
                     Spacer()
-                    BotAvatarView(look: look, mood: .idle, size: 120)
+                    BotAvatarView(look: look, mood: mood, size: 120)
                     Spacer()
                 }
             }
+            moods
             LazyVGrid(columns: columns, spacing: Spacing.sm) {
                 ForEach(BotAnimal.allCases) { animal in
                     let picked = look.animal == animal
-                    Button { look.animal = animal } label: {
-                        BotAvatarView(look: BotLook(animal: animal, bodyHex: look.bodyHex, eyeHex: look.eyeHex), size: 44)
-                            .padding(4)
-                            .background(RoundedRectangle(cornerRadius: CornerRadius.sm).strokeBorder(picked ? Color.primary : .clear, lineWidth: 2))
+                    Button { var p = preview; p.pick(animal); look = p.look } label: {
+                        VStack(spacing: 2) {
+                            BotAvatarView(look: BotLook(animal: animal, bodyHex: look.bodyHex, eyeHex: look.eyeHex), size: 44)
+                            Text(animal.name)
+                                .font(AppFont.caption(picked ? .semibold : .regular))
+                                .foregroundStyle(picked ? .primary : .secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .padding(4)
+                        .frame(maxWidth: .infinity)
+                        .background(RoundedRectangle(cornerRadius: CornerRadius.sm).strokeBorder(picked ? Color.primary : .clear, lineWidth: 2))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(animal.name)
@@ -508,6 +562,33 @@ struct BotLookPicker: View {
             }
             swatches("Main color", BotLook.bodyColors, selected: look.bodyHex) { look.bodyHex = $0 }
             swatches("Eye color", BotLook.eyeColors, selected: look.eyeHex) { look.eyeHex = $0 }
+        }
+    }
+
+    private var preview: AvatarPreview { AvatarPreview(look: look, mood: mood) }
+
+    /// The states the face can show; tap one to preview it. Reduce Motion
+    /// shows each state's still face.
+    private var moods: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("Preview a state").font(AppFont.caption(.semibold)).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: Spacing.xs)], alignment: .leading, spacing: Spacing.xs) {
+                ForEach(AvatarMood.allCases) { state in
+                    let on = mood == state
+                    Button { var p = preview; p.show(state); mood = p.mood } label: {
+                        Text(state.name)
+                            .font(AppFont.caption(on ? .semibold : .regular))
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.xs + 1)
+                            .background(Capsule().fill(on ? Color.brandBlue.opacity(0.2) : Color.secondary.opacity(0.1)))
+                            .overlay(Capsule().strokeBorder(on ? Color.brandBlue : .clear, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Preview \(state.name)"))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
         }
     }
 

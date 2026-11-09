@@ -11,6 +11,8 @@ struct NewBotView: View {
     @State private var folder: URL?
     @State private var pickingFolder = false
     @State private var look = BotLook.suggested(for: "")
+    /// The state the face previews while you pick (not saved).
+    @State private var mood = AvatarMood.idle
 
     /// Step 1 is the bot itself (face and name); step 2 is what it works on.
     @State private var onDetails = false
@@ -40,7 +42,7 @@ struct NewBotView: View {
     private var face: some View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
-                BotAvatarView(look: look, mood: .idle, size: 150)
+                BotAvatarView(look: look, mood: mood, size: 150)
                 TextField("Name your bot", text: $name)
                     .multilineTextAlignment(.center)
                     .font(AppFont.headline())
@@ -48,7 +50,7 @@ struct NewBotView: View {
                     .padding(Spacing.md)
                     .background(RoundedRectangle(cornerRadius: CornerRadius.md).strokeBorder(.secondary.opacity(0.4)))
                     .onSubmit { if canSave { onDetails = true } }
-                BotLookPicker(look: $look, showsPreview: false)
+                BotLookPicker(look: $look, mood: $mood, showsPreview: false)
             }
             .padding(Spacing.xl)
             .frame(maxWidth: 520)

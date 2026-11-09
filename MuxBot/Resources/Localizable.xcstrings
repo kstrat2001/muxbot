@@ -217,6 +217,12 @@
     "Back to chat (Esc)" : {
 
     },
+    "Bear" : {
+
+    },
+    "Beaver" : {
+
+    },
     "Bot" : {
 
     },
@@ -260,6 +266,9 @@
 
     },
     "Canceled" : {
+
+    },
+    "Cat" : {
 
     },
     "Change" : {
@@ -382,6 +391,9 @@
     "Docker is running" : {
 
     },
+    "Dog" : {
+
+    },
     "Don't have darkmux yet? Install it" : {
 
     },
@@ -445,6 +457,12 @@
 
     },
     "For this bot" : {
+
+    },
+    "Fox" : {
+
+    },
+    "Frog" : {
 
     },
     "From" : {
@@ -517,6 +535,9 @@
 
     },
     "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
+
+    },
+    "Idle" : {
 
     },
     "Install LM Studio and download a model, or open it and turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
@@ -707,6 +728,9 @@
     "Notifications are on." : {
 
     },
+    "Octopus" : {
+
+    },
     "Off" : {
 
     },
@@ -764,6 +788,12 @@
     "Or make a bot for code you already have with New bot." : {
 
     },
+    "Otter" : {
+
+    },
+    "Owl" : {
+
+    },
     "PR #%@" : {
 
     },
@@ -797,7 +827,13 @@
     "Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time." : {
 
     },
+    "Panda" : {
+
+    },
     "Pass to %@" : {
+
+    },
+    "Penguin" : {
 
     },
     "Pick" : {
@@ -815,6 +851,12 @@
     "Preview" : {
 
     },
+    "Preview %@" : {
+
+    },
+    "Preview a state" : {
+
+    },
     "Preview at phone, tablet or desktop width" : {
 
     },
@@ -828,6 +870,12 @@
 
     },
     "Pull request opened" : {
+
+    },
+    "Rabbit" : {
+
+    },
+    "Raccoon" : {
 
     },
     "Ran on %@" : {
@@ -977,6 +1025,9 @@
     "Skills" : {
 
     },
+    "Squirrel" : {
+
+    },
     "Start" : {
 
     },
@@ -1035,6 +1086,9 @@
 
     },
     "The messages go; runs stay in Activity." : {
+
+    },
+    "Thinking" : {
 
     },
     "This Mac has Apple silicon." : {
@@ -1186,6 +1240,9 @@
 
     },
     "Work copy" : {
+
+    },
+    "Working" : {
 
     },
     "Works on %@." : {

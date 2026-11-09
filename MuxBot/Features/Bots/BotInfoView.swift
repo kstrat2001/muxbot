@@ -32,6 +32,9 @@ struct BotInfoView: View {
         Binding(get: { bot.instructions }, set: { bot.instructions = $0; try? context.save() })
     }
 
+    /// The state the picker's face previews (not saved).
+    @State private var previewMood = AvatarMood.idle
+
     var body: some View {
         Form {
             Section("About") {
@@ -44,7 +47,7 @@ struct BotInfoView: View {
                     .foregroundStyle(.secondary)
             }
             Section("Look") {
-                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }))
+                BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }), mood: $previewMood)
             }
             workCopySection
             Section {
