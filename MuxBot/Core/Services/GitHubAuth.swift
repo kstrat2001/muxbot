@@ -28,7 +28,6 @@ final class GitHubAuth {
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let keychain: any KeychainProviding
     @ObservationIgnored private let sleep: @Sendable (Double) async throws -> Void
-    @ObservationIgnored private var flow: Task<Void, Never>?
 
     init(clientID: String? = Bundle.main.object(forInfoDictionaryKey: "MuxBotGitHubClientID") as? String,
          session: URLSession = .shared,
@@ -74,11 +73,13 @@ final class GitHubAuth {
             struct Poll: Decodable { var access_token: String?; var error: String?; var interval: Int? }
             while Date() < deadline {
                 try await sleep(interval)
-                if Task.isCancelled { return }
+                if Task.isCancelled { return canceled() }
                 let p: Poll = try await post("https://github.com/login/oauth/access_token", [
                     "client_id": clientID, "device_code": code.device_code,
                     "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 ])
+                // Cancel can land while the token is on its way: it's dropped.
+                if Task.isCancelled { return canceled() }
                 if let token = p.access_token {
                     _ = keychain.save(key: Self.tokenKey, value: token)
                     cachedToken = .some(token)
@@ -96,8 +97,15 @@ final class GitHubAuth {
             }
             state = .failed("The code expired before it was approved. Try again.")
         } catch {
+            // A canceled wait or request throws; that's Cancel, not a failure.
+            if Task.isCancelled { return canceled() }
             state = .failed("GitHub sign-in failed: \(error.localizedDescription)")
         }
+    }
+
+    /// A canceled sign-in leaves you signed out, with no token saved.
+    private func canceled() {
+        if case .waiting = state { state = .signedOut }
     }
 
     /// Who's signed in (for Settings).
@@ -116,8 +124,9 @@ final class GitHubAuth {
         }
     }
 
+    /// To stop a sign-in that's waiting, cancel the task running `signIn`
+    /// (the waiting screen's Cancel does, then signs out).
     func signOut() {
-        flow?.cancel()
         keychain.delete(key: Self.tokenKey)
         cachedToken = .some(nil)
         UserDefaults.standard.removeObject(forKey: Self.loginKey)

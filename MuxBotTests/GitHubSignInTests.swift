@@ -5,13 +5,18 @@ import Testing
 /// Answers GitHub requests from a queue per "METHOD path" and records
 /// what was asked (no network).
 final class GitHubStub: URLProtocol, @unchecked Sendable {
-    struct Reply { var status: Int; var body: String }
-    struct Seen { var method: String; var path: String; var body: [String: Any]?; var auth: String? }
+    struct Reply { var status: Int; var body: String; var headers: [String: String] = [:] }
+    struct Seen { var method: String; var path: String; var query: String?; var body: [String: Any]?; var auth: String?; var accept: String? }
     nonisolated(unsafe) static var replies: [String: [Reply]] = [:]
     nonisolated(unsafe) static var seen: [Seen] = []
+    /// Runs around a reply for one "METHOD path": it gets the call that
+    /// delivers the reply, to do something just before or after it.
+    nonisolated(unsafe) static var hooks: [String: (_ deliver: () -> Void) -> Void] = [:]
 
-    static func reset() { replies = [:]; seen = [] }
-    static func on(_ key: String, _ status: Int = 200, _ body: String) { replies[key, default: []].append(Reply(status: status, body: body)) }
+    static func reset() { replies = [:]; seen = []; hooks = [:] }
+    static func on(_ key: String, _ status: Int = 200, _ body: String, headers: [String: String] = [:]) {
+        replies[key, default: []].append(Reply(status: status, body: body, headers: headers))
+    }
 
     static var session: URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -37,13 +42,18 @@ final class GitHubStub: URLProtocol, @unchecked Sendable {
                 return (p[0], p.count > 1 ? p[1] : "")
             })
         }
-        Self.seen.append(Seen(method: method, path: path, body: json, auth: request.value(forHTTPHeaderField: "Authorization")))
+        Self.seen.append(Seen(method: method, path: path, query: request.url!.query, body: json,
+                              auth: request.value(forHTTPHeaderField: "Authorization"), accept: request.value(forHTTPHeaderField: "Accept")))
         let key = "\(method) \(path)"
         let reply = Self.replies[key]?.isEmpty == false ? Self.replies[key]!.removeFirst() : Reply(status: 404, body: #"{"message":"Not Found"}"#)
-        let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(reply.body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        let deliver = {
+            let headers = ["Content-Type": "application/json"].merging(reply.headers) { $1 }
+            let response = HTTPURLResponse(url: self.request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: headers)!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: Data(reply.body.utf8))
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        if let hook = Self.hooks[key] { hook(deliver) } else { deliver() }
     }
     override func stopLoading() {}
 }
@@ -132,5 +142,48 @@ struct GitHubSignInTests {
         GitHubStub.on("GET /user/installations", 200, #"{"total_count":1,"installations":[{"id":7,"app_slug":"mux-bot-app","account":{"login":"kstrat2001"}}]}"#)
         GitHubStub.on("GET /user/installations/7/repositories", 200, #"{"total_count":1,"repositories":[{"full_name":"kstrat2001/hcr"}]}"#)
         #expect(await a.installState(for: "kstrat2001/hcr") == .installed)
+    }
+
+    final class TaskBox: @unchecked Sendable { var task: Task<Void, Never>? }
+
+    private func codeAndToken() {
+        GitHubStub.reset()
+        GitHubStub.on("POST /login/device/code", 200, #"{"device_code":"dc1","user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":900,"interval":5}"#)
+        GitHubStub.on("POST /login/oauth/access_token", 200, #"{"access_token":"ghu_abc","token_type":"bearer","scope":""}"#)
+    }
+
+    @Test func cancelingAsTheTokenComesBackKeepsNoToken() async {
+        codeAndToken()
+        let box = TaskBox()
+        // The token arrives while the main actor is busy, and Cancel lands
+        // before the sign-in resumes to save it.
+        GitHubStub.hooks["POST /login/oauth/access_token"] = { deliver in
+            let busy = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async { busy.wait() }
+            deliver()
+            Thread.sleep(forTimeInterval: 0.3)
+            box.task?.cancel()
+            busy.signal()
+        }
+        let keychain = MemoryKeychain()
+        let a = auth(keychain)
+        box.task = Task { await a.signIn { _, _ in } }
+        await box.task?.value
+        #expect(keychain.items[GitHubAuth.tokenKey] == nil, "a canceled sign-in saves no token")
+        #expect(a.token == nil)
+        #expect(a.state == .signedOut)
+    }
+
+    @Test func cancelingWhileItWaitsIsNotAFailure() async {
+        codeAndToken()
+        let box = TaskBox()
+        let keychain = MemoryKeychain()
+        // Task.sleep throws CancellationError when the task is canceled.
+        let a = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain,
+                           sleep: { _ in box.task?.cancel(); throw CancellationError() })
+        box.task = Task { await a.signIn { _, _ in } }
+        await box.task?.value
+        #expect(a.state == .signedOut, "Cancel is not a failed sign-in")
+        #expect(keychain.items[GitHubAuth.tokenKey] == nil)
     }
 }
