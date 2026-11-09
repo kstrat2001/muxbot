@@ -3,8 +3,8 @@
   "templates": [
     {
       "id": "website",
-      "repo": "kstrat2001/muxbot-template-vite-react",
-      "ref": "aa6a07404664478816e0c351923a42281ad58e61",
+      "repo": "kstrat2001/muxbot-template-site",
+      "ref": "bd06532fda6e5d429b19112b2a792efa9be8f45d",
       "title": "Build a website",
       "icon": "globe",
       "summary": "A one-page site you can grow, with a live preview."
