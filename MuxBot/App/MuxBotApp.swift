@@ -15,32 +15,16 @@ struct MuxBotApp: App {
     #endif
 
     var body: some Scene {
-        WindowGroup(id: "main") {
-            if let container = store.container {
-                ContentView()
-                    .environment(router)
-                    .environment(brain)
-                    .environment(preview)
-                    .environment(connection)
-                    .environment(notifications)
-                    .environment(github)
-                    .modelContainer(container)
-                    .task {
-                        brain.pageInspector = preview
-                        if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
-                        brain.connection = connection
-                        brain.notifier = notifications
-                        brain.runs.githubToken = { [github] in github.token }
-                        brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
-                        #if os(macOS)
-                        appDelegate.runs = brain.runs
-                        #endif
-                    }
-            } else {
-                StoreRecoveryView(loader: store)
-            }
-        }
-        .commands { MuxBotCommands(router: router) }
+        #if os(macOS)
+        // One main window: a second one would share the router and the one
+        // preview page, and follow every run twice. The menu bar items bring
+        // this window forward (`openWindow(id: "main")`).
+        Window(LeadBot.name, id: "main") { main }
+            .commands { MuxBotCommands(router: router) }
+        #else
+        WindowGroup(id: "main") { main }
+            .commands { MuxBotCommands(router: router) }
+        #endif
 
         #if os(macOS)
         Settings {
@@ -58,12 +42,39 @@ struct MuxBotApp: App {
             }
         } label: {
             if let container = store.container {
-                MenuBarLabel().modelContainer(container)
+                MenuBarLabel().environment(notifications).modelContainer(container)
             } else {
                 Image(systemName: "bubble.left.and.bubble.right")
             }
         }
         #endif
+    }
+
+    /// The main window's content: the app, or why its data couldn't open.
+    @ViewBuilder private var main: some View {
+        if let container = store.container {
+            ContentView()
+                .environment(router)
+                .environment(brain)
+                .environment(preview)
+                .environment(connection)
+                .environment(notifications)
+                .environment(github)
+                .modelContainer(container)
+                .task {
+                    brain.pageInspector = preview
+                    if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
+                    brain.connection = connection
+                    brain.notifier = notifications
+                    brain.runs.githubToken = { [github] in github.token }
+                    brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
+                    #if os(macOS)
+                    appDelegate.runs = brain.runs
+                    #endif
+                }
+        } else {
+            StoreRecoveryView(loader: store)
+        }
     }
 }
 

@@ -159,12 +159,14 @@ final class RunCoordinator {
 
     private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
         var backoff = PollBackoff()
-        defer { unreachableRuns.remove(run.id) }
+        // One follower per run, however often following resumes.
+        guard following.insert(run.id).inserted else { return }
+        defer { unreachableRuns.remove(run.id); following.remove(run.id) }
         while run.phase == .running, run.darkmuxWorkId == workId {
-            try? await Task.sleep(for: .seconds(backoff.delay))
+            try? await Task.sleep(for: .seconds(pollInterval ?? backoff.delay))
             let status: DarkmuxClient.WorkStatus
             do {
-                status = try await client.workStatus(token: token, workId: workId)
+                if let workStatusFetcher { status = try await workStatusFetcher(workId) } else { status = try await client.workStatus(token: token, workId: workId) }
                 backoff.succeeded()
                 unreachableRuns.remove(run.id)
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
@@ -696,6 +698,12 @@ final class RunCoordinator {
     /// Tests stand in for darkmux's work API here; nil uses the client.
     var workSubmitter: ((_ role: String, _ message: String, _ profile: String?, _ workspace: String, _ continues: String?) async throws -> (String, String?))?
     var workCanceller: ((String) async throws -> Void)?
+    /// Runs being followed now (each by exactly one loop).
+    private var following: Set<UUID> = []
+    /// Tests answer a run's status here.
+    var workStatusFetcher: ((String) async throws -> DarkmuxClient.WorkStatus)?
+    /// Tests poll faster than darkmux's backoff.
+    var pollInterval: Double?
     var workUndoer: ((String) async throws -> DarkmuxClient.UndoResult)?
 
     /// Tests answer workspace requests here; nil asks darkmux.

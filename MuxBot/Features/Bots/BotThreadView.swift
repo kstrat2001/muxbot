@@ -150,7 +150,14 @@ struct BotThreadView: View {
             // unseen. Quitting stops them at once.
             if let bot { brain.runs.leavePreview(for: bot) }
         }
-        .onChange(of: conversations.first?.messages?.count) { markRead() }
+        .onChange(of: conversations.first?.messages?.count) {
+            markRead()
+            // The bot answered (or a card waits): show the chat if the
+            // preview filled the window.
+            if let newest = conversations.first?.messages?.max(by: { $0.timestamp < $1.timestamp }), newest.role != .user {
+                router.attentionArrived()
+            }
+        }
         #if DEBUG
         .task {
             // `-useFolder <path>`: set up this bot's work copy from a local
