@@ -33,6 +33,36 @@ struct ModelPreferenceTests {
         #expect(ModelPreference.next(after: nil, in: listing(fold, [big, flint])) == "flint-rec")
     }
 
+    /// The run's model went down: the next one after it in the order that
+    /// answers, never the one that's down.
+    @Test func notMetWhenTheCurrentModelIsDownMovesOnFromItsPlace() {
+        var down = flint; down.reachable = false
+        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, down])) == "q38-27b-tensorfold")
+        let deep = DarkmuxClient.ProfileInfo(name: "deep", description: nil, model: "d", endpoint: "url", reachable: true, loaded: true)
+        let order = ["flint-rec", "q38-27b-tensorfold", "deep"]
+        var foldDown = fold; foldDown.reachable = false
+        #expect(ModelPreference.next(after: "flint-rec", in: [down, foldDown, deep], order: order) == "deep", "skips the next one when it's down too")
+        #expect(ModelPreference.next(after: "q38-27b-tensorfold", in: [flint, foldDown], order: order) == "flint-rec",
+                "the last one down: the strongest that still answers")
+        #expect(ModelPreference.next(after: "flint-rec", in: [down], order: order) == nil, "nothing answers: darkmux decides")
+    }
+
+    @Test func aDefaultModelThatsDownOffersOneThatAnswers() {
+        var down = flint; down.reachable = false
+        let c = ModelChoice.resolve(mode: .model("flint-rec"), order: ModelSettings.defaultOrder, listed: [down, fold],
+                                    previous: "flint-rec", rerunAfterNotMet: true)
+        #expect(c.offerNext == "q38-27b-tensorfold")
+    }
+
+    /// A saved "Always <model>" that this Mac doesn't list still has a row in
+    /// the picker, so the saved value shows instead of a blank picker.
+    @Test func aSavedModelNotListedHereStillHasAPickerRow() {
+        #expect(ModelMode.unlistedModel(.model("gone"), listed: ["flint-rec"]) == "gone")
+        #expect(ModelMode.unlistedModel(.model("flint-rec"), listed: ["flint-rec"]) == nil)
+        #expect(ModelMode.unlistedModel(.auto, listed: []) == nil)
+        #expect(ModelMode.unlistedModel(nil, listed: []) == nil)
+    }
+
     @Test func darkmuxsReplyDecodes() throws {
         let json = #"{"role":"coder","profiles":[{"name":"flint-rec","description":"Flint","model":"flint","endpoint":"url","reachable":true,"loaded":true},{"name":"gone","description":null,"model":null,"endpoint":"unknown","reachable":false,"loaded":null,"error":"not in the registry"}]}"#
         let list = try JSONDecoder().decode(DarkmuxClient.ProfileList.self, from: Data(json.utf8))

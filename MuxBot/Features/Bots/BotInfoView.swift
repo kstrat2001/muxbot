@@ -58,6 +58,11 @@ struct BotInfoView: View {
                     ForEach(brain.runs.lastListed.map(\.name), id: \.self) { name in
                         Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
                     }
+                    // A saved model this Mac doesn't list keeps a row, so the picker shows it.
+                    if let name = ModelMode.unlistedModel(ModelMode(stored: modelModeBinding.wrappedValue), listed: brain.runs.lastListed.map(\.name)) {
+                        if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(Optional(ModelMode.model(name).stored)) }
+                        else { Text("Always \(name)").tag(Optional(ModelMode.model(name).stored)) }
+                    }
                 }
             } header: {
                 Text(brain.runs.machine.map { "Model on \($0.name)" } ?? "Model on this Mac")

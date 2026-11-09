@@ -18,6 +18,11 @@ struct ModelSettingsView: View {
                     Text("Auto").tag(ModelMode.auto)
                     Text("Always ask").tag(ModelMode.ask)
                     ForEach(names, id: \.self) { name in Text("Always \(row(name).title)").tag(ModelMode.model(name)) }
+                    // A saved model this Mac doesn't list keeps a row, so the picker shows it.
+                    if let name = ModelMode.unlistedModel(settings.mode, listed: names) {
+                        if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(ModelMode.model(name)) }
+                        else { Text("Always \(name)").tag(ModelMode.model(name)) }
+                    }
                 }
                 Text(explanation).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 listingNote

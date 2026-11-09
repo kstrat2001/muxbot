@@ -22,6 +22,13 @@ enum ModelMode: Equatable, Hashable, Sendable {
         }
     }
 
+    /// The model a saved "Always <name>" names when this machine doesn't
+    /// list it: its picker still needs a row for it, or it shows blank.
+    static func unlistedModel(_ mode: ModelMode?, listed: [String]) -> String? {
+        guard case let .model(name)? = mode, !listed.contains(name) else { return nil }
+        return name
+    }
+
     init?(stored: String?) {
         switch stored {
         case "auto"?: self = .auto
@@ -171,7 +178,7 @@ struct ModelChoice: Equatable, Sendable {
 
     private static func auto(next previous: String?, order: [String], listed: [DarkmuxClient.ProfileInfo]) -> ModelChoice {
         guard let previous, order.contains(previous) else { return auto(order: order, listed: listed) }
-        let next = ModelPreference.next(after: previous, in: listed, order: order)
+        guard let next = ModelPreference.next(after: previous, in: listed, order: order) else { return auto(order: order, listed: listed) }
         guard next != previous else { return ModelChoice(profile: next, reason: "last in your Auto order") }
         return ModelChoice(profile: next, reason: "next in your Auto order, after a done-when that wasn't met")
     }
@@ -189,12 +196,16 @@ enum ModelPreference {
     }
 
     /// The one after `current` in `order` that answers; the last stays.
+    /// When `current` itself doesn't answer, never `current`: the next one
+    /// after its place in the order that does, else the strongest before it
+    /// that does, else darkmux's default (nil when nothing answers).
     static func next(after current: String?, in listed: [DarkmuxClient.ProfileInfo], order: [String] = ModelSettings.defaultOrder) -> String? {
-        let up = listed.filter(\.reachable).map(\.name)
-        let running = order.filter(up.contains)
+        let up = Set(listed.filter(\.reachable).map(\.name))
         guard let current else { return first(in: listed, order: order) }
-        guard let i = running.firstIndex(of: current) else { return current }
-        return i + 1 < running.count ? running[i + 1] : running[i]
+        guard let i = order.firstIndex(of: current) else { return up.contains(current) ? current : first(in: listed, order: order) }
+        if let after = order[(i + 1)...].first(where: up.contains) { return after }
+        if up.contains(current) { return current }
+        return order[..<i].last(where: up.contains) ?? first(in: listed, order: order)
     }
 }
 
