@@ -931,6 +931,21 @@ final class BotBrain {
         let facts: PageFacts?
         if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text)) }
         let measured = facts.map(BugReport.describe) ?? []
+        // The layout around the reported width, measured in the preview: the
+        // switch between presets, its rule and file. No model judges it.
+        var layout: LayoutMeasure.Measured?
+        if let probe = layoutProbe, let bot, let root = runs.previewURL(for: bot), let width = facts?.viewport {
+            let page = facts?.url ?? "/"
+            let url = URL(string: String(page.drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
+            let got = await probe.measure(url: url, widths: LayoutMeasure.widths(around: width))
+            if !got.isEmpty { layout = LayoutMeasure.summarize(got, focus: width) }
+        }
+        // Cut off or off the screen, yet the page fits at every width
+        // measured: no bug and no Fix it now; the panel may be what's clipped.
+        if let bot, let layout, !layout.foundProblem, layout.layoutSwitch == nil, BugReport.isOverflowComplaint(text) {
+            store.postGuideCard(.pageFits(text: BugReport.pageFitsText), summary: BugReport.pageFitsText, in: .bot(bot.id))
+            return
+        }
         let reply: String
         if facts == nil {
             reply = "I can't see the site and the preview isn't open, so I couldn't measure anything. I drafted a bug from your description."
@@ -943,16 +958,8 @@ final class BotBrain {
         var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
                                     facts: facts, page: nil, repo: repo)
         draft.selector = element?.selector
-        // The layout around the reported width, measured in the preview: the
-        // switch between presets, its rule and file. No model judges it.
-        var layout: LayoutMeasure.Measured?
-        if let probe = layoutProbe, let bot, let root = runs.previewURL(for: bot), let width = facts?.viewport {
-            let page = facts?.url ?? "/"
-            let url = URL(string: String(page.drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
-            let got = await probe.measure(url: url, widths: LayoutMeasure.widths(around: width))
-            if !got.isEmpty { layout = LayoutMeasure.summarize(got, focus: width) }
-        }
         draft.facts += layout?.lines ?? []
+        draft.plain = layout?.plain
         draft.likelyPlace = layout?.likelyPlace
         // Expected is what you should see: from the measurement when it says,
         // else the model's line only if it names no fix or mechanism.

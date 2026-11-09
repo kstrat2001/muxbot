@@ -24,7 +24,8 @@ struct BugCardView: View {
                     Label("Bug: \(draft.title)", systemImage: "ladybug").font(AppFont.headline())
                     Text("\(draft.page)\(draft.viewport.map { " · \($0)px wide" } ?? "")")
                         .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
-                    ForEach(draft.facts, id: \.self) { Text($0).font(AppFont.footnote()) }
+                    Text(draft.headline).font(AppFont.body())
+                    if !draft.facts.isEmpty { TechnicalDetails(text: draft.details) }
                     HStack {
                         Button("File on GitHub", systemImage: "arrow.up.forward.square") { file(draft) }
                             .buttonStyle(.bordered)

@@ -79,7 +79,7 @@ struct PreviewPanel: View {
                 // Device widths: hold the last scale while the panel is being
                 // resized and apply the new one once it settles, so the page
                 // isn't re-laid out on every frame (that flickered).
-                let layout = settled ?? currentViewport.layout(in: geometry.size)
+                let layout = currentViewport.shown(settled: settled, in: geometry.size)
                 WebView(preview.page)
                     .task(id: displayScale) { preview.displayScale = displayScale }
                     .modifier(DeviceFrame(layout: layout, panel: geometry.size))

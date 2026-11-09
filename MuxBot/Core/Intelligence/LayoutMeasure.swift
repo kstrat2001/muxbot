@@ -109,6 +109,8 @@ enum LayoutMeasure {
         var likelyFile: String?
         /// Overflow, something wider than the screen, or no side padding.
         var foundProblem: Bool
+        /// The problem in one plain sentence, for the bug card.
+        var plain: String? = nil
         /// A section laid out differently at the next preset down, and why.
         var layoutSwitch: String? = nil
         /// The @media rule (and file) behind that switch.
@@ -135,6 +137,7 @@ enum LayoutMeasure {
     static func summarize(_ facts: [LayoutFacts], focus: Int?) -> Measured {
         var lines: [String] = []
         var done: String?
+        var plain: String?
         var problem = false
         var files: [String] = []
         for f in facts {
@@ -182,6 +185,13 @@ enum LayoutMeasure {
                 if done == nil || f.viewport == focus {
                     let others = facts.filter { $0.viewport != f.viewport && $0.scrollWidth <= $0.clientWidth && $0.wide.isEmpty }.map(\.viewport)
                     let keep = others.contains(desktop) ? ", and \(desktop)px looks the same as now" : ""
+                    if over > 0 {
+                        plain = "At \(f.viewport)px the page is wider than the screen, so it scrolls sideways."
+                    } else if !wide.isEmpty {
+                        plain = "At \(f.viewport)px part of the page is wider than the screen."
+                    } else if !edges.isEmpty {
+                        plain = "At \(f.viewport)px the text touches the edges of the screen."
+                    }
                     if over > 0 || !wide.isEmpty {
                         done = "at \(f.viewport)px nothing is wider than the screen\(keep)."
                     } else if let s = edges.first {
@@ -232,7 +242,7 @@ enum LayoutMeasure {
         // Deduplicate lines while keeping their order.
         var seen = Set<String>()
         lines = lines.filter { seen.insert($0).inserted }
-        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, layoutSwitch: switchLine,
+        return Measured(lines: lines, doneWhen: done, likelyFile: files.first, foundProblem: problem, plain: plain, layoutSwitch: switchLine,
                         switchRule: switchRule, targetRange: targetRange, switchLead: switchLead, switchPlace: switchPlace,
                         switchSelector: switchSelector, switchWanted: switchWanted, switchBelow: switchBelow, switchHigh: switchHigh)
     }
