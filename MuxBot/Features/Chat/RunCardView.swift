@@ -363,7 +363,9 @@ struct RunCardView: View {
                 Text("Setting up \(what) on \(machine)…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case let .failed(why)?:
-            Label("Couldn't set up \(what): \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            Label("Couldn't set up \(what) on this Mac. Try again.", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            // darkmux's own words, for bug reports.
+            TechnicalDetails(text: why)
             buttonsForSetup(bot: bot, run: run, retry: true)
         case nil:
             Text("Set up \(what) on \(machine)? darkmux makes its own copy on a new branch, so your files aren't touched.")
@@ -382,7 +384,8 @@ struct RunCardView: View {
                 Text("Making \(bot.name)'s project on this Mac…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         case let .failed(why)?:
-            Label("Couldn't make \(bot.name)'s project: \(why)", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            Label("Couldn't make \(bot.name)'s project on this Mac. Try again.", systemImage: "exclamationmark.triangle").font(AppFont.footnote())
+            TechnicalDetails(text: why)
             buttonsForProject(bot: bot, run: run, retry: true)
         case nil:
             Text("\(bot.name)'s project isn't on this Mac yet. Make it now? darkmux makes a fresh copy of its template here, then this run can start.")

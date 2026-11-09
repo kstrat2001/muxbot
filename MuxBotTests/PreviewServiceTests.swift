@@ -25,8 +25,7 @@ struct PreviewServiceTests {
     @Test func statusInPlainWords() {
         #expect(LivePreview.Status.starting.text == "Starting the preview…")
         #expect(LivePreview.Status.installing.text == "Installing the project's dependencies (first time only)…")
-        #expect(LivePreview.Status.failed("the dev server exited (exit status: 1)").text
-                == "The preview didn't start: the dev server exited (exit status: 1).")
+        #expect(LivePreview.Status.failed("the dev server exited (exit status: 1)").text == "The preview couldn't start.")
     }
 
     @Test func darkmuxsReplyDecodes() throws {

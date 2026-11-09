@@ -157,6 +157,9 @@
     "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
 
     },
+    "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
+
+    },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
 
     },
@@ -224,6 +227,9 @@
 
     },
     "Always ask" : {
+
+    },
+    "Another program was using the preview's port. Try again." : {
 
     },
     "Any model that runs on this Mac" : {
@@ -434,6 +440,9 @@
     "Copy command" : {
 
     },
+    "Copy details" : {
+
+    },
     "Copy screenshot" : {
 
     },
@@ -463,6 +472,9 @@
     "Couldn't get this Mac's models from darkmux: %@" : {
 
     },
+    "Couldn't make %@'s project on this Mac. Try again." : {
+
+    },
     "Couldn't make %@'s project: %@" : {
       "localizations" : {
         "en" : {
@@ -472,6 +484,9 @@
           }
         }
       }
+    },
+    "Couldn't set up %@ on this Mac. Try again." : {
+
     },
     "Couldn't set up %@: %@" : {
       "localizations" : {
@@ -623,6 +638,9 @@
     "GitHub sign-in" : {
 
     },
+    "GitHub sign-in didn't work. Try again in a moment." : {
+
+    },
     "Go" : {
 
     },
@@ -707,6 +725,9 @@
       }
     },
     "Install it in Terminal with Homebrew (skip this if you have it). Mux Bot can't tell until darkmux's app connection runs." : {
+
+    },
+    "Installing the project's packages didn't work. Try again; if it keeps happening, ask the bot to fix it." : {
 
     },
     "It needs a persona and at least one skill." : {
@@ -1278,6 +1299,9 @@
     "Show chat" : {
 
     },
+    "Show details" : {
+
+    },
     "Show preview" : {
 
     },
@@ -1299,6 +1323,9 @@
     "Sign out" : {
 
     },
+    "Sign-in with GitHub is turned off for Mux Bot's GitHub App. Its owner needs to switch on Device Flow in the App's settings." : {
+
+    },
     "Signed in as %@" : {
 
     },
@@ -1306,6 +1333,9 @@
 
     },
     "Skills" : {
+
+    },
+    "Something went wrong while starting it. Try again." : {
 
     },
     "Squirrel" : {
@@ -1392,13 +1422,25 @@
     "The persona and conventions are drafted on this device from your README. Check them." : {
 
     },
+    "The preview couldn't start." : {
+
+    },
     "The preview didn't start from the new recipe: %@. Fix the file in your checkout and open the preview again." : {
 
     },
     "The preview started from the new recipe." : {
 
     },
+    "The preview took too long to start. Try again." : {
+
+    },
     "The project gets its own repo in your GitHub account, so sign in first." : {
+
+    },
+    "The project's own server stopped right after it started. Ask the bot to look at it, or try again." : {
+
+    },
+    "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them." : {
 
     },
     "The template can't be copied: %@" : {
@@ -1417,6 +1459,9 @@
 
     },
     "This Mac has Apple silicon." : {
+
+    },
+    "This Mux Bot build isn't set up to sign in with GitHub." : {
 
     },
     "This one is changed in darkmux on your Mac; here's its value." : {
@@ -1444,6 +1489,9 @@
 
     },
     "This project is only on this Mac. Sign in with GitHub (Settings › GitHub) to put it there." : {
+
+    },
+    "This project needs a newer version of Node than the preview has. darkmux needs an update for it." : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
