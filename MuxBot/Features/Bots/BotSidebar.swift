@@ -61,6 +61,11 @@ struct BotSidebar: View {
             }
         }
         .toolbar {
+            // Starting a project is always one tap away (also File › New Project… ⌘N).
+            ToolbarItem {
+                Button("Start a project", systemImage: "plus") { router.showStartProject = true }
+                    .help("Start a project (⌘N)")
+            }
             ToolbarItem {
                 Button("darkmux", systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
                     .help(connection.isPaired ? "Paired with darkmux" : "Pair with darkmux")

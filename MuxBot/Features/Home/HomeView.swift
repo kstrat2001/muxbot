@@ -31,7 +31,7 @@ struct HomeView: View {
                     .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
                 #endif
                 if !roles.isEmpty {
-                    Button("Start a project", systemImage: "sparkles") { router.showStartProject = true }
+                    Button("Start a project", systemImage: "plus") { router.showStartProject = true }
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
                     Button("New bot", systemImage: "plus") { router.showNewBot = true }

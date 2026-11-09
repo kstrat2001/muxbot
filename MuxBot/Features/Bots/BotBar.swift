@@ -63,7 +63,8 @@ struct BotBar: View {
                 .accessibilityLabel("About \(element.chip)")
             }
             if !chips.isEmpty, ChatShortcuts.showsRow(draft: router.barDraft, tweaking: tweakRun != nil,
-                                                      picked: preview.picked != nil, waitingCard: hasWaitingCard) {
+                                                      picked: preview.picked != nil, waitingCard: hasWaitingCard,
+                                                      lead: router.context.botId == nil) {
                 ChatShortcutRow(chips: chips, run: run)
             }
             #if os(macOS)

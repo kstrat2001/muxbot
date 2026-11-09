@@ -27,6 +27,8 @@ final class AppRouter {
     var showNewBot = false
     /// "What do you want to get done?" (`StartProjectView`).
     var showStartProject = false
+    /// A template to open straight to when Start opens ("write a book").
+    var startTemplateId: String?
     var showPairing = false
     /// Search across bots and threads (⌘F).
     var showSearch = false

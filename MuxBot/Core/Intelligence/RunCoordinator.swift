@@ -359,6 +359,41 @@ final class RunCoordinator {
 
     /// darkmux-run previews, by bot.
     var livePreviews: [UUID: LivePreview] = [:]
+    /// Tests answer a clean start (Start over) here.
+    var previewCleanStarter: (() async throws -> LivePreview)?
+    /// Tests answer whether darkmux can start over here.
+    var startOverProbe: (() async -> Bool)?
+    /// darkmux can start a preview over (`{"clean": true}`), as asked once
+    /// (again after a preview fails, in case darkmux changed meanwhile).
+    private(set) var canStartOver = false
+    private var startOverChecked = false
+
+    func checkStartOver() async {
+        guard !startOverChecked else { return }
+        if let startOverProbe {
+            startOverChecked = true
+            canStartOver = await startOverProbe()
+            return
+        }
+        guard let connection, let token = connection.token else { return }
+        startOverChecked = true
+        canStartOver = await connection.client.supportsCleanStart(token: token)
+    }
+
+    /// Start over: darkmux reinstalls the project's packages and starts the
+    /// preview again, running or not. Nothing at all where darkmux can't,
+    /// never a plain restart in its place.
+    func startOver(for bot: Bot) async {
+        guard canStartOver, bot.workspaceName != nil else { return }
+        let before = livePreviews[bot.id]?.url
+        livePreviews[bot.id] = nil
+        await ensurePreview(for: bot, clean: true)
+        // Same address: the page is reloaded so it shows the new server.
+        if let now = livePreviews[bot.id], now.status == .ready, now.url == before {
+            previewReloads[bot.id, default: 0] += 1
+        }
+    }
+
     /// Counts up each time a bot's open preview should reload (after a run
     /// changed files, or Undo); the panel reloads its page on a change.
     var previewReloads: [UUID: Int] = [:]
@@ -406,7 +441,7 @@ final class RunCoordinator {
     /// Has darkmux run the bot's preview, and follows it until it's ready or
     /// fails. Does nothing without a work copy or pairing (a preview link
     /// is shown as is).
-    func ensurePreview(for bot: Bot) async {
+    func ensurePreview(for bot: Bot, clean: Bool = false) async {
         guard let name = bot.workspaceName else {
             Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
             return
@@ -421,15 +456,23 @@ final class RunCoordinator {
         }
         waitingPreviews[bot.id] = nil
         previewWorkspaces[bot.id] = name
+        // Opening it again calls off a stop waiting out its grace period.
+        returnToPreview(for: bot)
         if let status = livePreviews[bot.id]?.status, !status.canRetry {
             Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
             return
         }
         Self.previewLog.info("preview \(name, privacy: .public): asking darkmux to start it")
         livePreviews[bot.id] = LivePreview(status: .starting)
-        let fetch: (Bool) async throws -> LivePreview = previewFetcher ?? { start in
-            start ? try await connection.client.startPreview(token: token, workspace: name).live
-                  : try await connection.client.previewStatus(token: token, workspace: name).live
+        let fetcher = previewFetcher, cleanStarter = previewCleanStarter
+        let fetch: (Bool) async throws -> LivePreview = { start in
+            if start, clean {
+                if let cleanStarter { return try await cleanStarter() }
+                return try await connection.client.startPreview(token: token, workspace: name, clean: true).live
+            }
+            if let fetcher { return try await fetcher(start) }
+            return start ? try await connection.client.startPreview(token: token, workspace: name).live
+                         : try await connection.client.previewStatus(token: token, workspace: name).live
         }
         do {
             var p = try await fetch(true)
@@ -466,6 +509,9 @@ final class RunCoordinator {
             Self.previewLog.error("preview \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
         }
+        // A failure is when Start over matters: ask darkmux again next time
+        // (it may have been updated meanwhile).
+        if livePreviews[bot.id]?.status.isFailed == true { startOverChecked = false }
     }
 
     private static let previewLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "preview")
@@ -487,12 +533,43 @@ final class RunCoordinator {
         }
     }
 
+    /// How long a preview keeps running after you leave its bot's thread.
+    /// Coming back (or SwiftUI rebuilding the view) within it sends darkmux
+    /// nothing, rather than a stop and then a new start.
+    static let previewStopGrace: Duration = .seconds(30)
+    /// The grace period's clock; tests move it themselves.
+    var previewGraceSleep: (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    /// Stops waiting out their grace period, by bot.
+    private var pendingStops: [UUID: Task<Void, Never>] = [:]
+
+    /// You left the bot's thread: its preview stops after
+    /// `previewStopGrace`, unless you come back first.
+    func leavePreview(for bot: Bot) {
+        guard bot.workspaceName != nil else { return }
+        pendingStops[bot.id]?.cancel()
+        pendingStops[bot.id] = Task { [weak self] in
+            guard let self else { return }
+            await self.previewGraceSleep(Self.previewStopGrace)
+            guard !Task.isCancelled else { return }
+            self.pendingStops[bot.id] = nil
+            await self.stopPreview(for: bot)
+        }
+    }
+
+    /// You're back in the bot's thread: a stop still waiting is called off.
+    func returnToPreview(for bot: Bot) {
+        pendingStops.removeValue(forKey: bot.id)?.cancel()
+    }
+
+    /// Stops the bot's preview now (the Stop button, a grace period that
+    /// ran out).
     func stopPreview(for bot: Bot) async {
         guard let name = bot.workspaceName else { return }
         await stopPreview(bot.id, workspace: name)
     }
 
     private func stopPreview(_ id: UUID, workspace name: String) async {
+        pendingStops.removeValue(forKey: id)?.cancel()
         // One that was waiting for the connection must not start later, unseen.
         if waitingPreviews.removeValue(forKey: id) != nil { livePreviews[id] = LivePreview(status: .stopped) }
         guard let status = livePreviews[id]?.status, status != .stopped, !status.isFailed else { return }
