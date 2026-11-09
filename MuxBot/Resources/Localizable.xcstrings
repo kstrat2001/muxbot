@@ -267,6 +267,9 @@
         }
       }
     },
+    "Couldn't get this Mac's models from darkmux: %@" : {
+
+    },
     "Couldn't set up %@: %@" : {
       "localizations" : {
         "en" : {
@@ -395,7 +398,13 @@
     "Live" : {
 
     },
+    "Loads when used" : {
+
+    },
     "Look" : {
+
+    },
+    "Looking at this Mac's models…" : {
 
     },
     "Machine" : {
@@ -435,7 +444,16 @@
     "Models" : {
 
     },
+    "Move down" : {
+
+    },
+    "Move up" : {
+
+    },
     "Mux Bot couldn't open its data" : {
+
+    },
+    "Mux Bot isn't paired with darkmux." : {
 
     },
     "Mux Bot picks: the first in the Auto order that's running." : {
@@ -480,7 +498,13 @@
     "Not now" : {
 
     },
+    "Not on this Mac" : {
+
+    },
     "Not opened." : {
+
+    },
+    "Not running" : {
 
     },
     "Not set up on this Mac yet" : {
@@ -820,15 +844,6 @@
 
     },
     "darkmux: paired" : {
-
-    },
-    "not on this Mac" : {
-
-    },
-    "not running" : {
-
-    },
-    "running" : {
 
     },
     "·" : {

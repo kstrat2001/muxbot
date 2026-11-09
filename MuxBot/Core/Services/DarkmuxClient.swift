@@ -260,7 +260,9 @@ struct DarkmuxClient: Sendable {
     /// The profiles Coder may run on here, in the owner's grant order. An
     /// older darkmux without the route answers 404: no list.
     func profiles(token: String) async throws -> ProfileList {
-        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 5)
+        // darkmux looks at every local model server (about 1 s at most);
+        // room for a slow LM Studio.
+        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 15)
         return try JSONDecoder().decode(ProfileList.self, from: data)
     }
 

@@ -475,16 +475,36 @@ final class RunCoordinator {
     /// memory on this Mac, like `checkSpecs`); nil leaves it to darkmux.
     var runProfiles: [UUID: String] = [:]
     /// Tests list profiles here; nil asks darkmux (`GET /client/profiles`).
-    var profileSource: (@MainActor () async -> [DarkmuxClient.ProfileInfo])?
+    var profileSource: (@MainActor () async throws -> [DarkmuxClient.ProfileInfo])?
 
     /// What this app may run Coder on here, and what answers now.
     func listedProfiles() async -> [DarkmuxClient.ProfileInfo] {
-        if let profileSource { return await profileSource() }
-        guard let connection, let token = connection.token,
-              let list = try? await connection.client.profiles(token: token) else { return [] }
-        if let named = list.machine { machine = named }
-        return list.profiles
+        do {
+            let profiles: [DarkmuxClient.ProfileInfo]
+            if let profileSource {
+                profiles = try await profileSource()
+            } else {
+                guard let connection, let token = connection.token else {
+                    listing = .failed(String(localized: "Mux Bot isn't paired with darkmux."))
+                    return []
+                }
+                let list = try await connection.client.profiles(token: token)
+                if let named = list.machine { machine = named }
+                profiles = list.profiles
+            }
+            listing = .listed
+            return profiles
+        } catch {
+            Self.modelsLog.error("GET /client/profiles failed: \(error.localizedDescription, privacy: .public)")
+            listing = .failed(error.localizedDescription)
+            return []
+        }
     }
+
+    /// How the last look at darkmux's models went; Settings › Models says a
+    /// failure instead of showing an empty list.
+    var listing: ModelListing = .loading
+    private static let modelsLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "models")
 
     /// The darkmux machine runs go to, as darkmux names it (`GET
     /// /client/profiles`): the same id from every device.

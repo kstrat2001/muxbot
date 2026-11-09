@@ -197,3 +197,71 @@ enum ModelPreference {
         return i + 1 < running.count ? running[i + 1] : running[i]
     }
 }
+
+/// How the last look at darkmux's models went.
+enum ModelListing: Equatable, Sendable {
+    case loading
+    case listed
+    case failed(String)
+}
+
+/// A model in Settings › Models: its description's leading phrase as the
+/// name with the id under it (the id alone without one), and whether it's
+/// running on this machine.
+struct ModelRow: Equatable {
+    enum Status: Equatable {
+        case running, loadsWhenUsed, notRunning, notHere, unknown
+
+        var label: String? {
+            switch self {
+            case .running: String(localized: "Running")
+            case .loadsWhenUsed: String(localized: "Loads when used")
+            case .notRunning: String(localized: "Not running")
+            case .notHere: String(localized: "Not on this Mac")
+            case .unknown: nil
+            }
+        }
+    }
+
+    var name: String
+    var title: String
+    var subtitle: String?
+    /// The whole description, for hover.
+    var detail: String?
+    var status: Status
+
+    init(name: String, listed: [DarkmuxClient.ProfileInfo], listing: ModelListing) {
+        self.name = name
+        let profile = listed.first { $0.name == name }
+        let description = profile?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        detail = description?.isEmpty == false ? description : nil
+        if let phrase = detail.map(Self.leadingPhrase), !phrase.isEmpty, phrase != name {
+            title = phrase
+            subtitle = name
+        } else {
+            title = name
+            subtitle = nil
+        }
+        guard listing == .listed else { status = .unknown; return }
+        guard let profile else { status = .notHere; return }
+        if !profile.reachable { status = .notRunning }
+        else if profile.loaded == false { status = .loadsWhenUsed }
+        else { status = .running }
+    }
+
+    /// Up to the first ": ", ". ", " — " or line break, at most about 50
+    /// characters (cut at a word).
+    static func leadingPhrase(_ text: String) -> String {
+        var phrase = text.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? text
+        for stop in [": ", ". ", " — "] {
+            if let r = phrase.range(of: stop) { phrase = String(phrase[..<r.lowerBound]) }
+        }
+        phrase = phrase.trimmingCharacters(in: .whitespaces)
+        if phrase.hasSuffix(".") { phrase.removeLast() }
+        let cap = 50
+        guard phrase.count > cap else { return phrase }
+        let head = phrase.prefix(cap)
+        let cut = head.lastIndex(of: " ").map { head[..<$0] } ?? head
+        return cut.trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
