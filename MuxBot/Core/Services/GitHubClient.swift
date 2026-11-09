@@ -127,8 +127,9 @@ struct PreviewManifest: Sendable, Equatable, Decodable {
     }
 }
 
-/// Unauthenticated GitHub REST API: public repos only, 60 requests an hour
-/// per IP. A GitHub sign-in comes later.
+/// GitHub's REST API: with your sign-in, every read carries the token
+/// (private repos, 5,000 requests an hour); without it, public repos only,
+/// 60 requests an hour per IP.
 struct RESTGitHubClient: GitHubClient {
     var session: URLSession = .shared
     /// Your GitHub sign-in, when there is one (private repos, higher limits).
@@ -169,11 +170,10 @@ struct RESTGitHubClient: GitHubClient {
         }
         var found = try JSONDecoder().decode(GitHubIssue.self, from: data)
         // The issues endpoint doesn't say whether a PR merged; the pulls one does.
+        // Through `get`, so a private repo's PR is read with your sign-in.
         if found.isPullRequest, found.state == "closed",
            let prURL = URL(string: "https://api.github.com/repos/\(repo)/pulls/\(number)") {
-            var pr = URLRequest(url: prURL)
-            pr.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
-            if let (prData, _) = try? await session.data(for: pr),
+            if let prData = try? await get(prURL),
                let marker = try? JSONDecoder().decode(GitHubIssue.PullRequestMarker.self, from: prData) {
                 found.pullRequest = marker
             }
@@ -183,11 +183,24 @@ struct RESTGitHubClient: GitHubClient {
 }
 
 extension RESTGitHubClient {
-    /// Raw file from the default branch (raw.githubusercontent.com, which
-    /// doesn't count against the API rate limit).
+    /// Raw file from the default branch. Signed in, through the contents
+    /// API with your token (private repos); signed out, from
+    /// raw.githubusercontent.com, which doesn't count against the API rate
+    /// limit.
     func file(repo: String, path: String) async throws -> Data? {
-        guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
-        let (data, response) = try await session.data(from: url)
+        let request: URLRequest
+        if let token = await token() {
+            guard let url = URL(string: "https://api.github.com/repos/\(repo)/contents/\(path)") else { return nil }
+            var signed = URLRequest(url: url)
+            signed.setValue("application/vnd.github.raw+json", forHTTPHeaderField: "Accept")
+            signed.setValue("MuxBot", forHTTPHeaderField: "User-Agent")
+            signed.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request = signed
+        } else {
+            guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
+            request = URLRequest(url: url)
+        }
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
         guard status == 200 else { throw GitHubError(status: status) }

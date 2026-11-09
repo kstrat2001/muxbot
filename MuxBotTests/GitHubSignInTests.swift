@@ -131,6 +131,39 @@ struct GitHubSignInTests {
         #expect(GitHubStub.seen.last?.auth == "Bearer ghu_abc")
     }
 
+    @Test(arguments: [true, false])
+    func aClosedPRsMergeCheckCarriesTheSignIn(signedIn: Bool) async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kstrat2001/hcr/issues/9", 200, #"{"number":9,"title":"Restore padding","labels":[],"state":"closed","pull_request":{}}"#)
+        GitHubStub.on("GET /repos/kstrat2001/hcr/pulls/9", 200, #"{"merged_at":"2026-11-01T00:00:00Z"}"#)
+        let gh = RESTGitHubClient(session: GitHubStub.session, token: { signedIn ? "ghu_abc" : nil })
+        let found = try await gh.issue(repo: "kstrat2001/hcr", number: 9)
+        #expect(found?.statusLine.hasSuffix("merged") == true)
+        let pull = GitHubStub.seen.first { $0.path == "/repos/kstrat2001/hcr/pulls/9" }
+        #expect(pull?.auth == (signedIn ? "Bearer ghu_abc" : nil))
+    }
+
+    @Test func aPrivateRepoFileIsReadWithTheSignIn() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kstrat2001/hcr/contents/.darkmux/preview.json", 200, #"{"command":"npm run dev"}"#)
+        let gh = RESTGitHubClient(session: GitHubStub.session, token: { "ghu_abc" })
+        let data = try await gh.file(repo: "kstrat2001/hcr", path: PreviewManifest.path)
+        #expect(data.map { String(decoding: $0, as: UTF8.self) } == #"{"command":"npm run dev"}"#)
+        let read = GitHubStub.seen.last
+        #expect(read?.path == "/repos/kstrat2001/hcr/contents/.darkmux/preview.json")
+        #expect(read?.auth == "Bearer ghu_abc")
+        #expect(read?.accept == "application/vnd.github.raw+json", "the file's own bytes, not JSON about it")
+    }
+
+    @Test func signedOutAFileIsReadFromRawWithoutAToken() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /kstrat2001/hcr/HEAD/.darkmux/preview.json", 200, #"{"command":"npm run dev"}"#)
+        let gh = RESTGitHubClient(session: GitHubStub.session, token: { nil })
+        #expect(try await gh.file(repo: "kstrat2001/hcr", path: PreviewManifest.path) != nil)
+        #expect(GitHubStub.seen.last?.path == "/kstrat2001/hcr/HEAD/.darkmux/preview.json")
+        #expect(GitHubStub.seen.last?.auth == nil)
+    }
+
     @Test func theAppSaysWhenItIsntInstalledOnTheRepo() async {
         GitHubStub.reset()
         GitHubStub.on("GET /user/installations", 200, #"{"total_count":1,"installations":[{"id":7,"app_slug":"mux-bot-app","account":{"login":"kstrat2001"}}]}"#)
