@@ -131,7 +131,11 @@ struct BotThreadView: View {
                 }
             }
         }
-        .onAppear { markRead() }
+        .onAppear {
+            markRead()
+            // Back within the grace period: the preview keeps running.
+            if let bot { brain.runs.returnToPreview(for: bot) }
+        }
         .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
             // darkmux runs the preview from the repo's recipe when you open it
             // (again once the darkmux connection is ready at launch).
@@ -141,10 +145,19 @@ struct BotThreadView: View {
             }
         }
         .onDisappear {
-            // Leaving the bot stops its dev server, so none keep running unseen.
-            if let bot { Task { await brain.runs.stopPreview(for: bot) } }
+            // Leaving the bot stops its dev server after a grace period (so
+            // coming straight back doesn't restart it), so none keep running
+            // unseen. Quitting stops them at once.
+            if let bot { brain.runs.leavePreview(for: bot) }
         }
-        .onChange(of: conversations.first?.messages?.count) { markRead() }
+        .onChange(of: conversations.first?.messages?.count) {
+            markRead()
+            // The bot answered (or a card waits): show the chat if the
+            // preview filled the window.
+            if let newest = conversations.first?.messages?.max(by: { $0.timestamp < $1.timestamp }), newest.role != .user {
+                router.attentionArrived()
+            }
+        }
         #if DEBUG
         .task {
             // `-useFolder <path>`: set up this bot's work copy from a local
@@ -260,7 +273,7 @@ struct BotThreadView: View {
         let hello = bot.map { BotGreeting.text(name: $0.name, about: $0.useCaseId.isEmpty ? $0.instructions : "",
                                                hasPreview: $0.previewURL != nil || $0.workspaceName != nil) }
             ?? (Guide.isEnabled
-                ? String(localized: "Hi, I'm \(LeadBot.name). I help you set up darkmux and your models, make your first bot from a repo, and answer questions about Mux Bot and darkmux. Try “check my setup”.")
+                ? LeadGuide.intro
                 : "Hi, I'm \(LeadBot.name). Tell me what needs doing and I'll get the right bot on it.")
         store.append(.assistant, hello, to: conversation)
     }

@@ -7,8 +7,10 @@ struct MuxBotCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Bot…") { router.showNewBot = true }
+            Button("New Project…") { router.showStartProject = true }
                 .keyboardShortcut("n")
+            Button("New Bot…") { router.showNewBot = true }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         CommandGroup(after: .textEditing) {
             Button("Search Bots and Messages…") { router.showSearch = true }
@@ -75,15 +77,21 @@ struct MenuBarRuns: View {
 /// The menu bar icon: busy while something runs, a count when work waits.
 struct MenuBarLabel: View {
     @Query private var runs: [BotRun]
+    @Environment(NotificationService.self) private var notifications
 
     var body: some View {
         let waiting = NeedsYou.waiting(runs).count
         let running = runs.contains { $0.phase == .running }
-        if waiting > 0 {
-            Label("\(waiting)", systemImage: "exclamationmark.bubble.fill").labelStyle(.titleAndIcon)
-        } else {
-            Image(systemName: running ? "waveform.path.ecg" : "bubble.left.and.bubble.right")
+        Group {
+            if waiting > 0 {
+                Label("\(waiting)", systemImage: "exclamationmark.bubble.fill").labelStyle(.titleAndIcon)
+            } else {
+                Image(systemName: running ? "waveform.path.ecg" : "bubble.left.and.bubble.right")
+            }
         }
+        // The Dock badge lives here, not in the window: it keeps counting
+        // while the window is closed.
+        .onChange(of: RunNotice.badgeCount(runs), initial: true) { _, count in notifications.setBadge(count) }
     }
 }
 #endif

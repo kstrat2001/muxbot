@@ -11,7 +11,7 @@ import FoundationModels
 enum LeadBot {
     static let name = "Mux Bot"
     static let systemImage = "crown"
-    static let persona = "You're the guide: you help people set up Mux Bot (darkmux, pairing, models, GitHub), make their first bot from a repo, and answer questions about Mux Bot and darkmux from its help. When the help doesn't say, you say you don't know. You don't start work yourself: work happens in a bot's thread. Short, friendly, plain."
+    static let persona = "You're the guide: you help people set up Mux Bot (darkmux, pairing, models, GitHub), start a project, and answer questions about Mux Bot and darkmux from its help. When the help doesn't say, you say you don't know. You don't start work yourself: work happens in a bot's thread. Short, friendly, plain."
 }
 
 /// Which conversation the user is in. Follows navigation.
@@ -340,6 +340,8 @@ final class BotBrain {
     @ObservationIgnored var checkoutReader: ((URL) -> (packageJSON: String?, files: Set<String>))?
     /// Mux Bot as a guide, in its own thread.
     let guide = LeadGuide()
+    /// Opens the Start chooser, or a template's form (set by the app).
+    var openStart: ((String?) -> Void)?
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection? {
@@ -730,6 +732,11 @@ final class BotBrain {
             : turnNote.map { "\($0) I used keyword matching for this message." }
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
         var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
+        // Mux Bot never improvises: what the guide and the hand-off, new-bot
+        // and work-status paths didn't take gets what he can do.
+        if speaker == nil, Guide.isEnabled, result.action == nil {
+            result.reply = LeadGuide.menuText
+        }
         if intent == .ask { result.action = nil }   // a question never proposes work
         // Never a dispatch built from a bare "Fix PR #9": issues are read first.
         if case let .dispatch(_, task)? = result.action, Self.isBareReference(task) {
@@ -931,6 +938,21 @@ final class BotBrain {
         let facts: PageFacts?
         if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text)) }
         let measured = facts.map(BugReport.describe) ?? []
+        // The layout around the reported width, measured in the preview: the
+        // switch between presets, its rule and file. No model judges it.
+        var layout: LayoutMeasure.Measured?
+        if let probe = layoutProbe, let bot, let root = runs.previewURL(for: bot), let width = facts?.viewport {
+            let page = facts?.url ?? "/"
+            let url = URL(string: String(page.drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
+            let got = await probe.measure(url: url, widths: LayoutMeasure.widths(around: width))
+            if !got.isEmpty { layout = LayoutMeasure.summarize(got, focus: width) }
+        }
+        // Cut off or off the screen, yet the page fits at every width
+        // measured: no bug and no Fix it now; the panel may be what's clipped.
+        if let bot, let layout, !layout.foundProblem, layout.layoutSwitch == nil, BugReport.isOverflowComplaint(text) {
+            store.postGuideCard(.pageFits(text: BugReport.pageFitsText), summary: BugReport.pageFitsText, in: .bot(bot.id))
+            return
+        }
         let reply: String
         if facts == nil {
             reply = "I can't see the site and the preview isn't open, so I couldn't measure anything. I drafted a bug from your description."
@@ -943,16 +965,8 @@ final class BotBrain {
         var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
                                     facts: facts, page: nil, repo: repo)
         draft.selector = element?.selector
-        // The layout around the reported width, measured in the preview: the
-        // switch between presets, its rule and file. No model judges it.
-        var layout: LayoutMeasure.Measured?
-        if let probe = layoutProbe, let bot, let root = runs.previewURL(for: bot), let width = facts?.viewport {
-            let page = facts?.url ?? "/"
-            let url = URL(string: String(page.drop { $0 == "/" }), relativeTo: root)?.absoluteURL ?? root
-            let got = await probe.measure(url: url, widths: LayoutMeasure.widths(around: width))
-            if !got.isEmpty { layout = LayoutMeasure.summarize(got, focus: width) }
-        }
         draft.facts += layout?.lines ?? []
+        draft.plain = layout?.plain
         draft.likelyPlace = layout?.likelyPlace
         // Expected is what you should see: from the measurement when it says,
         // else the model's line only if it names no fix or mechanism.

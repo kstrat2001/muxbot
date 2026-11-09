@@ -67,6 +67,21 @@ protocol PageInspecting: AnyObject {
 }
 
 /// A bug report drafted from what the user described, plus page facts.
+extension BugReport {
+    /// What the bot says when you report something cut off or off the
+    /// screen and the page fits at every width it measured.
+    static let pageFitsText = "The page itself fits at every width I checked. If the preview looks cut off, it may be the preview panel."
+
+    /// A complaint about the page running past the screen's edge.
+    static func isOverflowComplaint(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let phrases = ["off the screen", "off screen", "off-screen", "offscreen", "cut off", "cut-off", "overflow",
+                       "sideways", "horizontal scroll", "scrolls horizontally", "wider than", "clipped", "off the edge",
+                       "past the edge", "off the side", "spills"]
+        return phrases.contains { lower.contains($0) }
+    }
+}
+
 struct BugDraft: Sendable, Equatable, Codable {
     var title: String
     var described: String
@@ -81,6 +96,19 @@ struct BugDraft: Sendable, Equatable, Codable {
     var expected: String? = nil
     /// The file and rule the measurement points at.
     var likelyPlace: String? = nil
+    /// The card's one plain sentence: what the measurement found, without
+    /// rules, files or selectors.
+    var plain: String? = nil
+
+    /// The card's main text.
+    var headline: String {
+        if let plain, !plain.isEmpty { return plain }
+        return facts.isEmpty ? "Drafted from your description." : "Drafted from your description; the measurements are in the details."
+    }
+
+    /// Every measurement, behind the card's Show details (the issue and the
+    /// brief to Coder carry them all in `body`).
+    var details: String { facts.joined(separator: "\n") }
 
     var body: String {
         var lines = [
@@ -184,6 +212,45 @@ enum BugReport {
               marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
               fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
           };
+          // Delete outside a text field would make WebKit go back a page:
+          // swallow it there; the page's own fields still get it.
+          document.addEventListener('keydown', e => {
+            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+            const t = e.target;
+            const editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+            if (!editable) e.preventDefault();
+          }, true);
+          // While a pick's chip is in the bar, its element stays outlined
+          // (`__muxMark`): redrawn when the page re-renders or resizes,
+          // hidden when the element is gone, removed with `__muxUnmark`.
+          const mark = document.createElement('div');
+          mark.dataset.muxbotMark = '1';
+          mark.style.cssText = 'position:absolute;pointer-events:none;z-index:2147483646;border:2px solid #22d3a6;background:rgba(34,211,166,.12);border-radius:3px;display:none;box-sizing:border-box';
+          let markSelector = null, markWatch = null;
+          const drawMark = () => {
+            const el = markSelector && document.querySelector(markSelector);
+            if (!el) { mark.style.display = 'none'; return; }
+            const r = el.getBoundingClientRect();
+            Object.assign(mark.style, { display: 'block', left: (r.left + scrollX) + 'px', top: (r.top + scrollY) + 'px', width: r.width + 'px', height: r.height + 'px' });
+            if (!mark.isConnected) document.body.appendChild(mark);
+          };
+          window.__muxMark = sel => {
+            markSelector = sel;
+            drawMark();
+            if (!markWatch) {
+              // A microtask, not a frame: it runs even when the preview isn't drawing.
+              markWatch = new MutationObserver(records => { if (records.some(r => r.target !== mark)) queueMicrotask(drawMark); });
+              markWatch.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
+              window.addEventListener('resize', drawMark);
+            }
+            return !!document.querySelector(sel);
+          };
+          window.__muxUnmark = () => {
+            markSelector = null;
+            mark.style.display = 'none';
+            if (markWatch) { markWatch.disconnect(); markWatch = null; window.removeEventListener('resize', drawMark); }
+            return true;
+          };
           const menu = document.createElement('div');
           menu.style.cssText = 'position:fixed;z-index:2147483647;display:none;padding:5px;border-radius:10px;background:#1c2622;box-shadow:0 4px 16px rgba(0,0,0,.45);font:13px -apple-system,system-ui,sans-serif';
           const choose = () => {
@@ -199,7 +266,7 @@ enum BugReport {
             const quote = sel.toString().trim().slice(0, 200);
             window.__muxSend(window.__muxDescribe(el, { selectedText: quote }));
             menu.style.display = 'none';
-            sel.removeAllRanges();
+            // The selection stays, so you keep your place while you write.
           };
           const chat = document.createElement('button');
           chat.textContent = 'Chat about this';

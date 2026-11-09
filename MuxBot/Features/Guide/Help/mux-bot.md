@@ -1,6 +1,6 @@
 # What Mux Bot does
 
-Mux Bot is the guide on Home. It helps you get set up (darkmux, pairing, models, GitHub), makes your first bot from a repo, and answers questions about Mux Bot and darkmux from these help articles. When the articles don't cover something, it says it doesn't know.
+Mux Bot is the guide on Home. It helps you start a project (say “new project”, or name what you want to make, like “write a book”), get set up (darkmux, pairing, models, GitHub), change a setting, and answers questions about Mux Bot and darkmux from these help articles. Start a project is also always one tap away: the + button, or File › New Project… (⌘N) on the Mac. When the articles don't cover something, it says it doesn't know.
 
 ## What it doesn't do
 

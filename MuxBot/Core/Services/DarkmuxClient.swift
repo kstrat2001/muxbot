@@ -163,12 +163,47 @@ struct DarkmuxClient: Sendable {
         }
     }
 
+    /// A preview start's body: `{}` for a plain start, `{"clean": true}`
+    /// to start over (darkmux #3484: it reinstalls the project's packages
+    /// in darkmux's workspace, then starts the preview).
+    struct PreviewStart: Encodable, Sendable {
+        var clean: Bool
+        private enum Key: String, CodingKey { case clean }
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: Key.self)
+            if clean { try container.encode(true, forKey: .clean) }
+        }
+    }
+
     /// Starts (or finds) the workspace's preview; darkmux picks the ports.
-    func startPreview(token: String, workspace: String) async throws -> Preview {
-        let data = try await send("POST", "/client/workspaces/\(workspace)/preview", body: [String: String](),
-                                  headers: ["Authorization": "Bearer \(token)"], timeout: 30)
+    /// `clean` starts it over (only where `supportsCleanStart` said yes).
+    func startPreview(token: String, workspace: String, clean: Bool = false) async throws -> Preview {
+        let data = try await send("POST", "/client/workspaces/\(workspace)/preview", body: PreviewStart(clean: clean),
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: clean ? 60 : 30)
         return try JSONDecoder().decode(Preview.self, from: data)
     }
+
+    /// A workspace name no darkmux has, for the probe.
+    static let probeWorkspace = "muxbot-capability-probe"
+
+    /// Whether this darkmux can start a preview over. A darkmux with the
+    /// clean restart reads the start's body first and refuses an unknown
+    /// key (400); an older one never reads the body and refuses the
+    /// unknown workspace (404, or 403 with previews off). Nothing starts
+    /// either way.
+    func supportsCleanStart(token: String) async -> Bool {
+        do {
+            _ = try await send("POST", "/client/workspaces/\(Self.probeWorkspace)/preview", body: ["muxbot_capability_probe": true],
+                               headers: ["Authorization": "Bearer \(token)"])
+            return false
+        } catch let error as ClientError {
+            return Self.supportsCleanStart(probeStatus: error.status)
+        } catch {
+            return false
+        }
+    }
+
+    static func supportsCleanStart(probeStatus: Int) -> Bool { probeStatus == 400 }
 
     func previewStatus(token: String, workspace: String) async throws -> Preview {
         let data = try await send("GET", "/client/workspaces/\(workspace)/preview", headers: ["Authorization": "Bearer \(token)"])

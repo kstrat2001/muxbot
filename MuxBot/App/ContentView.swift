@@ -7,6 +7,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
+    @Environment(BotBrain.self) private var brain
     @Environment(\.modelContext) private var context
     @Environment(NotificationService.self) private var notifications
     @Query private var runs: [BotRun]
@@ -33,6 +34,11 @@ struct ContentView: View {
             // darkmux forgot this app (401): show pairing, which says why.
             let router = router
             connection.onRevoked = { router.showPairing = true }
+            // "new project" in Mux Bot's thread opens Start (or a template's form).
+            brain.openStart = { template in
+                router.startTemplateId = template
+                router.showStartProject = true
+            }
         }
         .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
         // Runs an earlier build kept become committed results (Open PR).
@@ -63,7 +69,11 @@ struct ContentView: View {
             if let run = BotStore(context: context).run(id: id) { router.open(run) }
             return .handled
         })
+        #if os(iOS)
+        // On the Mac the menu bar item keeps the Dock badge (it lives while
+        // the window is closed).
         .onChange(of: waitingCount, initial: true) { notifications.setBadge(waitingCount) }
+        #endif
     }
 
     #if DEBUG

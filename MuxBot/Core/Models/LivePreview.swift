@@ -161,6 +161,14 @@ struct PreviewFailure: Equatable, Sendable {
         }
     }
 
+    /// An install problem (a missing module or native binding, the wrong
+    /// Node for the packages): Start over, which reinstalls them, is the
+    /// main action.
+    var startOverFirst: Bool { kind == .installFailed || kind == .nodeTooOld }
+
+    /// What Start over does, in plain words.
+    static let startOverNote = String(localized: "Reinstalls the project's packages, then starts the preview again. Your files aren't touched.")
+
     var headline: String { String(localized: "The preview couldn't start.") }
 
     /// One plain sentence on what happened and what to do.

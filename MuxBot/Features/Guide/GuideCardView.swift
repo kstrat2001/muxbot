@@ -14,6 +14,7 @@ struct GuideCardView: View {
                 case .firstBot?: FirstBotCardView()
                 case let .setting(id)?: SettingCardView(id: id)
                 case let .answer(text, articles, onDevice)?: AnswerCardView(text: text, articles: articles, onDevice: onDevice)
+                case let .pageFits(text)?: PageFitsCardView(text: text)
                 case nil: Text(message.content).font(AppFont.body())
                 }
             }
@@ -310,6 +311,23 @@ struct HelpText: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+}
+
+// MARK: - The page fits
+
+/// "The page itself fits": the measurement found nothing wider than the
+/// screen, so the preview panel may be what looks cut off.
+struct PageFitsCardView: View {
+    let text: String
+    @Environment(PreviewController.self) private var preview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(text).font(AppFont.body())
+            Button("Reload the preview", systemImage: "arrow.clockwise") { preview.reload() }
+                .buttonStyle(.bordered)
         }
     }
 }
