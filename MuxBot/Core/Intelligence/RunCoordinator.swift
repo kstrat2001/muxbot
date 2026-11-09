@@ -342,7 +342,7 @@ final class RunCoordinator {
         }
         waitingPreviews[bot.id] = nil
         previewWorkspaces[bot.id] = name
-        if let status = livePreviews[bot.id]?.status, status != .stopped, status != .waiting, !(status.isFailed) {
+        if let status = livePreviews[bot.id]?.status, !status.canRetry {
             Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
             return
         }
@@ -371,10 +371,18 @@ final class RunCoordinator {
             livePreviews[bot.id] = LivePreview(status: .stopped)
         } catch let error as URLError where error.code == .cancelled {
             livePreviews[bot.id] = LivePreview(status: .stopped)
-        } catch let error as DarkmuxClient.ClientError where error.status == 404 {
-            Self.previewLog.info("preview \(name, privacy: .public): the repo has no preview recipe")
-            livePreviews[bot.id] = nil   // no recipe: fall back to a preview link, if any
-            noRecipe.insert(bot.id)      // the thread offers to set one up
+        } catch let error as DarkmuxClient.ClientError {
+            // darkmux won't run it: say why (a preview link you added is
+            // still shown). Any other refusal is a failure.
+            if let why = LivePreview.Unavailable.from(status: error.status, message: error.message, template: !bot.useCaseId.isEmpty) {
+                Self.previewLog.info("preview \(name, privacy: .public): unavailable, \(String(describing: why), privacy: .public)")
+                livePreviews[bot.id] = LivePreview(status: .unavailable(why))
+                // No recipe in your checkout: the thread offers to set one up.
+                if why == .noRecipe { noRecipe.insert(bot.id) }
+            } else {
+                Self.previewLog.error("preview \(name, privacy: .public) refused (\(error.status)): \(error.message, privacy: .public)")
+                livePreviews[bot.id] = LivePreview(status: .failed(error.message))
+            }
         } catch {
             Self.previewLog.error("preview \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             livePreviews[bot.id] = LivePreview(status: .failed(error.localizedDescription))
