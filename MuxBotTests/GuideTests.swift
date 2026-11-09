@@ -169,6 +169,31 @@ struct SetupCheckTests {
     }
 }
 
+/// The live setup checklist looks once when it appears, then every few
+/// seconds while it's the newest (not twice at the start).
+@Suite @MainActor
+struct SetupWatchTests {
+    @Test(.timeLimit(.minutes(1))) func itProbesOnceThenWaits() async throws {
+        var probes = 0
+        var shown: [Int] = []
+        let watch = Task { @MainActor in
+            await SetupProbe.watch(isLive: true, every: .seconds(3600), probe: { probes += 1; return probes }, show: { shown.append($0) })
+        }
+        for _ in 0..<100 where probes == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(probes == 1)
+        #expect(shown == [1])
+        watch.cancel()
+        await watch.value
+    }
+
+    @Test func anOldChecklistLooksOnceAndStops() async {
+        var probes = 0
+        await SetupProbe.watch(isLive: false, every: .seconds(3600), probe: { probes += 1; return probes }, show: { _ in })
+        #expect(probes == 1)
+    }
+}
+
 @Suite(.serialized) @MainActor
 struct LeadGuideFlowTests {
     private func setUp() -> (BotStore, BotBrain) {

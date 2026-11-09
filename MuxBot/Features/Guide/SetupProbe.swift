@@ -8,7 +8,9 @@ import Darwin
 enum SetupProbe {
     static let dockerKey = "guide.setup.dockerConfirmed"
 
-    static func facts(connection: FleetConnection?, runs: RunCoordinator) async -> SetupFacts {
+    /// `githubSignedIn` comes from `GitHubAuth` (its token is cached), so
+    /// the checklist doesn't read the Keychain every few seconds.
+    static func facts(connection: FleetConnection?, runs: RunCoordinator, githubSignedIn: Bool) async -> SetupFacts {
         #if os(macOS)
         var f = SetupFacts(platform: .mac, appleSilicon: isAppleSilicon, memoryGB: memoryGB)
         let base = connection?.client.baseURL ?? DarkmuxClient().baseURL
@@ -27,8 +29,17 @@ enum SetupProbe {
         var f = SetupFacts(platform: .phone, appleSilicon: false, memoryGB: memoryGB)
         #endif
         f.dockerConfirmed = UserDefaults.standard.bool(forKey: dockerKey)
-        f.githubSignedIn = KeychainHelper().get(key: GitHubAuth.tokenKey) != nil
+        f.githubSignedIn = githubSignedIn
         return f
+    }
+
+    /// Looks once, then every `every` while `isLive` (the newest checklist).
+    static func watch<Facts>(isLive: Bool, every: Duration, probe: () async -> Facts, show: (Facts) -> Void) async {
+        repeat {
+            show(await probe())
+            guard isLive else { return }
+            try? await Task.sleep(for: every)
+        } while !Task.isCancelled
     }
 
     static var memoryGB: Int { Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded()) }

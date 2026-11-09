@@ -31,6 +31,7 @@ struct SetupChecklistView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(BotBrain.self) private var brain
     @Environment(AppRouter.self) private var router
+    @Environment(GitHubAuth.self) private var github
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -53,11 +54,9 @@ struct SetupChecklistView: View {
             #endif
         }
         .task(id: isLive) {
-            facts = await SetupProbe.facts(connection: connection, runs: brain.runs)
-            while isLive, !Task.isCancelled {
-                facts = await SetupProbe.facts(connection: connection, runs: brain.runs)
-                try? await Task.sleep(for: .seconds(4))
-            }
+            await SetupProbe.watch(isLive: isLive, every: .seconds(4),
+                                   probe: { await SetupProbe.facts(connection: connection, runs: brain.runs, githubSignedIn: github.token != nil) },
+                                   show: { facts = $0 })
         }
     }
 
