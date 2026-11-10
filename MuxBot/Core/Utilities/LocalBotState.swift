@@ -33,11 +33,14 @@ final class LocalBotState: @unchecked Sendable {
         /// darkmux has them. Others (synced from another Mac) are never
         /// followed, stopped or undone from here.
         var localRuns: [String]?
+        /// Each run's darkmux work ids, oldest first (the run, then each
+        /// Tweak): Undo reverts them all, newest first.
+        var runWorkIds: [String: [String]]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty
         }
     }
 

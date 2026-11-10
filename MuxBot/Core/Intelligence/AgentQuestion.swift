@@ -40,9 +40,22 @@ enum RunCardState {
         }
     }
 
+    /// Close (Done): a result with nothing to undo that's still open: a
+    /// question, changes darkmux couldn't commit, or a read-only crew's
+    /// answer (a review, research).
+    @MainActor static func canClose(_ run: BotRun) -> Bool {
+        run.phase == .result && !canUndo(run) && (run.needsYou || !run.crew.changesFiles)
+    }
+
+    /// Replaced only by a later run that actually ran (not one waiting for
+    /// Approve or canceled before it started), and never while it still
+    /// needs you.
     @MainActor
     static func isReplaced(_ run: BotRun) -> Bool {
-        run.phase == .result && (run.bot?.runs ?? []).contains { $0.id != run.id && $0.createdAt > run.createdAt }
+        guard run.phase == .result, !run.needsYou else { return false }
+        return (run.bot?.runs ?? []).contains {
+            $0.id != run.id && $0.createdAt > run.createdAt && $0.startedAt != nil && $0.phase != .canceled
+        }
     }
 }
 

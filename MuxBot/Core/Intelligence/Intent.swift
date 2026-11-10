@@ -37,7 +37,10 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     /// the user correcting how the bot read their last message.
     static func correction(in text: String) -> Intent? {
         let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard lower.count <= 60, ["no", "not ", "nope", "actually"].contains(where: { lower.hasPrefix($0) }) else { return nil }
+        // "no"/"not"/"nope"/"actually" as a whole first word ("now", "note",
+        // "nothing" and "notice" are new requests).
+        guard lower.count <= 60, lower.range(of: #"^(no|nope|not|actually)\b"#, options: .regularExpression) != nil,
+              lower.range(of: #"^no-"#, options: .regularExpression) == nil else { return nil }
         let cues: [(Intent, [String])] = [
             (.ask, ["question", "just asking", "only asking", "ask"]),
             (.bug, ["bug"]),
@@ -49,7 +52,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         var best: (Intent, String.Index)?
         for (intent, words) in cues {
             for word in words {
-                if let r = lower.range(of: word, options: .backwards), best == nil || r.lowerBound > best!.1 { best = (intent, r.lowerBound) }
+                // Whole words: "ask" is not in "task", "fix" not in "prefix".
+                let pattern = "\\b" + NSRegularExpression.escapedPattern(for: word) + "\\b"
+                if let r = lower.range(of: pattern, options: [.regularExpression, .backwards]), best == nil || r.lowerBound > best!.1 { best = (intent, r.lowerBound) }
             }
         }
         return best?.0

@@ -229,8 +229,8 @@ struct RunCardView: View {
                             .buttonStyle(.bordered)
                             .disabled(brain.runs.deciding.contains(run.id))
                             .help("Revert this run's commit")
-                    } else if run.needsYou {
-                        Button("Close") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
+                    } else if RunCardState.canClose(run) {
+                        Button(run.crew.changesFiles ? "Close" : "Done") { brain.runs.decide(.close, on: run, store: store) }.buttonStyle(.bordered)
                     }
                 }
             }
@@ -330,11 +330,14 @@ struct RunCardView: View {
                                 Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, nextModel: true) }
                             }
                             .buttonStyle(.bordered)
+                            .disabled(brain.runs.rerunning.contains(run.id))
+                            if brain.runs.rerunning.contains(run.id) { ProgressView().controlSize(.small) }
                             // A default model stays on its model; offer the next one.
                             if let next = brain.runs.runChoices[run.id]?.offerNext {
                                 Button("Run again on \(next)") {
                                     Task { await brain.rerun(run, change: LayoutCheck.rerunChange(check), store: store, model: next) }
                                 }
+                                .disabled(brain.runs.rerunning.contains(run.id))
                                 .buttonStyle(.bordered)
                             }
                         }

@@ -36,7 +36,9 @@ struct DarkmuxClient: Sendable {
         var commitError: String?
         /// Why it failed, for an app (`busy`, `wont_fit`, …; darkmux #3468).
         var code: String?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code; case commitError = "commit_error" }
+        /// Why darkmux couldn't read the run's changes (`changes` is then null).
+        var changesError: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code; case commitError = "commit_error"; case changesError = "changes_error" }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -44,6 +46,7 @@ struct DarkmuxClient: Sendable {
             error = try c.decodeIfPresent(String.self, forKey: .error)
             reason = try c.decodeIfPresent(String.self, forKey: .reason)
             code = try? c.decodeIfPresent(String.self, forKey: .code)
+            changesError = try? c.decodeIfPresent(String.self, forKey: .changesError)
             changes = try? c.decodeIfPresent(Changes.self, forKey: .changes)
             commit = try? c.decodeIfPresent(String.self, forKey: .commit)
             branch = try? c.decodeIfPresent(String.self, forKey: .branch)

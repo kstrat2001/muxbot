@@ -244,7 +244,7 @@ struct PreviewFailure: Equatable, Sendable {
         case .settings:
             template
                 ? String(localized: "The template's preview settings aren't in a form darkmux can use, so this project's preview can't start until the template is fixed.")
-                : String(localized: "The preview settings in your checkout's .darkmux/preview.json aren't in a form darkmux can use. Fix that file in your checkout, then try again.")
+                : String(localized: "The preview settings file in your checkout isn't in a form darkmux can use. Fix it in your checkout (darkmux never reads the bot's copy), then try again.")
         case .tooSlow:
             String(localized: "The preview took too long to start. Try again.")
         case .serverStopped:

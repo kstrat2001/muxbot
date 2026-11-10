@@ -28,7 +28,7 @@ struct BotBar: View {
     var body: some View {
         @Bindable var router = router
         VStack(spacing: Spacing.md) {
-            if let note = brain.fallbackNote {
+            if let note = brain.fallbackNotes[router.context] {
                 Label(note, systemImage: "info.circle")
                     .font(AppFont.caption())
                     .foregroundStyle(Color.secondaryText)
@@ -64,7 +64,8 @@ struct BotBar: View {
             }
             if !chips.isEmpty, ChatShortcuts.showsRow(draft: router.barDraft, tweaking: tweakRun != nil,
                                                       picked: preview.picked != nil, waitingCard: hasWaitingCard,
-                                                      lead: router.context.botId == nil) {
+                                                      lead: router.context.botId == nil,
+                                                      answerPending: router.context.botId.flatMap { brain.pendingAnswers[$0] } != nil) {
                 ChatShortcutRow(chips: chips, run: run)
             }
             #if os(macOS)
@@ -124,13 +125,13 @@ struct BotBar: View {
     private var sendButton: some View {
         Button("Send", systemImage: "arrow.up.circle.fill", action: send)
             .labelStyle(.iconOnly)
-            .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking)
+            .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking(in: router.context))
     }
 
     private func send() {
         let text = router.barDraft
         let element = router.context.botId == nil ? nil : preview.picked
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking else { return }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking(in: router.context) else { return }
         router.barDraft = ""
         preview.clearPick()   // a pick is about one message
         let chat = router.context
