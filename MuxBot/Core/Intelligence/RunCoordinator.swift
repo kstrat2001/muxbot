@@ -1204,6 +1204,106 @@ final class RunCoordinator {
         [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut].contains(error.code)
     }
 
+    // MARK: Hand edits
+
+    /// Tests answer a hand edit here (workspace, old, new).
+    var handEditor: ((String, String, String) async throws -> DarkmuxClient.EditResult)?
+
+    static let handEditNeedsMac = String(localized: "Edits are made from the Mac app, with this bot's project set up on that Mac.")
+    static let handEditWaitForRun = String(localized: "A run is changing this project right now. Edit the text once it finishes.")
+
+    /// A person's own edit to text they selected in the preview: darkmux
+    /// changes the one place in the project that holds it and commits it,
+    /// and the thread shows the result with Undo. Typing the words and
+    /// pressing Save is the approval. Text darkmux can't place (not found,
+    /// or found more than once) goes to Coder as a dispatch card instead.
+    func handEdit(_ element: PickedElement, to new: String, bot: Bot, store: BotStore) async {
+        let old = element.selectedText ?? ""
+        let thread = store.conversation(for: .bot(bot.id))
+        guard let workspace = bot.workspaceName, handEditor != nil || connection?.token != nil else {
+            store.append(.system, Self.handEditNeedsMac, to: thread)
+            return
+        }
+        if (bot.runs ?? []).contains(where: { $0.phase == .running && $0.startedHere }) {
+            store.append(.system, Self.handEditWaitForRun, to: thread)
+            return
+        }
+        let result: DarkmuxClient.EditResult
+        do {
+            if let handEditor {
+                result = try await handEditor(workspace, old, new)
+            } else if let connection, let token = connection.token {
+                result = try await connection.client.handEdit(token: token, workspace: workspace, old: old, new: new)
+            } else {
+                return
+            }
+        } catch {
+            store.append(.system, String(localized: "Couldn't make that edit: \(DarkmuxPlain.sentence(error))"), to: thread)
+            proposeHandEditToCoder(element, to: new, bot: bot, store: store)
+            return
+        }
+        guard result.matches == 1, let workId = result.workId else {
+            store.append(.system, Self.handEditMissText(matches: result.matches), to: thread)
+            proposeHandEditToCoder(element, to: new, bot: bot, store: store)
+            return
+        }
+        // The diff and line counts, as a run's details show them.
+        let status: DarkmuxClient.WorkStatus?
+        if let workStatusFetcher {
+            status = try? await workStatusFetcher(workId)
+        } else if let connection, let token = connection.token {
+            status = try? await connection.client.workStatus(token: token, workId: workId)
+        } else {
+            status = nil
+        }
+        let run = store.recordHandEdit(task: Self.handEditTask(old: old, new: new), on: bot)
+        markStartedHere(run)
+        run.darkmuxWorkId = workId
+        recordWork(workId, for: run)
+        run.keptCommit = result.commit
+        run.keptBranch = result.branch
+        let file = result.file ?? ""
+        run.changedFiles = [file]
+        if let changes = status?.changes {
+            run.changedFiles = changes.files.map { "\($0.path) +\($0.added ?? 0) −\($0.removed ?? 0)" }
+            run.diff = changes.diff
+        }
+        store.apply(.finish(summary: String(localized: "Changed \u{201C}\(Self.clip(old))\u{201D} to \u{201C}\(Self.clip(new))\u{201D} in \(file).")), to: run)
+        Task { await self.refreshPreview(for: bot) }
+        if bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
+    }
+
+    /// What the thread says when darkmux couldn't place the text.
+    static func handEditMissText(matches: Int) -> String {
+        matches == 0
+            ? String(localized: "I couldn't find that text in the project's files as written (it may be built by code, or split by formatting), so Coder can make the change.")
+            : String(localized: "That text is in more than one place in the project, so Coder can make the change where you picked it.")
+    }
+
+    static func handEditTask(old: String, new: String) -> String {
+        String(localized: "Edit \u{201C}\(clip(old))\u{201D} to \u{201C}\(clip(new))\u{201D}")
+    }
+
+    /// Words for a card: one line, at most 40 characters.
+    static func clip(_ text: String) -> String {
+        let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return line.count > 40 ? String(line.prefix(40)) + "…" : line
+    }
+
+    /// The edit as a Coder dispatch card: the exact old and new text and
+    /// where it was picked, waiting on Approve.
+    func proposeHandEditToCoder(_ element: PickedElement, to new: String, bot: Bot, store: BotStore) {
+        let old = element.selectedText ?? ""
+        let brief = """
+            On the page \(element.url), in the element `\(element.selector)`, change the text
+            \(old)
+            to
+            \(new)
+            Change only that text, where it appears on that page.
+            """
+        store.proposeRun(task: Self.handEditTask(old: old, new: new), crew: .coder, on: bot, brief: brief)
+    }
+
     /// The darkmux work ids of a run, oldest first: the run and each Tweak
     /// (its own commit). Kept on this Mac (LocalBotState), never synced.
     func recordWork(_ workId: String, for run: BotRun) {
