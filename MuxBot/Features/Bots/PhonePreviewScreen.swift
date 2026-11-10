@@ -23,7 +23,7 @@ struct PhonePreviewScreen: View {
             .task(id: displayScale) { preview.displayScale = displayScale }
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .bottomTrailing) { controls }
-            .task(id: url) { preview.show(url) }
+            .task(id: url) { preview.showFullScreen(url, for: bot?.id) }
             .onChange(of: preview.picked) {
                 if preview.picked != nil { router.returnToChatAfterPick() }
             }
@@ -34,6 +34,7 @@ struct PhonePreviewScreen: View {
             if let bot, NeedsYou.shownState(bot) != .ready {
                 StatusBadge(kind: NeedsYou.shownState(bot).kind)
             }
+            Button("Reload", systemImage: "arrow.clockwise") { preview.goHome() }
             Button(preview.isPicking ? "Cancel pick" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
                 preview.togglePicking()
             }

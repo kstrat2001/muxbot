@@ -19,8 +19,17 @@ struct PreviewStatusView: View {
 
     var body: some View {
         VStack(spacing: Spacing.md) {
+            if router.previewFullScreen {
+                // Full window with no page yet: still a way back (Esc).
+                HStack {
+                    Spacer()
+                    Button("Show chat", systemImage: "arrow.down.right.and.arrow.up.left") { router.previewFullScreen = false }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Back to chat (Esc)")
+                }
+            }
             switch preview.status {
-            case .waiting, .starting, .installing:
+            case .waiting, .starting, .installing, .settingUpWorkCopy:
                 ProgressView()
                 Text(preview.status.text).foregroundStyle(Color.secondaryText)
             case let .failed(reason):

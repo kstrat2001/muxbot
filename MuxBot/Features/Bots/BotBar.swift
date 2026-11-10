@@ -48,7 +48,7 @@ struct BotBar: View {
                 }
                 .foregroundStyle(Color.secondaryText)
             }
-            if let element = preview.picked, router.context.botId != nil {
+            if let element = preview.pick(for: router.context) {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "scope").accessibilityHidden(true)
                     Text(element.chip).lineLimit(1)
@@ -64,7 +64,7 @@ struct BotBar: View {
                 .accessibilityLabel("About \(element.chip)")
             }
             if !chips.isEmpty, ChatShortcuts.showsRow(draft: router.barDraft, tweaking: tweakRun != nil,
-                                                      picked: preview.picked != nil, waitingCard: hasWaitingCard,
+                                                      picked: preview.pick(for: router.context) != nil, waitingCard: hasWaitingCard,
                                                       lead: router.context.botId == nil,
                                                       answerPending: router.context.botId.flatMap { brain.pendingAnswers[$0] } != nil) {
                 ChatShortcutRow(chips: chips, run: run)
@@ -116,7 +116,7 @@ struct BotBar: View {
     }
 
     private var field: some View {
-        let placeholder = tweakRun != nil ? String(localized: "What should change?") : preview.picked != nil ? String(localized: "What about it?") : String(localized: "Message \(listenerName)…")
+        let placeholder = tweakRun != nil ? String(localized: "What should change?") : preview.pick(for: router.context) != nil ? String(localized: "What about it?") : String(localized: "Message \(listenerName)…")
         return TextField(placeholder, text: Bindable(router).barDraft, prompt: Text(placeholder).foregroundStyle(Color.secondaryText), axis: .vertical)
             .lineLimit(1...4)
             .focused($barFocused)
@@ -127,12 +127,12 @@ struct BotBar: View {
     private var sendButton: some View {
         Button("Send", systemImage: "arrow.up.circle.fill", action: send)
             .labelStyle(.iconOnly)
-            .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.picked == nil) || brain.isThinking(in: router.context))
+            .disabled((router.barDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && preview.pick(for: router.context) == nil) || brain.isThinking(in: router.context))
     }
 
     private func send() {
         let text = router.barDraft
-        let element = router.context.botId == nil ? nil : preview.picked
+        let element = preview.pick(for: router.context)
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking(in: router.context) else { return }
         router.barDraft = ""
         router.showLeadBeforeSending()

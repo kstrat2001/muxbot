@@ -112,12 +112,12 @@ struct PreviewPanel: View {
                     }
                 }
         }
-        .task(id: url) { preview.show(url, for: botId) }
+        .task(id: url) { preview.show(url, for: botId, generation: botId.flatMap { brain.runs.previewReloads[$0] } ?? 0) }
         // A pick (or Chat about this) puts the cursor in the bar for your words.
         .onChange(of: preview.picked) { _, picked in if picked != nil { router.focusBarRequest += 1 } }
         .task { await brain.runs.checkStartOver() }
         // A run changed files (or Undo): show what the server serves now.
-        .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { preview.reload() }
+        .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { _, count in preview.show(url, for: botId, generation: count ?? 0) }
     }
 
     /// The bot whose darkmux preview this is (Start over needs its workspace).
