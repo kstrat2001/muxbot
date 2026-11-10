@@ -57,3 +57,7 @@ Then make a bot, use **Add folder** to pick a checkout of your repo, and ask it 
 ## License
 
 MIT
+
+## Website
+
+`site/` is the landing page at muxbot.darkmux.com: one plain HTML file and its images, with no build step. Open `site/index.html` in a browser to see it. A merge to `main` that touches `site/` publishes it through GitHub Pages (`.github/workflows/pages.yml`).

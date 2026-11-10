@@ -2,8 +2,10 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore: ['site/**', '.github/workflows/pages.yml']
   push:
     branches: [main]
+    paths-ignore: ['site/**', '.github/workflows/pages.yml']
 
 concurrency:
   group: ci-${{ github.ref }}
