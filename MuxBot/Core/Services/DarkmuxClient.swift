@@ -5,11 +5,22 @@ import Foundation
 /// darkmux build only.
 struct DarkmuxClient: Sendable {
     var baseURL = URL(string: "http://127.0.0.1:8767")!
-    /// Tests answer here instead of darkmux.
-    var session: URLSession = .shared
+    /// Tests answer here instead of darkmux. Under tests the default never
+    /// reaches the network (`defaultSession`).
+    var session: URLSession = DarkmuxClient.defaultSession
     /// darkmux answered 401 to a call with this app's token: it no longer
     /// knows this app (the pairing was revoked).
     var onUnauthorized: (@Sendable () -> Void)?
+
+    /// The app's shared session; under tests (`TestIsolation`) one whose
+    /// every request fails as "can't connect", so a test that forgot its
+    /// stub never reaches a darkmux really running on this Mac.
+    static let defaultSession: URLSession = {
+        guard TestIsolation.isTesting else { return .shared }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [NoNetworkProtocol.self]
+        return URLSession(configuration: config)
+    }()
 
     struct PairStatus: Decodable, Sendable {
         var status: String
@@ -158,17 +169,13 @@ struct DarkmuxClient: Sendable {
     /// The preview recipe in a workspace; nil when it has none.
     func recipe(token: String, workspace: String) async throws -> PreviewManifest? {
         struct Reply: Decodable { var recipe: PreviewManifest }
-        var parts = URLComponents(url: baseURL.appending(path: "/client/recipe"), resolvingAgainstBaseURL: false)
-        parts?.queryItems = [URLQueryItem(name: "workspace", value: workspace)]
-        guard let url = parts?.url else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 404 { return nil }
-        guard status == 200 else { throw ClientError(message: "darkmux answered \(status)") }
-        return try JSONDecoder().decode(Reply.self, from: data).recipe
+        do {
+            let data = try await send("GET", "/client/recipe", headers: ["Authorization": "Bearer \(token)"],
+                                      query: [URLQueryItem(name: "workspace", value: workspace)])
+            return try JSONDecoder().decode(Reply.self, from: data).recipe
+        } catch let error as ClientError where error.status == 404 {
+            return nil
+        }
     }
 
     struct Preview: Decodable, Sendable {
@@ -409,4 +416,15 @@ extension CrewRole {
         case .evalRunner: nil
         }
     }
+}
+
+/// Fails every request as "can't connect": the only protocol of
+/// `DarkmuxClient.defaultSession` under tests.
+final class NoNetworkProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+    }
+    override func stopLoading() {}
 }

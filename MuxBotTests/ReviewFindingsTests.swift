@@ -120,3 +120,64 @@ struct ReviewFindingsRunTests {
         #expect(backing !== UserDefaults.standard)
     }
 }
+
+/// 4 and 8: the darkmux client under tests, and a refused token.
+@Suite(.serialized) @MainActor
+struct ReviewFindingsClientTests {
+    @Test func theDefaultClientNeverReachesTheNetworkUnderTests() async {
+        #expect(DarkmuxClient.defaultSession !== URLSession.shared)
+        #expect(DarkmuxClient.defaultSession.configuration.protocolClasses?.first == NoNetworkProtocol.self)
+        do {
+            _ = try await DarkmuxClient().workStatus(token: "t0ken", workId: "w-1")
+            Issue.record("a request went somewhere")
+        } catch let error as URLError {
+            #expect(error.code == .cannotConnectToHost)
+        } catch {
+            Issue.record("\(error)")
+        }
+    }
+
+    @Test func aPairedConnectionsClientIsTheNoNetworkOneByDefault() {
+        let keychain = MemoryKeychain()
+        keychain.items["darkmux.client.token"] = "t0ken"
+        let connection = FleetConnection(keychain: keychain, defaults: UserDefaults(suiteName: "muxbot-tests-client-\(UUID().uuidString)")!)
+        #expect(connection.client.session === DarkmuxClient.defaultSession)
+    }
+
+    @Test func theRecipeGoesThroughTheClientsSession() async throws {
+        ClientStub.status = 404
+        var client = DarkmuxClient()
+        client.session = ClientStub.session
+        let none = try await client.recipe(token: "t", workspace: "site-1")
+        #expect(none == nil, "no recipe is nil, never an error")
+        #expect(ClientStub.lastURL?.query == "workspace=site-1")
+        ClientStub.status = 500
+        do {
+            _ = try await client.recipe(token: "t", workspace: "site-1")
+            Issue.record("expected a refusal")
+        } catch let error as DarkmuxClient.ClientError {
+            #expect(error.status == 500)
+        }
+    }
+}
+
+/// Answers every darkmux request with one status (this file's suites only).
+final class ClientStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var status = 200
+    nonisolated(unsafe) static var lastURL: URL?
+    static var session: URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ClientStub.self]
+        return URLSession(configuration: config)
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lastURL = request.url
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: [:])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"error":"unknown token"}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
