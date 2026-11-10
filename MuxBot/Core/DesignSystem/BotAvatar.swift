@@ -627,6 +627,7 @@ struct BotLookPicker: View {
                             .font(AppFont.caption(on ? .semibold : .regular))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
+                            .padding(.horizontal, Spacing.xs)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Spacing.xs + 1)
                             .background(Capsule().fill(on ? Color.brandBlue.opacity(0.2) : Color.secondary.opacity(0.1)))

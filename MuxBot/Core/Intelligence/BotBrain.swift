@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 #if canImport(FoundationModels)
@@ -125,6 +126,12 @@ enum FallbackBrain {
         }
         if speaker != nil, isVisualReport(lower) {
             return visualReportTurn(text)
+        }
+        // "make the header bigger", "can you remove the footer": a change for
+        // Coder, even with no crew word in it.
+        if speaker != nil, resourceValue(in: text) == nil, Intent.isChangeRequest(lower),
+           !GuideRoute.isQuestion(lower) || Intent.isPoliteChangeRequest(lower) {
+            return BotTurn(reply: "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", action: .dispatch(crew: .coder, task: text))
         }
         // A request with work in it goes to the crew before any path in it
         // is taken as a link to keep.
@@ -787,7 +794,12 @@ final class BotBrain {
             } catch {
                 // Only "can't run at all" errors mean the model is unavailable;
                 // a too-long or refused turn just falls back for this message.
-                if Self.isPerTurnFailure(error) { turnNote = Self.describe(error) } else { unavailableReason = error.localizedDescription }
+                if Self.isPerTurnFailure(error) {
+                    turnNote = Self.describe(error)
+                } else {
+                    Self.modelLog.error("on-device model unavailable: \(error.localizedDescription, privacy: .public)")
+                    unavailableReason = Self.modelFailureReason(error)
+                }
             }
         }
         if turn == nil, let reason = unavailableReason, useOnDeviceModel, !toldFallback.contains(context) {
@@ -987,6 +999,14 @@ final class BotBrain {
         guard intent == nil || intent == .fix, element == nil, !isDismissal(text) else { return false }
         return !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
     }
+
+    /// Why the on-device model can't answer, in plain words: the
+    /// framework's own error (its type name and code) goes to the log.
+    nonisolated static func modelFailureReason(_ error: any Error) -> String {
+        String(localized: "it didn't start on this device")
+    }
+
+    private static let modelLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "brain")
 
     static let questionNotWork = String(localized: "That reads as a question, so I didn't start anything. Say what to change and I'll send it to the crew.")
 
