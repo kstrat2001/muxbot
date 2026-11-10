@@ -144,6 +144,23 @@ struct PreviewStatusView: View {
         case .notPaired:
             Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
                 .buttonStyle(.borderedProminent)
+        case .earlierPairing:
+            let command = DarkmuxPlain.claimCommand(workspace: bot.workspaceName ?? "", client: connection.pairedName ?? LeadBot.name)
+            Text(command)
+                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                .padding(Spacing.sm)
+                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
+            HStack {
+                Button(copied ? "Copied" : "Copy command", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    Clipboard.copy(command)
+                    copied = true
+                }
+                .buttonStyle(.borderedProminent)
+                Button("New work copy", systemImage: "arrow.triangle.branch") {
+                    Task { await brain.runs.newWorkCopy(for: bot, store: BotStore(context: context)) }
+                }
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            }
         }
     }
 }

@@ -20,7 +20,9 @@ enum AgentQuestion {
 /// How a run's card shows itself.
 enum RunCardState {
     /// Undo reverts a run's commit: only a result that has one.
-    @MainActor static func canUndo(_ run: BotRun) -> Bool { run.phase == .result && run.keptCommit != nil }
+    @MainActor static func canUndo(_ run: BotRun) -> Bool {
+        [.result, .failed, .canceled].contains(run.phase) && run.keptCommit != nil
+    }
 
     /// A result whose changes darkmux couldn't commit: why (or a plain
     /// line when it didn't say). nil when it was committed or changed nothing.

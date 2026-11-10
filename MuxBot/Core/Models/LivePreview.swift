@@ -75,6 +75,8 @@ struct LivePreview: Equatable, Sendable {
         /// Your checkout moved or was deleted: darkmux's workspace is no
         /// longer a worktree of it.
         case checkoutMoved
+        /// The work copy was made for this app's earlier pairing.
+        case earlierPairing
 
         /// The command that turns previews on (run by you: the app can't).
         static let enableCommand = "darkmux config set clients.preview.enabled true"
@@ -89,6 +91,7 @@ struct LivePreview: Equatable, Sendable {
             case .templateNoRecipe: String(localized: "This project's template has no preview")
             case .remakeProject: String(localized: "This project can't be previewed")
             case .checkoutMoved: String(localized: "Your checkout moved")
+            case .earlierPairing: String(localized: "This work copy is from an earlier pairing")
             case .noRecipe: String(localized: "This project has no preview setup")
             }
         }
@@ -113,6 +116,8 @@ struct LivePreview: Equatable, Sendable {
                 return String(localized: "It was made by an older darkmux, which didn't keep what a preview needs. Start the project again from its template to get a preview.")
             case .checkoutMoved:
                 return String(localized: "darkmux's copy of \(repo) is no longer linked to your checkout (it moved, or was deleted). Add your checkout again.")
+            case .earlierPairing:
+                return String(localized: "darkmux made it for this app before you paired again, so it won't let this pairing use it. Claim it with this command in Terminal, or set up a new work copy (a new branch; the earlier commits stay on the old one):")
             case .noRecipe:
                 let folder = folder ?? String(localized: "your checkout")
                 return String(localized: "darkmux starts a preview from .darkmux/preview.json in \(folder), and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again.")
@@ -141,6 +146,8 @@ struct LivePreview: Equatable, Sendable {
             switch status {
             case 403 where m.hasPrefix("previews are off"):
                 return .previewsOff
+            case 403 where m.contains("not made for this app"):
+                return .earlierPairing
             case 404 where m.contains("not made from a checkout of yours"):
                 return template ? .newProject : .notYourCheckout
             case 404 where m.contains("no .darkmux/preview.json"):

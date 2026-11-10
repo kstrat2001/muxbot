@@ -38,7 +38,11 @@ struct DarkmuxClient: Sendable {
         var code: String?
         /// Why darkmux couldn't read the run's changes (`changes` is then null).
         var changesError: String?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code; case commitError = "commit_error"; case changesError = "changes_error" }
+        /// What a failed or stopped run left behind (darkmux 5.10 commits
+        /// it as the run's own commit): the files, with `commit`/`branch`.
+        var leftFiles: [String]?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files; case commitError = "commit_error"; case changesError = "changes_error" }
+        private struct PathOnly: Decodable { var path: String }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -51,6 +55,11 @@ struct DarkmuxClient: Sendable {
             commit = try? c.decodeIfPresent(String.self, forKey: .commit)
             branch = try? c.decodeIfPresent(String.self, forKey: .branch)
             commitError = try? c.decodeIfPresent(String.self, forKey: .commitError)
+            if let names = try? c.decodeIfPresent([String].self, forKey: .files) {
+                leftFiles = names
+            } else if let files = try? c.decodeIfPresent([PathOnly].self, forKey: .files) {
+                leftFiles = files.map(\.path)
+            }
             let result = try? c.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
             finalAssistant = try result?.decodeIfPresent(String.self, forKey: .finalAssistant)
         }
@@ -110,6 +119,19 @@ struct DarkmuxClient: Sendable {
         var template: Bool? = nil
         var ref: String? = nil
         enum CodingKeys: String, CodingKey { case repoURL = "repo_url", sourcePath = "source_path", bot, template, ref }
+
+        /// darkmux names a workspace `<repo ≤32>-<bot>` within 64
+        /// characters: the bot's name is sent cut to 31 (until darkmux #3493).
+        static let botNameLimit = 31
+
+        func encode(to encoder: any Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(repoURL, forKey: .repoURL)
+            try c.encodeIfPresent(sourcePath, forKey: .sourcePath)
+            try c.encode(String(bot.prefix(Self.botNameLimit)), forKey: .bot)
+            try c.encodeIfPresent(template, forKey: .template)
+            try c.encodeIfPresent(ref, forKey: .ref)
+        }
     }
 
     struct Workspace: Decodable, Sendable, Equatable {
@@ -196,19 +218,27 @@ struct DarkmuxClient: Sendable {
     /// key (400); an older one never reads the body and refuses the
     /// unknown workspace (404, or 403 with previews off). Nothing starts
     /// either way.
-    func supportsCleanStart(token: String) async -> Bool {
+    func supportsCleanStart(token: String) async -> Bool? {
         do {
             _ = try await send("POST", "/client/workspaces/\(Self.probeWorkspace)/preview", body: ["muxbot_capability_probe": true],
                                headers: ["Authorization": "Bearer \(token)"])
-            return false
+            return nil
         } catch let error as ClientError {
             return Self.supportsCleanStart(probeStatus: error.status)
         } catch {
-            return false
+            return nil
         }
     }
 
-    static func supportsCleanStart(probeStatus: Int) -> Bool { probeStatus == 400 }
+    /// 400: darkmux read the body (it has clean starts); 404: an older one
+    /// that never read it. Anything else isn't an answer: nil, asked again.
+    static func supportsCleanStart(probeStatus: Int) -> Bool? {
+        switch probeStatus {
+        case 400: true
+        case 404: false
+        default: nil
+        }
+    }
 
     func previewStatus(token: String, workspace: String) async throws -> Preview {
         let data = try await send("GET", "/client/workspaces/\(workspace)/preview", headers: ["Authorization": "Bearer \(token)"])

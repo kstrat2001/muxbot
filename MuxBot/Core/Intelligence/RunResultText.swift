@@ -81,6 +81,8 @@ enum RunResultText {
     /// ended long ago. Never "Stopped.": nobody stopped it.
     static let lostTrack = String(localized: "darkmux restarted and lost track of this run. Check the project before running it again.")
     /// Approved, but the app quit before darkmux had it.
+    /// darkmux answered 404 for a run submitted under an earlier pairing.
+    static let earlierPairing = String(localized: "This run is from an earlier pairing with darkmux, so this app can't follow it anymore. If it's still going, stop it on the Mac with darkmux.")
     static let quitBeforeStart = String(localized: "Mux Bot quit before darkmux started it.")
 
     /// Why a run failed, in plain words, from darkmux's `code` (client_wire
@@ -163,12 +165,31 @@ enum DarkmuxPlain {
         guard let client = error as? DarkmuxClient.ClientError else { return error.localizedDescription }
         switch client.status {
         case 401: return String(localized: "darkmux no longer knows this app. Pair again.")
+        case 403 where isEarlierPairing(client):
+            return String(localized: "This work copy belongs to an earlier pairing with darkmux. Claim it for this app with darkmux's claim command, or set up a new work copy (a new branch; the earlier commits stay on the old one).")
         case 404: return String(localized: "darkmux doesn't have that anymore.")
+        case 409 where client.message.localizedCaseInsensitiveContains("no free workspace name"):
+            return String(localized: "darkmux has no free work copy name left for this project. Remove an old work copy of it in darkmux, then try again.")
+        case 409 where client.message.localizedCaseInsensitiveContains("isn't on a branch") || client.message.localizedCaseInsensitiveContains("not on a branch"):
+            return String(localized: "The work copy isn't on a branch, so darkmux can't hand over its changes.")
+        case 409 where client.message.localizedCaseInsensitiveContains("default branch"):
+            return String(localized: "darkmux couldn't find the repo's default branch on GitHub. Check the checkout's remote, then try again.")
         case 409: return String(localized: "darkmux is busy with that right now. Try again in a moment.")
         case 429: return String(localized: "darkmux is already running two of this app's runs. This one waits for a free slot.")
         case 400..<500: return String(localized: "darkmux didn't accept that. Show details has why.")
         default: return String(localized: "darkmux ran into a problem. Try again in a moment.")
         }
+    }
+
+    /// darkmux refused a workspace made for this app's earlier pairing.
+    static func isEarlierPairing(_ error: any Error) -> Bool {
+        guard let client = error as? DarkmuxClient.ClientError else { return false }
+        return client.status == 403 && client.message.localizedCaseInsensitiveContains("not made for this app")
+    }
+
+    /// Hands an earlier pairing's work copy to this one (run on the Mac).
+    static func claimCommand(workspace: String, client: String) -> String {
+        "darkmux client claim \(workspace) \"\(client)\""
     }
 
     /// The raw text for Show details.

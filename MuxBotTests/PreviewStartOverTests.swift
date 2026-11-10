@@ -17,8 +17,9 @@ struct StartOverContractTests {
     /// darkmux with the clean restart reads the body first and refuses an
     /// unknown key (400); an older one never reads it and refuses the
     /// unknown workspace (404). Nothing starts either way.
-    @Test(arguments: [(400, true), (404, false), (403, false), (401, false), (503, false), (0, false)])
-    func theProbeTellsThemApart(status: Int, supported: Bool) {
+    /// Anything else isn't an answer (sweep 2 seam #9): not cached.
+    @Test(arguments: [(400, true), (404, false), (403, nil), (401, nil), (503, nil), (0, nil)] as [(Int, Bool?)])
+    func theProbeTellsThemApart(status: Int, supported: Bool?) {
         #expect(DarkmuxClient.supportsCleanStart(probeStatus: status) == supported)
     }
 

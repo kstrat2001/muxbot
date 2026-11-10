@@ -31,6 +31,8 @@ extension RunPhase {
         case (.result, .keep): .kept
         case (.result, .tweak): .running
         case (.result, .discard): .discarded
+        // A stopped or failed run that left a commit behind can be undone.
+        case (.failed, .discard), (.canceled, .discard): .discarded
         case (.kept, .openPR): .prOpened
         case (.kept, .skipPR): .done
         case (.result, .close): .done

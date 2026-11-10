@@ -129,6 +129,7 @@ struct RunCardView: View {
                     .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            leftBehindUndo(run)
         case .resultCard:
             if let line = RunCardState.collapsedLine(run) {
                 Label(line, systemImage: run.phase == .discarded ? "arrow.uturn.backward" : "checkmark.circle")
@@ -243,6 +244,7 @@ struct RunCardView: View {
                 }
             }
         }
+        leftBehindUndo(run)
         decisionError(run)
     }
 
@@ -357,6 +359,15 @@ struct RunCardView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// A stopped or failed run that left a commit behind: Undo puts it back.
+    @ViewBuilder private func leftBehindUndo(_ run: BotRun) -> some View {
+        if isLatest, run.phase == .failed || run.phase == .canceled, RunCardState.canUndo(run) {
+            Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: run, store: store) }
+                .buttonStyle(.bordered)
+                .disabled(brain.runs.deciding.contains(run.id))
         }
     }
 
