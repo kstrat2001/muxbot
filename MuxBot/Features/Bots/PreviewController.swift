@@ -21,6 +21,7 @@ final class PreviewController: PageInspecting {
         let home = HomeBox()
         self.home = home
         page = Self.makePage(relay: relay, home: home)
+        relay.home = home
         relay.onPick = { [weak self] element in self?.received(element) }
         watchForMarks()
     }
@@ -303,6 +304,16 @@ struct PreviewNavigationDecider: WebPage.NavigationDeciding {
             #endif
             return .cancel
         }
+        // Anything else that would take the preview itself (its main frame;
+        // an iframe or embed loads as before) to another site, without a
+        // click on a link (a script's redirect, a form, a meta refresh), is
+        // refused: the preview stays on the bot's own page, so nothing
+        // from another site is ever shown, measured or picked as the bot's.
+        if PreviewNavigation.leavesPreview(isLink: action.navigationType == .linkActivated,
+                                           targetsMainFrame: action.target?.isMainFrame == true,
+                                           url: action.request.url, home: home.url) {
+            return .cancel
+        }
         return .allow
     }
 
@@ -310,11 +321,20 @@ struct PreviewNavigationDecider: WebPage.NavigationDeciding {
 }
 
 /// Receives the page's posted picks (WebKit calls it on the main thread).
+/// A pick counts only when the preview's own page posted it: from the main
+/// frame, on the preview's own site (`HomeBox.url`). An iframe, or a page
+/// from anywhere else, can post to the handler too; those are dropped.
 final class PickRelay: NSObject, WKScriptMessageHandler {
     @MainActor var onPick: ((PickedElement) -> Void)?
+    /// The preview's own address.
+    @MainActor var home: HomeBox?
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         MainActor.assumeIsolated {
+            let frame = message.frameInfo
+            let origin = frame.securityOrigin
+            guard frame.isMainFrame,
+                  PreviewNavigation.isPreviewOrigin(scheme: origin.`protocol`, host: origin.host, port: origin.port, home: home?.url) else { return }
             if let element = BugReport.decodePick(message.body) { onPick?(element) }
         }
     }
@@ -331,7 +351,25 @@ enum PreviewNavigation {
     }
 
     private static func defaultPort(_ url: URL) -> Int { url.scheme?.lowercased() == "https" ? 443 : 80 }
-}
+
+    /// Whether an origin (as WebKit reports a frame's: scheme, host, and a
+    /// port of 0 for the scheme's own) is the preview's own page's.
+    static func isPreviewOrigin(scheme: String, host: String, port: Int, home: URL?) -> Bool {
+        guard let home, let homeScheme = home.scheme?.lowercased(), let homeHost = home.host()?.lowercased(),
+              ["http", "https"].contains(homeScheme) else { return false }
+        let scheme = scheme.lowercased()
+        let usual = scheme == "https" ? 443 : 80
+        return scheme == homeScheme && host.lowercased() == homeHost
+            && (port == 0 ? usual : port) == (home.port ?? defaultPort(home))
+    }
+
+    /// A navigation that would take the preview's main frame to another
+    /// site without a click on a link. (A clicked link opens in the
+    /// browser; a subframe, and the preview's own page, load as usual.)
+    static func leavesPreview(isLink: Bool, targetsMainFrame: Bool, url: URL?, home: URL?) -> Bool {
+        guard !isLink, targetsMainFrame, let url, let home else { return false }
+        return opensElsewhere(url, home: home)
+    }
 
 /// The preview's address, read by its navigation decider.
 @MainActor final class HomeBox {

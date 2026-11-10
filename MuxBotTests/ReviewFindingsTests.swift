@@ -453,3 +453,47 @@ struct ReviewFindingsDeleteTests {
         ModelSettingsStore.shared.removeBotModes(bot: other.id)
     }
 }
+
+/// The preview: a pick counts only from its own page, and nothing but a
+/// clicked link takes it to another site.
+struct ReviewFindingsPreviewTests {
+    private let home = URL(string: "http://127.0.0.1:5000/")!
+
+    @Test func aPickCountsOnlyFromThePreviewsOwnSite() {
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "http", host: "127.0.0.1", port: 5000, home: home))
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "HTTP", host: "127.0.0.1", port: 5000, home: URL(string: "http://127.0.0.1:5000/about?x=1")!))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "http", host: "127.0.0.1", port: 6000, home: home), "another port is another site")
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "https", host: "127.0.0.1", port: 5000, home: home))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "https", host: "evil.example", port: 0, home: home))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "http", host: "localhost", port: 5000, home: home), "the host as written, never guessed equal")
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "http", host: "127.0.0.1", port: 5000, home: nil), "no preview, no pick")
+        // An opaque origin (a sandboxed frame, about:blank, a data: page).
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "", host: "", port: 0, home: home))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "about", host: "", port: 0, home: URL(string: "about:blank")!))
+    }
+
+    @Test func webKitsPortZeroIsTheSchemesOwn() {
+        let site = URL(string: "https://site.tail1234.ts.net/")!
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "https", host: "site.tail1234.ts.net", port: 0, home: site))
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "https", host: "Site.Tail1234.ts.net", port: 443, home: site))
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "http", host: "site.ts.net", port: 0, home: URL(string: "http://site.ts.net:80/")!))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "https", host: "site.tail1234.ts.net", port: 8443, home: site))
+    }
+
+    @Test func onlyAClickedLinkLeavesThePreview() {
+        let elsewhere = URL(string: "https://evil.example/")!
+        // A script's redirect, a form or a meta refresh in the preview itself.
+        #expect(PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: elsewhere, home: home))
+        #expect(PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "http://127.0.0.1:6000/")!, home: home))
+        // A clicked link is the browser's (handled before this).
+        #expect(!PreviewNavigation.leavesPreview(isLink: true, targetsMainFrame: true, url: elsewhere, home: home))
+        // An iframe or embed from another site still loads.
+        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: false, url: elsewhere, home: home))
+        // The preview's own page: its first load, a reload, a move within the site.
+        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: home, home: home))
+        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "http://127.0.0.1:5000/about")!, home: home))
+        // Not a web address (about:blank, a blob), or no preview yet.
+        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "about:blank")!, home: home))
+        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: elsewhere, home: nil))
+    }
+}
