@@ -77,6 +77,8 @@ struct PendingDispatch {
     var task: String
     var crew: CrewRole
     var check: LayoutCheck.Spec? = nil
+    /// When the bot asked: an old question no longer takes your next message.
+    var askedAt: Date = .now
     var brief: @MainActor (String) -> String
 }
 
@@ -374,6 +376,8 @@ final class BotBrain {
     let guide = LeadGuide()
     /// Opens the Start chooser, or a template's form (set by the app).
     var openStart: ((String?) -> Void)?
+    /// A hand-off being planned from its issue (tests wait on it).
+    @ObservationIgnored var handingOff: Task<Void, Never>?
     /// Shows a bot's thread (the app's router).
     var openBot: ((UUID) -> Void)?
     /// A bot from an approved repo link being set up (tests wait on it).
@@ -608,6 +612,14 @@ final class BotBrain {
             store.append(.assistant, skill.question, to: conversation)
             return
         }
+        // The bot's one question waits across questions only: a dismissal,
+        // another kind of request, an issue number or a stale question drops
+        // it, so what you say next is never taken as its answer.
+        if let bot, let pending = pendingAnswers[bot.id] {
+            let stale = Date().timeIntervalSince(pending.askedAt) > Self.pendingAnswerLifetime
+            let other = intent.map { ![.fix, .ask].contains($0) } ?? false
+            if stale || Self.isDismissal(text) || other || Intent.issueNumber(in: text) != nil { pendingAnswers[bot.id] = nil }
+        }
         // The answer to the bot's one question becomes the run it was about.
         if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix,
            !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -787,12 +799,17 @@ final class BotBrain {
             : turnNote.map { "\($0) I used keyword matching for this message." }
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
         var result = turn ?? FallbackBrain.turn(for: text, speaker: speaker, bots: bots)
+        // A question never proposes work, and never says "Approve" with no
+        // card to approve.
+        if intent == .ask, result.action != nil {
+            result.action = nil
+            result.reply = Self.questionNotWork
+        }
         // Mux Bot never improvises: what the guide and the hand-off, new-bot
         // and work-status paths didn't take gets what he can do.
         if speaker == nil, Guide.isEnabled, result.action == nil {
             result.reply = LeadGuide.menuText
         }
-        if intent == .ask { result.action = nil }   // a question never proposes work
         // Never a dispatch built from a bare "Fix PR #9": issues are read first.
         if case let .dispatch(_, task)? = result.action, Self.isBareReference(task) {
             result.action = nil
@@ -971,6 +988,11 @@ final class BotBrain {
         return !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    static let questionNotWork = String(localized: "That reads as a question, so I didn't start anything. Say what to change and I'll send it to the crew.")
+
+    /// How long the bot's one question waits for its answer.
+    static let pendingAnswerLifetime: TimeInterval = 10 * 60
+
     nonisolated static func isDismissal(_ text: String) -> Bool {
         let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         return ["thanks", "thank you", "ok", "okay", "never mind", "nevermind", "cancel", "no", "nope", "forget it"].contains(lower)
@@ -982,6 +1004,7 @@ final class BotBrain {
         case let .dispatch(crew, task)?:
             // Dispatches become a card in the thread, not a bar card.
             if let bot = context.botId.flatMap(store.bot(id:)) {
+                pendingAnswers[bot.id] = nil   // a new dispatch: the old question is moot
                 let run = store.proposeRun(task: task, crew: crew, on: bot, brief: result.brief)
                 runs.checkSpecs[run.id] = result.check
                 Task { await runs.chooseProfile(for: run) }
@@ -1010,7 +1033,7 @@ final class BotBrain {
         }
         // Cut off or off the screen, yet the page fits at every width
         // measured: no bug and no Fix it now; the panel may be what's clipped.
-        if let bot, let layout, !layout.foundProblem, layout.layoutSwitch == nil, BugReport.isOverflowComplaint(text) {
+        if let bot, element == nil, let layout, !layout.foundProblem, layout.layoutSwitch == nil, BugReport.isPageOverflowComplaint(text) {
             store.postGuideCard(.pageFits(text: BugReport.pageFitsText), summary: BugReport.pageFitsText, in: .bot(bot.id))
             return
         }
@@ -1090,8 +1113,32 @@ final class BotBrain {
                 store.append(.system, String(localized: "\(toName) isn't here anymore, so nothing was handed off."), to: store.conversation(for: chat))
                 return
             }
-            store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task). It waits for Approve in \(toName)'s thread."
+            // An issue's fix gets the issue's brief and check, planned for the
+            // bot it goes to, as a fix in that bot's own thread would.
+            if let number = Intent.issueNumber(in: task), let repo = target.repoSlugs.first {
+                handingOff = Task { [self] in
+                    guard let issue = try? await github.issue(repo: repo, number: number) else {
+                        store.handOff(task: task, from: from, to: target)
+                        return
+                    }
+                    switch await plan(issue: issue, repo: repo, crew: .coder, bot: target) {
+                    case let .dispatch(_, brief, check):
+                        let run = store.handOff(task: task, from: from, to: target, brief: brief)
+                        runs.checkSpecs[run.id] = check
+                        await runs.chooseProfile(for: run)
+                    case let .ask(question, pending):
+                        store.append(.system, "From \(from): \(task)", to: store.conversation(for: .bot(target.id)))
+                        pendingAnswers[target.id] = pending
+                        store.append(.assistant, question, to: store.conversation(for: .bot(target.id)))
+                    case let .cannot(why):
+                        store.append(.system, "From \(from): \(task)", to: store.conversation(for: .bot(target.id)))
+                        store.append(.assistant, why, to: store.conversation(for: .bot(target.id)))
+                    }
+                }
+            } else {
+                store.handOff(task: task, from: from, to: target)
+            }
         case let .createBot(draft) where draft.resource.flatMap(GitHubIssue.repoSlug(from:)) != nil:
             // A repo link: set up like Work on a project I already have (its
             // own PLAYBOOK.md or the general skills, darkmux's work copy, the
