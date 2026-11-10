@@ -40,6 +40,9 @@ enum RunCardState {
         }
     }
 
+    // Red-first stub.
+    @MainActor static func canClose(_ run: BotRun) -> Bool { run.needsYou }
+
     @MainActor
     static func isReplaced(_ run: BotRun) -> Bool {
         run.phase == .result && (run.bot?.runs ?? []).contains { $0.id != run.id && $0.createdAt > run.createdAt }

@@ -767,6 +767,12 @@ final class RunCoordinator {
         }
     }
 
+    // Red-first stubs.
+    func recordWork(_ workId: String, for run: BotRun) {}
+    static let staleBase = "STUB-stale"
+    static let waitingForSlot = "STUB-wait"
+    func slotFreed(store: BotStore) {}
+
     static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
     static let stopElsewhere = String(localized: "Stop it from the Mac it runs on.")
 

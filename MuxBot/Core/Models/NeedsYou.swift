@@ -21,6 +21,11 @@ enum NeedsYou {
     }
 
     /// The thread's pinned banner, oldest first.
+    // Red-first stub.
+    @MainActor static func bannerLine(for run: BotRun) -> String {
+        run.phase == .proposed ? "Waiting for your Approve: \(run.task)" : "\(run.crew.name) has a question: \(run.task)"
+    }
+
     static func banner(_ runs: [BotRun], in local: LocalBotState = .shared) -> [BotRun] {
         waiting(runs, in: local).sorted { $0.createdAt < $1.createdAt }
     }

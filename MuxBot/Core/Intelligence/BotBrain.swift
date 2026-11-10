@@ -314,6 +314,10 @@ enum GeneratedCrew {
 @MainActor @Observable
 final class BotBrain {
     var isThinking = false
+    // Red-first stubs.
+    func beginThinking(_ context: ChatContext) { isThinking = true }
+    func endThinking(_ context: ChatContext) { isThinking = false }
+    func isThinking(in context: ChatContext) -> Bool { isThinking }
     /// Shown in the bar when the keyword fallback answered.
     var fallbackNote: String?
     /// A dispatch waiting on one answer from you, by bot: "What's still
