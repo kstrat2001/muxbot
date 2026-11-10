@@ -117,13 +117,19 @@ final class AppRouter {
 
     /// The size class changed (iPad split view, rotation): the same thread
     /// (or Activity) stays on screen in the other layout.
-    func layoutChanged(toSidebar: Bool) {
+    /// `botCount` 0 keeps the Start chooser (the sidebar's empty selection).
+    func layoutChanged(toSidebar: Bool, botCount: Int = 1) {
         guard toSidebar != usesSidebar else { return }
         if toSidebar {
-            switch path.last {
-            case let .bot(id)?: sidebar = .bot(id)
-            case .lead?: sidebar = .lead
-            case nil: sidebar = tab == .activity ? .activity : .lead
+            // Activity's tab wins over a thread left under the Bots tab.
+            if tab == .activity {
+                sidebar = .activity
+            } else {
+                switch path.last {
+                case let .bot(id)?: sidebar = .bot(id)
+                case .lead?: sidebar = .lead
+                case nil: sidebar = botCount == 0 ? nil : .lead
+                }
             }
             path = []
         } else {
