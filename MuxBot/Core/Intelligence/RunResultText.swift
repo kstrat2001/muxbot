@@ -163,6 +163,14 @@ enum DarkmuxPlain {
         }
         // Not darkmux's answer (the app's own error): its own words.
         guard let client = error as? DarkmuxClient.ClientError else { return error.localizedDescription }
+        // darkmux's coded refusals first: their status alone means something else.
+        switch client.code {
+        case "no_own_branch":
+            return String(localized: "This work copy isn't on its own Mux Bot branch yet. Start a run and darkmux moves it there, then try again.")
+        case "branch_failed":
+            return String(localized: "darkmux couldn't make this bot's branch in the work copy. Show details has git's reason.")
+        default: break
+        }
         switch client.status {
         case 401: return String(localized: "darkmux no longer knows this app. Pair again.")
         case 403 where isEarlierPairing(client):
@@ -179,6 +187,12 @@ enum DarkmuxPlain {
         case 400..<500: return String(localized: "darkmux didn't accept that. Show details has why.")
         default: return String(localized: "darkmux ran into a problem. Try again in a moment.")
         }
+    }
+
+    /// A refusal whose sentence says what happened (not just "couldn't start").
+    static func saysWhy(_ error: any Error) -> Bool {
+        guard let client = error as? DarkmuxClient.ClientError else { return false }
+        return isEarlierPairing(error) || client.code == "branch_failed"
     }
 
     /// darkmux refused a workspace made for this app's earlier pairing.

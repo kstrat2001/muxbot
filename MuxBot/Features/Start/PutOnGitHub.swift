@@ -115,3 +115,9 @@ enum PutOnGitHub {
         return made
     }
 }
+
+extension PutOnGitHub {
+    /// What Bot info says when putting it on GitHub fails: darkmux's
+    /// refusals plainly, the app's and GitHub's own words as they are.
+    static func problem(_ error: any Error) -> String { RunCoordinator.plain(error).sentence }
+}

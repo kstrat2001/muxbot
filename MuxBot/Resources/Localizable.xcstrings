@@ -2004,6 +2004,9 @@
     "This work copy is from an earlier pairing" : {
 
     },
+    "This work copy isn't on its own Mux Bot branch yet. Start a run and darkmux moves it there, then try again." : {
+
+    },
     "To do" : {
 
     },
@@ -2196,6 +2199,9 @@
 
     },
     "darkmux couldn't get the latest from GitHub, so this work copy may be behind it." : {
+
+    },
+    "darkmux couldn't make this bot's branch in the work copy. Show details has git's reason." : {
 
     },
     "darkmux couldn't read what changed" : {

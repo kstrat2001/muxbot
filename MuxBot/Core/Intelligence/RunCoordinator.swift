@@ -188,8 +188,8 @@ final class RunCoordinator {
     /// darkmux refusing or not answering a submit fails the run; it is never
     /// a result to Keep.
     nonisolated static func startFailure(_ error: any Error) -> RunEvent {
-        // A work copy from an earlier pairing says so (with what to do).
-        .fail(reason: DarkmuxPlain.isEarlierPairing(error) ? DarkmuxPlain.sentence(error) : "Couldn't start on darkmux", details: DarkmuxPlain.details(error))
+        // A work copy from an earlier pairing, or a branch git couldn't make, says so.
+        .fail(reason: DarkmuxPlain.saysWhy(error) ? DarkmuxPlain.sentence(error) : "Couldn't start on darkmux", details: DarkmuxPlain.details(error))
     }
 
     /// A Tweak re-sends the original brief, what the run changed, and the
