@@ -37,6 +37,8 @@ struct GitHubRepoMaker: Sendable {
         /// GitHub refused a request; `message` is its own reason.
         case refused(status: Int, message: String)
         case github(String)
+        /// The app's own sentence (not GitHub's words).
+        case plain(String)
 
         var errorDescription: String? {
             switch self {
@@ -52,10 +54,11 @@ struct GitHubRepoMaker: Sendable {
                 String(localized: "I made github.com/\(repo), but couldn't put this project's work in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
             case .signInExpired:
                 GitHubAuth.expiredMessage
-            case let .refused(_, message):
-                message.isEmpty ? String(localized: "GitHub refused the request. Try again in a moment.") : String(localized: "GitHub said: \(message)")
+            case let .refused(status, message):
+                message.isEmpty ? GitHubPlain.sentence(status: status, signedIn: true) : String(localized: "GitHub said: \(message)")
             case let .github(why):
                 String(localized: "GitHub said: \(why)")
+            case let .plain(text): text
             }
         }
     }

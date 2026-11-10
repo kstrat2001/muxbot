@@ -245,7 +245,7 @@ final class GitHubAuth {
     /// The repos you own, collaborate on or reach through an organization,
     /// most recently pushed first, paged; `truncated` past the page cap.
     func myRepos() async throws -> (repos: [GitHubRepoSummary], truncated: Bool) {
-        guard let token else { throw GitHubError(status: 401) }
+        guard let token else { throw GitHubError(status: 401, signedIn: false) }
         var repos: [GitHubRepoSummary] = []
         var next: String? = "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=100"
         for _ in 0..<Self.repoPageCap {
@@ -306,7 +306,7 @@ final class GitHubAuth {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse
-        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0) }
+        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0, signedIn: true) }
         return (try JSONDecoder().decode(T.self, from: data), Self.nextPage(http?.value(forHTTPHeaderField: "Link")))
     }
 

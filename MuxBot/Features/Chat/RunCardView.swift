@@ -363,6 +363,7 @@ struct RunCardView: View {
     @ViewBuilder private func decisionError(_ run: BotRun) -> some View {
         if let why = brain.runs.decisionErrors[run.id] {
             Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+            if let details = brain.runs.decisionDetails[run.id] { TechnicalDetails(text: details) }
         }
     }
 

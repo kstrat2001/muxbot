@@ -86,8 +86,9 @@ struct AutoCommitFlowTests {
         let later = finished(store, bot, changed: ["a.txt +1 −0"], task: "Fix #12: footer")
         later.darkmuxWorkId = "w-later1"
         let text = RunResultText.undoRefusal("run w-later1 changed the same files later; undo that first", runs: [later])
-        #expect(text == "“Fix #12: footer” changed the same files later. Undo that first.")
-        #expect(RunResultText.undoRefusal("already undone", runs: []) == "Couldn't undo it: already undone.")
+        // Plain words (sweep 9 #1): darkmux's own text is behind Show details.
+        #expect(text == "“Fix #12: footer” changed the same files later. Undo that run first.")
+        #expect(RunResultText.undoRefusal("already undone", runs: []) == "darkmux couldn't undo it. Show details has what it reported.")
     }
 
     @Test func theBannerPinsApprovalsAndQuestionsUntilDismissed() {

@@ -31,6 +31,8 @@ struct GitHubPR: Sendable {
         case baseMissing(String)
         /// GitHub stopped taking the sign-in and it couldn't be renewed.
         case signInExpired
+        /// GitHub refused with no reason of its own.
+        case refused(Int)
         case github(String)
         var errorDescription: String? {
             switch self {
@@ -38,6 +40,7 @@ struct GitHubPR: Sendable {
             case let .branchMoved(branch): String(localized: "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it.")
             case let .baseMissing(commit): String(localized: "This work builds on a commit GitHub doesn't have (\(String(commit.prefix(7)))), so I couldn't put it there. Push that commit to GitHub, then try again.")
             case .signInExpired: GitHubAuth.expiredMessage
+            case let .refused(status): GitHubPlain.sentence(status: status, signedIn: true)
             case let .github(why): String(localized: "GitHub said: \(why)")
             }
         }
@@ -165,7 +168,7 @@ struct GitHubPR: Sendable {
     private func sendOptional<T: Decodable>(_ method: String, _ url: String, repo: String) async throws -> T? {
         let (data, status) = try await load(method, url, nil)
         if status == 404 { return nil }
-        guard status == 200 else { throw status == 403 ? Failure.cantWrite(repo) : Failure.github("status \(status)") }
+        guard status == 200 else { throw status == 403 ? Failure.cantWrite(repo) : Failure.refused(status) }
         return try JSONDecoder().decode(T.self, from: data)
     }
 
@@ -203,7 +206,9 @@ struct GitHubPR: Sendable {
             if status == 404, let missing { throw missing }
             if status == 403 || status == 404 { throw Failure.cantWrite(repo) }
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let detail = ((json?["errors"] as? [[String: Any]])?.first?["message"] as? String) ?? (json?["message"] as? String) ?? "status \(status)"
+            guard let detail = ((json?["errors"] as? [[String: Any]])?.first?["message"] as? String) ?? (json?["message"] as? String) else {
+                throw Failure.refused(status)
+            }
             throw Failure.github(detail)
         }
         return try JSONDecoder().decode(T.self, from: data)

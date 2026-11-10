@@ -178,7 +178,7 @@ struct RESTGitHubClient: GitHubClient {
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse
         if http?.statusCode == 304, let body = cached?.body { return body }
-        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0) }
+        guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0, signedIn: request.value(forHTTPHeaderField: "Authorization") != nil) }
         if let etag = http?.value(forHTTPHeaderField: "ETag") { cache[url] = (etag, data) }
         return data
     }
@@ -226,7 +226,7 @@ extension RESTGitHubClient {
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }
-        guard status == 200 else { throw GitHubError(status: status) }
+        guard status == 200 else { throw GitHubError(status: status, signedIn: request.value(forHTTPHeaderField: "Authorization") != nil) }
         return data
     }
 }
@@ -265,11 +265,23 @@ final class ETagCache: Sendable {
 
 struct GitHubError: LocalizedError {
     var status: Int
-    var errorDescription: String? {
+    /// The request carried your sign-in: a 403 then isn't the anonymous
+    /// rate limit.
+    var signedIn = false
+    var errorDescription: String? { GitHubPlain.sentence(status: status, signedIn: signedIn) }
+}
+
+/// GitHub's answers in plain sentences, never a status code up front.
+enum GitHubPlain {
+    static func sentence(status: Int, signedIn: Bool) -> String {
         switch status {
-        case 403, 429: "GitHub's rate limit for unsigned-in requests is used up (60 an hour)."
-        case 404: "GitHub can't find that repo. If it's private, sign in with GitHub (Settings › GitHub) and install Mux Bot on it."
-        default: "GitHub answered with status \(status)."
+        case 401: String(localized: "Your GitHub sign-in expired. Sign in again.")
+        case 403 where signedIn: String(localized: "GitHub didn't allow that: Mux Bot may not have access to this repo.")
+        case 403, 429: String(localized: "GitHub's rate limit for requests without sign-in is used up (60 an hour). Sign in with GitHub (Settings › GitHub) for more.")
+        case 404: String(localized: "GitHub can't find that repo. If it's private, sign in with GitHub (Settings › GitHub) and install Mux Bot on it.")
+        case 500...599: String(localized: "GitHub is busy. Try again in a moment.")
+        case 0: String(localized: "Mux Bot can't reach GitHub right now.")
+        default: String(localized: "GitHub didn't accept that. Try again in a moment.")
         }
     }
 }

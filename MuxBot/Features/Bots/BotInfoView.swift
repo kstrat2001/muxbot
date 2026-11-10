@@ -248,7 +248,10 @@ struct BotInfoView: View {
                     Text("Setting up on \(FleetConnection.machineName)…")
                 case let (.failed(why)?, _):
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.brandOrange)
-                    Text(why).font(AppFont.footnote())
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text(why).font(AppFont.footnote())
+                        if let details = brain.runs.workCopyDetails[bot.id] { TechnicalDetails(text: details) }
+                    }
                 case (nil, _?):
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.brandGreen)
                     VStack(alignment: .leading, spacing: 2) {

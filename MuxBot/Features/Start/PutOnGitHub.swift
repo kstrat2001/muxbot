@@ -46,10 +46,10 @@ enum PutOnGitHub {
                     local: LocalBotState = .shared, store: BotStore, runs: RunCoordinator) async throws -> GitHubRepoMaker.Made {
         let resuming = canResume(bot)
         guard resuming || canPut(bot), let workspace = bot.workspaceName else {
-            throw GitHubRepoMaker.Failure.github(String(localized: "This project is already on GitHub, or isn't on this Mac."))
+            throw GitHubRepoMaker.Failure.plain(String(localized: "This project is already on GitHub, or isn't on this Mac."))
         }
         guard !runs.puttingOnGitHub.contains(bot.id) else {
-            throw GitHubRepoMaker.Failure.github(String(localized: "It's already being put on GitHub."))
+            throw GitHubRepoMaker.Failure.plain(String(localized: "It's already being put on GitHub."))
         }
         runs.puttingOnGitHub.insert(bot.id)
         defer { runs.puttingOnGitHub.remove(bot.id) }
