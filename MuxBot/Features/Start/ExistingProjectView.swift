@@ -45,6 +45,12 @@ struct ExistingProjectView: View {
             }
         }
         .navigationTitle(ExistingProject.title)
+        // Its rows are text buttons: the readable green.
+        .tint(Color.accentText)
+        #if os(iOS)
+        // The long title fits on a phone (as a large title it was cut off).
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Back") {

@@ -19,6 +19,9 @@ struct GuideCardView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Links and text buttons in a card read at 4.5:1 (the brand green
+            // is about 2:1 on a light card).
+            .tint(Color.accentText)
         }
         .chatColumn(alignment: .leading)
     }

@@ -104,6 +104,7 @@ struct FleetPairingView: View {
         .safeAreaInset(edge: .bottom) {
             Link("Don't have darkmux yet? Install it", destination: URL(string: "https://github.com/kstrat2001/darkmux#readme")!)
                 .font(AppFont.footnote())
+                .tint(Color.accentText)
                 .padding(.bottom, Spacing.md)
         }
         .navigationTitle("Pair with darkmux")
