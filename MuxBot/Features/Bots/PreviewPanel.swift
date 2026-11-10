@@ -116,6 +116,18 @@ struct PreviewPanel: View {
         // A pick (or Chat about this) puts the cursor in the bar for your words.
         .onChange(of: preview.picked) { _, picked in if picked != nil { router.focusBarRequest += 1 } }
         .task { await brain.runs.checkStartOver() }
+        // Edit on a selection: the words in a focused editor; Save changes the file.
+        .sheet(isPresented: Binding(get: { preview.editing != nil && preview.editingBot == botId },
+                                    set: { if !$0 { preview.endEditing() } })) {
+            if let element = preview.editing {
+                HandEditSheet(element: element, crop: preview.editingCrop, save: { new in
+                    let bot = botId.flatMap { BotStore(context: context).bot(id: $0) }
+                    preview.endEditing()
+                    guard let bot else { return }
+                    Task { await brain.runs.handEdit(element, to: new, bot: bot, store: BotStore(context: context)) }
+                }, cancel: { preview.endEditing() })
+            }
+        }
         // A run changed files (or Undo): show what the server serves now.
         .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { _, count in preview.show(url, for: botId, generation: count ?? 0) }
     }

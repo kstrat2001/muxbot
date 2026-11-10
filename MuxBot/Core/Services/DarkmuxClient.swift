@@ -305,6 +305,25 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(Changes.self, from: data)
     }
 
+    /// A hand edit (darkmux #3533): how many places hold the old text, and,
+    /// when exactly one did, the work record darkmux committed it as.
+    struct EditResult: Decodable, Sendable, Equatable {
+        var matches: Int
+        var workId: String?
+        var file: String?
+        var commit: String?
+        var branch: String?
+        enum CodingKeys: String, CodingKey { case matches, file, commit, branch; case workId = "work_id" }
+    }
+
+    /// Replaces the one place in the workspace's files that holds `old`
+    /// (as the page shows it) with `new`, committed like a run.
+    func handEdit(token: String, workspace: String, old: String, new: String) async throws -> EditResult {
+        let data = try await send("POST", "/client/workspaces/\(workspace)/edit", body: ["old": old, "new": new],
+                                  headers: ["Authorization": "Bearer \(token)"], timeout: 60)
+        return try JSONDecoder().decode(EditResult.self, from: data)
+    }
+
     struct UndoResult: Decodable, Sendable, Equatable {
         var revert: String
         var files: [String]

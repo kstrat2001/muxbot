@@ -9,3 +9,7 @@ darkmux needs a preview recipe that says how the project starts. When there isn'
 ## Pointing at things
 
 Use Pick in the preview and click an element, or select text and choose Chat about this. It goes into the chat bar, and what you type decides what happens: ask for a change ("make this bigger", "replace this with…") and the bot proposes the work for you to approve; describe a problem ("why is this cut off") and it measures the element and drafts a bug; ask a question ("what font is this") and it answers. Bots can't see the page, so they measure it instead.
+
+## Editing text yourself
+
+On the Mac, select text in the preview and choose Edit. Type the new words and choose Save. Mux Bot changes the one place in your project that holds that text and saves it as a change you can undo from the thread. If the text isn't in your files exactly once (it's built by code, split by formatting, or repeated), the bot offers the change to Coder instead, for you to approve.

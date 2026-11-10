@@ -35,6 +35,9 @@ final class PreviewController: PageInspecting {
     private static func makePage(relay: PickRelay, home: HomeBox) -> WebPage {
         var config = WebPage.Configuration()
         let scripts = WKUserContentController()
+        #if os(macOS)
+        scripts.addUserScript(WKUserScript(source: BugReport.canEditScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #endif
         scripts.addUserScript(WKUserScript(source: BugReport.pageScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         scripts.add(relay, name: BugReport.handlerName)
         config.userContentController = scripts
@@ -49,6 +52,7 @@ final class PreviewController: PageInspecting {
             isPicking = false
             picked = nil
             pickedBot = nil
+            endEditing()
             loadedGeneration = nil
             pickedCrop = nil
             loadedURL = nil
@@ -125,8 +129,27 @@ final class PreviewController: PageInspecting {
         Task { _ = try? await page.callJavaScript(isPicking ? BugReport.pickerScript : BugReport.cancelPickScript) }
     }
 
+    /// Text you chose to edit by hand ("Edit" in the selection menu), with
+    /// the bot whose page it's on and a snapshot of its element.
+    var editing: PickedElement?
+    private(set) var editingBot: UUID?
+    private(set) var editingCrop: Data?
+
+    func endEditing() {
+        editing = nil
+        editingBot = nil
+        editingCrop = nil
+    }
+
     /// A pick or a menu choice the page just posted.
     private func received(_ element: PickedElement) {
+        if element.edit == true {
+            editing = element
+            editingBot = botId
+            editingCrop = nil
+            Task { editingCrop = await crop(element) }
+            return
+        }
         isPicking = false
         picked = element
         pickedBot = botId

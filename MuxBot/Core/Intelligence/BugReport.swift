@@ -46,6 +46,8 @@ struct PickedElement: Sendable, Equatable, Codable {
     var fontFamily: String? = nil
     /// From "Chat about this" on a selection: the text you selected.
     var selectedText: String? = nil
+    /// From "Edit" on a selection: change the selected text by hand.
+    var edit: Bool? = nil
 
     /// "Start_a_Project · /pricing · 683px"
     var chip: String { "\(label) · \(url) · \(viewport)px" }
@@ -276,6 +278,25 @@ enum BugReport {
           chat.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); choose(); });
           chat.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); choose(); }, { passive: false });
           menu.append(chat);
+          // Edit (the Mac app only, where darkmux holds the files): the
+          // selected words in a focused editor; Save changes the file.
+          if (window.__muxCanEdit) {
+            const editText = () => {
+              const sel = getSelection();
+              if (!sel || !sel.rangeCount) return;
+              let el = sel.getRangeAt(0).commonAncestorContainer;
+              if (el.nodeType !== 1) el = el.parentElement;
+              const words = sel.toString().slice(0, 2000);
+              window.__muxSend(window.__muxDescribe(el, { selectedText: words, edit: true }));
+              menu.style.display = 'none';
+            };
+            const edit = document.createElement('button');
+            edit.textContent = 'Edit';
+            edit.style.cssText = 'background:#2c3a35;color:#e6fff6;border:0;border-radius:6px;padding:5px 9px;margin:0 3px;font:inherit;cursor:pointer';
+            edit.addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); editText(); });
+            edit.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); editText(); }, { passive: false });
+            menu.append(edit);
+          }
           document.body.appendChild(menu);
           document.addEventListener('selectionchange', () => {
             const sel = getSelection();
@@ -287,6 +308,10 @@ enum BugReport {
           });
         }
         """
+
+    /// Set before `pageScript` where hand edits can be made (the Mac app):
+    /// the selection menu then offers Edit.
+    static let canEditScript = "window.__muxCanEdit = true;"
 
     /// Pick mode: hover highlights, a click (or tap) picks the element.
     static let pickerScript = """

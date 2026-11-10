@@ -121,6 +121,17 @@ struct BotStore {
         return run
     }
 
+    /// A hand edit darkmux has made (#3533): a run with no dispatch card,
+    /// already running, so `apply(.finish)` posts its result with Undo.
+    func recordHandEdit(task: String, on bot: Bot) -> BotRun {
+        let run = BotRun(task: task, crew: .coder)
+        context.insert(run)
+        run.bot = bot
+        run.phase = .running
+        run.startedAt = .now
+        return run
+    }
+
     func run(id: UUID) -> BotRun? {
         (try? context.fetch(FetchDescriptor<BotRun>(predicate: #Predicate { $0.id == id })))?.first
     }
