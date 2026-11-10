@@ -20,7 +20,7 @@ struct BotSidebar: View {
 
     private var list: some View {
         @Bindable var router = router
-        return List(selection: $router.sidebar) {
+        return ScrollViewReader { proxy in List(selection: $router.sidebar) {
             Section {
                 Button { router.sidebar = .lead } label: {
                     LeadBotTile(selected: router.sidebar == .lead, unread: unread(nil))
@@ -37,6 +37,7 @@ struct BotSidebar: View {
                         .modifier(SidebarInfoButton(bot: bot))   // inside the row, so the tag stays outermost
                         #endif
                         .tag(SidebarItem.bot(bot.id))
+                        .id(bot.id)
                         .help(Self.waitingText(bot) ?? bot.name)
                         .accessibilityValue(Self.waitingText(bot) ?? "")
                         .botContextMenu(bot)
@@ -72,6 +73,10 @@ struct BotSidebar: View {
             }
         }
         .onChange(of: router.sidebar) { router.path = [] }
+        // ⌘I: Bot info is a popover on the bot's row, so the row is
+        // scrolled into view (and built) first, never shown later.
+        .onChange(of: router.infoBotId) { if let id = router.infoBotId { proxy.scrollTo(id) } }
+        }
     }
 
     private func unread(_ botId: UUID?) -> Bool {

@@ -86,7 +86,7 @@ struct FleetPairingView: View {
                 Section {
                     Label("Paired as \(name)", systemImage: "checkmark.circle.fill")
                         .font(AppFont.headline())
-                        .foregroundStyle(Color.brandGreen)
+                        .labelStyle(.tintedIcon(Color.brandGreen))
                     Text("darkmux on this Mac decides which models apps may use.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }

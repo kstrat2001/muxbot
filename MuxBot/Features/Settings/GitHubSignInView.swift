@@ -35,7 +35,7 @@ struct GitHubSignInView: View {
                 }
             case let .signedIn(login):
                 Section {
-                    Label("Signed in as \(login)", systemImage: "checkmark.circle.fill").foregroundStyle(Color.brandGreen)
+                    Label("Signed in as \(login)", systemImage: "checkmark.circle.fill").labelStyle(.tintedIcon(Color.brandGreen))
                     Button("Sign out", role: .destructive) { github.signOut() }
                 }
             }

@@ -251,6 +251,9 @@
     "Always ask" : {
 
     },
+    "Another Mac" : {
+
+    },
     "Another program is using the model's port." : {
 
     },
@@ -1073,7 +1076,13 @@
     "Notifications" : {
 
     },
+    "Notifications are blocked in System Settings › Notifications." : {
+
+    },
     "Notifications are off." : {
+
+    },
+    "Notifications are on here, but blocked in System Settings › Notifications, so none show." : {
 
     },
     "Notifications are on." : {
@@ -1119,6 +1128,9 @@
 
     },
     "Open PR" : {
+
+    },
+    "Open System Settings" : {
 
     },
     "Open Terminal" : {

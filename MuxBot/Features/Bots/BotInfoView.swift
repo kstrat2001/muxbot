@@ -14,6 +14,7 @@ struct BotInfoView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(GitHubAuth.self) private var github
     @State private var putPublic = false
+    @State private var nameDraft: String?
     /// This bot's model mode as shown; loaded on appear and written through,
     /// so the picker shows what you picked.
     @State private var botMode: String?
@@ -27,10 +28,14 @@ struct BotInfoView: View {
 
     /// Renaming keeps the bot's look: a look still suggested from the old
     /// name is saved first, so the animal doesn't change with the name.
+    /// The field shows what you type; only a name that isn't empty is
+    /// saved (cleared, the bot keeps its name).
     private var nameBinding: Binding<String> {
-        Binding(get: { bot.name }, set: { newName in
+        Binding(get: { nameDraft ?? bot.name }, set: { newName in
+            nameDraft = newName
+            guard let name = Self.savableName(newName), name != bot.name else { return }
             let look = bot.look
-            bot.name = newName
+            bot.name = name
             bot.look = look
             try? context.save()
         })
@@ -105,6 +110,12 @@ struct BotInfoView: View {
                         Image(systemName: resource.kind.systemImage)
                     }
                     .accessibilityLabel("\(resource.kind.label): \(resource.value)")
+                    #if os(macOS)
+                    // A grouped Form on the Mac has no swipe to delete.
+                    .contextMenu {
+                        Button("Remove", systemImage: "trash", role: .destructive) { BotStore(context: context).remove(resource) }
+                    }
+                    #endif
                 }
                 .onDelete { offsets in
                     let store = BotStore(context: context)
@@ -304,7 +315,7 @@ struct BotInfoView: View {
         case let .ready(manifest, fromLocalCopy)?:
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Label("Preview ready · from \(fromLocalCopy ? "the local copy" : "GitHub")", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(Color.brandGreen)
+                    .labelStyle(.tintedIcon(Color.brandGreen))
                 Text(manifest.summary).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 Text(repo).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
             }
@@ -328,5 +339,13 @@ struct BotInfoView: View {
         case .loading?, nil:
             ProgressView().frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+extension BotInfoView {
+    /// A name worth saving: trimmed, never empty.
+    static func savableName(_ name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

@@ -109,7 +109,7 @@ struct PreviewStatusView: View {
                 Button("Add folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
                     .buttonStyle(.borderedProminent)
             }
-            if let folderProblem { Text(folderProblem).foregroundStyle(Color.brandOrange).multilineTextAlignment(.center) }
+            if let folderProblem { Label(folderProblem, systemImage: "exclamationmark.triangle").labelStyle(.tintedIcon(Color.brandOrange)).multilineTextAlignment(.center) }
         case .noRecipe:
             Button("Try again", systemImage: "arrow.clockwise", action: retry)
         case .newProject:

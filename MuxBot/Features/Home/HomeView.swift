@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Bot.createdAt) private var roles: [Bot]
+    @Query(filter: #Predicate<ChatConversation> { $0.roleId == nil }, sort: \ChatConversation.createdAt) private var leadThreads: [ChatConversation]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
 
@@ -46,7 +47,7 @@ struct HomeView: View {
     private var grid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
-                Button { router.navigate(to: .lead) } label: { LeadBotTile() }
+                Button { router.navigate(to: .lead) } label: { LeadBotTile(unread: leadThreads.first?.hasUnread ?? false) }
                     .buttonStyle(.plain)
                 ForEach(BotState.allCases, id: \.self) { state in
                     let group = roles.filter { NeedsYou.shownState($0) == state }
