@@ -17,7 +17,8 @@ struct BotThreadView: View {
     init(context: ChatContext) {
         self.context = context
         let roleId = context.botId
-        _conversations = Query(filter: #Predicate<ChatConversation> { $0.roleId == roleId })
+        // Oldest first: another device's copy (until merged) never wins.
+        _conversations = Query(filter: #Predicate<ChatConversation> { $0.roleId == roleId }, sort: \.createdAt)
         // The lead bot is not stored, so its lookup matches nothing.
         let botId = roleId ?? UUID()
         _matches = Query(filter: #Predicate<Bot> { $0.id == botId })
@@ -219,15 +220,20 @@ struct BotThreadView: View {
     private var chat: some View {
         Group {
             if context.botId != nil && bot == nil {
+                // Deleted (maybe on another device): no chat bar to send into.
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
-            } else if let conversation = conversations.first {
-                ChatView(conversation: conversation, isThinking: brain.isThinking(in: context))
-                    .safeAreaInset(edge: .top) { needsYouBanner }
             } else {
-                ProgressView()
+                Group {
+                    if let conversation = conversations.first {
+                        ChatView(conversation: conversation, isThinking: brain.isThinking(in: context))
+                            .safeAreaInset(edge: .top) { needsYouBanner }
+                    } else {
+                        ProgressView()
+                    }
+                }
+                .safeAreaInset(edge: .bottom) { BotBar() }
             }
         }
-        .safeAreaInset(edge: .bottom) { BotBar() }
     }
 
     /// Pinned at the top: runs waiting for Approve or with a question. A tap

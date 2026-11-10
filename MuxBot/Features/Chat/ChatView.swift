@@ -76,9 +76,18 @@ struct ChatView: View {
             .onAppear {
                 if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 focus(proxy)
+                focusMessage(proxy)
             }
             .onChange(of: router.focusRunId) { focus(proxy) }
+            .onChange(of: router.focusMessageId) { focusMessage(proxy) }
         }
+    }
+
+    /// A Search result: scrolls to its message, once it's in this thread.
+    private func focusMessage(_ proxy: ScrollViewProxy) {
+        guard let id = router.focusMessageId, messages.contains(where: { $0.id == id }) else { return }
+        router.focusMessageId = nil
+        withAnimation { proxy.scrollTo(id, anchor: .center) }
     }
 
     /// Scrolls to the focused run's newest card and outlines it briefly.

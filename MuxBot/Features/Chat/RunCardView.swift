@@ -31,6 +31,14 @@ struct RunCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .chatColumn(alignment: .leading)
+            // A card proposed elsewhere (another device, before a relaunch):
+            // its model is chosen here, so Always ask's picker or a missing
+            // default model's warning shows before you tap Approve.
+            .task(id: run.id) {
+                if isLatest, run.phase == .proposed, brain.runs.runChoices[run.id] == nil, brain.runs.choosingModel[run.id] == nil {
+                    await brain.runs.chooseProfile(for: run)
+                }
+            }
         }
     }
 
@@ -58,9 +66,9 @@ struct RunCardView: View {
                         Text("Model: \(model)\(brain.runs.runChoices[run.id].map { " (\($0.reason))" } ?? "")")
                             .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                         Spacer()
-                        if run.phase == .proposed, !brain.runs.lastListed.isEmpty {
+                        if run.phase == .proposed, !brain.runs.listed(for: run).isEmpty {
                             Menu("Change") {
-                                ForEach(brain.runs.lastListed.filter(\.reachable).map(\.name), id: \.self) { name in
+                                ForEach(brain.runs.listed(for: run).filter(\.reachable).map(\.name), id: \.self) { name in
                                     Button(name) { brain.runs.override(run, with: name) }
                                 }
                             }
@@ -281,7 +289,12 @@ struct RunCardView: View {
     /// Always ask: a picker before Approve. A chosen model that isn't running:
     /// said, with Auto's pick offered (never swapped silently).
     @ViewBuilder private func modelRow(_ run: BotRun) -> some View {
-        if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
+        if run.phase == .proposed, brain.runs.choosingModel[run.id] != nil {
+            HStack(spacing: Spacing.xs) {
+                ProgressView().controlSize(.small)
+                Text("Choosing the model…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            }
+        } else if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
             if let why = choice.unavailable {
                 HStack {
                     Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
@@ -291,7 +304,7 @@ struct RunCardView: View {
                     }
                 }
             } else if choice.ask {
-                let names = brain.runs.lastListed.filter(\.reachable).map(\.name)
+                let names = brain.runs.listed(for: run).filter(\.reachable).map(\.name)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Picker("Model", selection: Binding(get: { brain.runs.profile(for: run) ?? "" },
                                                        set: { brain.runs.override(run, with: $0) })) {

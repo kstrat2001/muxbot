@@ -277,6 +277,8 @@ struct LeadGuideFlowTests {
 
     @Test func theSwitchWritesTheLiveSetting() {
         let (_, brain) = setUp()
+        // Saved only for a machine darkmux has named (sweep 7 #2).
+        brain.runs.machine = DarkmuxClient.Machine(id: "m-1", name: "studio")
         GuideSettings.setModelMode(.ask, runs: brain.runs)
         #expect(brain.runs.currentModelSettings().mode == .ask)
         #expect(GuideSettings.describe(.ask) == "Always ask")

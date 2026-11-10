@@ -31,9 +31,9 @@ struct SearchView: View {
                 if !results.messages.isEmpty {
                     Section("Messages") {
                         ForEach(results.messages) { message in
-                            Button { open(message.conversation?.roleId.map { Route.bot($0) } ?? .lead) } label: {
+                            Button { open(message) } label: {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(message.conversation?.title ?? LeadBot.name).font(AppFont.caption(.semibold))
+                                    Text(Self.threadName(for: message, bots: bots)).font(AppFont.caption(.semibold))
                                     Text(message.content).lineLimit(2)
                                     Text(message.timestamp, style: .date).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                                 }
@@ -63,5 +63,21 @@ struct SearchView: View {
         router.tab = .bots
         router.navigate(to: route)
         dismiss()
+    }
+
+    /// A message result opens its thread at that message.
+    private func open(_ message: ChatMessage) {
+        router.tab = .bots
+        router.open(message: message.id, in: message.conversation?.roleId.map { Route.bot($0) } ?? .lead)
+        dismiss()
+    }
+}
+
+extension SearchView {
+    /// A message's thread by its bot's name now (a thread's title is the
+    /// name it had when the thread was made).
+    @MainActor static func threadName(for message: ChatMessage, bots: [Bot]) -> String {
+        guard let id = message.conversation?.roleId else { return LeadBot.name }
+        return bots.first { $0.id == id }?.name ?? message.conversation?.title ?? LeadBot.name
     }
 }

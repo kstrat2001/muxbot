@@ -73,6 +73,21 @@ final class RunCoordinator {
             Task { await applyOnDisk(event, to: run, store: store) }
             return
         }
+        // A card this Mac didn't just propose (after a relaunch, synced from
+        // another device, or Approve before the listing came back) has no
+        // model choice yet: it's chosen first, and Always ask or a default
+        // model that isn't here is shown on the card, never skipped. The
+        // next Approve, with the picker or the warning on screen, goes.
+        if event == .approve, run.phase == .proposed, runChoices[run.id] == nil {
+            guard choosingModel[run.id] == nil else { return }
+            choosingModel[run.id] = Task { @MainActor [self] in
+                await chooseProfile(for: run)
+                choosingModel[run.id] = nil
+                guard let choice = runChoices[run.id], !choice.ask, choice.unavailable == nil else { return }
+                decide(.approve, on: run, store: store)
+            }
+            return
+        }
         guard store.apply(event, to: run) else { return }
         if event == .approve { _ = startRealRun(run, message: run.brief ?? run.task, store: store) }
     }
@@ -1227,18 +1242,21 @@ final class RunCoordinator {
     /// Tests list profiles here; nil asks darkmux (`GET /client/profiles`).
     var profileSource: (@MainActor () async throws -> [DarkmuxClient.ProfileInfo])?
 
-    /// What this app may run Coder on here, and what answers now.
-    func listedProfiles() async -> [DarkmuxClient.ProfileInfo] {
+    /// What this app may run a role on here (Coder's by default), and what
+    /// answers now.
+    func listedProfiles(role: String = "coder") async -> [DarkmuxClient.ProfileInfo] {
         do {
             let profiles: [DarkmuxClient.ProfileInfo]
-            if let profileSource {
+            if let profileSourceByRole {
+                profiles = try await profileSourceByRole(role)
+            } else if let profileSource {
                 profiles = try await profileSource()
             } else {
                 guard let connection, let token = connection.token else {
                     listing = .failed(String(localized: "Mux Bot isn't paired with darkmux."))
                     return []
                 }
-                let list = try await connection.client.profiles(token: token)
+                let list = try await connection.client.profiles(token: token, role: role)
                 if let named = list.machine { machine = named }
                 profiles = list.profiles
             }
@@ -1258,15 +1276,51 @@ final class RunCoordinator {
 
     /// The darkmux machine runs go to, as darkmux names it (`GET
     /// /client/profiles`): the same id from every device.
-    var machine: DarkmuxClient.Machine?
+    var machine: DarkmuxClient.Machine? {
+        didSet { if let machine, machine != oldValue { settingsStore.lastMachine = machine } }
+    }
     /// Where model settings live (iCloud key-value when sync is on).
     var settingsStore = ModelSettingsStore.shared
 
     /// The machine's id; before darkmux has said, its endpoint.
     var machineKey: String {
-        if let machine { return machine.id }
+        if let known = knownMachine { return known.id }
         let url = connection?.client.baseURL ?? DarkmuxClient().baseURL
         return "endpoint:\(url.host() ?? "localhost"):\(url.port ?? 8767)"
+    }
+
+    /// The darkmux machine model settings are about: darkmux's answer
+    /// now, else the last one it gave (kept with the settings, so it's known
+    /// after a relaunch and on your other devices). nil until darkmux has
+    /// said once: model settings aren't shown or saved before then.
+    var knownMachine: DarkmuxClient.Machine? { machine ?? settingsStore.lastMachine }
+
+    /// The machine as the settings name it: its name on the Mac; "your Mac
+    /// (name)" on iPhone, where runs never go to the phone itself.
+    nonisolated static func machinePhrase(_ machine: DarkmuxClient.Machine?, onPhone: Bool) -> String {
+        if onPhone { return machine.map { String(localized: "your Mac (\($0.name))") } ?? String(localized: "your Mac") }
+        return machine?.name ?? String(localized: "this Mac")
+    }
+
+    var machinePhrase: String {
+        #if os(iOS)
+        Self.machinePhrase(knownMachine, onPhone: true)
+        #else
+        Self.machinePhrase(knownMachine, onPhone: false)
+        #endif
+    }
+
+    /// A model being chosen for a card that had none when you tapped
+    /// Approve (tests wait on it).
+    var choosingModel: [UUID: Task<Void, Never>] = [:]
+    /// Tests list a role's profiles here; else darkmux (`?role=`).
+    var profileSourceByRole: ((String) async throws -> [DarkmuxClient.ProfileInfo])?
+    /// What darkmux listed last for each role (each crew has its own).
+    var listedByRole: [String: [DarkmuxClient.ProfileInfo]] = [:]
+
+    /// The models a run's picker offers: its crew's own.
+    func listed(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
+        run.crew.darkmuxRole.flatMap { listedByRole[$0] } ?? lastListed
     }
 
     /// Settings › Models as they apply to runs on this machine.
@@ -1280,8 +1334,11 @@ final class RunCoordinator {
     /// default model, or Always ask. With `next`, it's a run again after a
     /// done-when that wasn't met.
     func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
-        let listed = await listedProfiles()
-        lastListed = listed
+        // Each crew's own models: darkmux lists a role's (`?role=`).
+        let role = run.crew.darkmuxRole ?? "coder"
+        let listed = await listedProfiles(role: role)
+        listedByRole[role] = listed
+        if role == "coder" { lastListed = listed }
         let settings = currentModelSettings()
         let mode = settings.mode(forBot: run.bot.flatMap { settingsStore.botMode(bot: $0.id, machine: machineKey) })
         let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,

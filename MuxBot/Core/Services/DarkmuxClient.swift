@@ -311,10 +311,12 @@ struct DarkmuxClient: Sendable {
 
     /// The profiles Coder may run on here, in the owner's grant order. An
     /// older darkmux without the route answers 404: no list.
-    func profiles(token: String) async throws -> ProfileList {
+    /// What this app may run `role` on (darkmux defaults to coder).
+    func profiles(token: String, role: String = "coder") async throws -> ProfileList {
         // darkmux looks at every local model server (about 1 s at most);
         // room for a slow LM Studio.
-        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"], timeout: 15)
+        let data = try await send("GET", "/client/profiles", headers: ["Authorization": "Bearer \(token)"],
+                                  query: [URLQueryItem(name: "role", value: role)], timeout: 15)
         return try JSONDecoder().decode(ProfileList.self, from: data)
     }
 
@@ -342,8 +344,11 @@ struct DarkmuxClient: Sendable {
     }
 
     private func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
-                      headers: [String: String] = [:], timeout: TimeInterval = 5) async throws -> Data {
-        var request = URLRequest(url: baseURL.appending(path: path))
+                      headers: [String: String] = [:], query: [URLQueryItem] = [], timeout: TimeInterval = 5) async throws -> Data {
+        // The query goes in as query items: in the path, `?` would be encoded.
+        var url = baseURL.appending(path: path)
+        if !query.isEmpty { url.append(queryItems: query) }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = timeout
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
