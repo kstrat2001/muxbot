@@ -54,10 +54,14 @@ enum GuideSettings {
 
     // MARK: Live values
 
-    @MainActor static func setModelMode(_ mode: ModelMode, runs: RunCoordinator) {
-        var settings = runs.currentModelSettings()
+    /// Saves the mode for darkmux's machine; false (nothing saved) until
+    /// darkmux has said which machine it is.
+    @discardableResult @MainActor static func setModelMode(_ mode: ModelMode, runs: RunCoordinator) -> Bool {
+        guard let machine = runs.knownMachine else { return false }
+        var settings = runs.settingsStore.settings(machine: machine.id)
         settings.mode = mode
-        runs.settingsStore.save(settings, machine: runs.machineKey)
+        runs.settingsStore.save(settings, machine: machine.id)
+        return true
     }
 
     static func describe(_ mode: ModelMode) -> String {

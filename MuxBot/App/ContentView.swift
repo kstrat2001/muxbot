@@ -43,7 +43,13 @@ struct ContentView: View {
         }
         .onChange(of: wantsSidebar) { router.layoutChanged(toSidebar: wantsSidebar) }
         // Runs an earlier build kept become committed results (Open PR).
-        .task { BotStore(context: context).migrateKeptRuns() }
+        .task {
+            BotStore(context: context).migrateKeptRuns()
+            // Threads two devices each made merge into one.
+            BotStore(context: context).mergeDuplicateThreads()
+        }
+        // A bot deleted (here or on another device): its thread is left.
+        .onChange(of: bots.map(\.id)) { router.botsChanged(existing: Set(bots.map(\.id))) }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif

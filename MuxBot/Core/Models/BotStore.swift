@@ -200,7 +200,7 @@ struct BotStore {
     func delete(_ bot: Bot) {
         let id = bot.id
         let botId: UUID? = id
-        if let thread = (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == botId })))?.first {
+        for thread in (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == botId }))) ?? [] {
             context.delete(thread)
         }
         context.delete(bot)
@@ -233,19 +233,53 @@ struct BotStore {
     /// thread has no role id.
     /// The thread if it exists, without making one (safe from a view's body).
     func existingConversation(for chat: ChatContext) -> ChatConversation? {
-        let roleId = chat.botId
-        return ((try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId }))) ?? []).first
+        threads(for: chat).first
     }
 
+    /// Every thread for a context, oldest first: a second one is another
+    /// device's copy that synced in.
+    private func threads(for chat: ChatContext) -> [ChatConversation] {
+        let roleId = chat.botId
+        let descriptor = FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId },
+                                                           sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)])
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// The thread for a context, created on first use. Copies made on
+    /// another device merge into the oldest: their messages move to it.
     func conversation(for chat: ChatContext) -> ChatConversation {
         let roleId = chat.botId
-        let matching = (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == roleId }))) ?? []
-        if let existing = matching.first { return existing }
+        let matching = threads(for: chat)
+        if let oldest = matching.first {
+            if matching.count > 1 { merge(matching.dropFirst(), into: oldest) }
+            return oldest
+        }
         let title = roleId.flatMap { bot(id: $0)?.name } ?? LeadBot.name
         let created = ChatConversation(title: title, roleId: roleId)
+        created.id = ChatConversation.threadId(for: chat)
         context.insert(created)
         save()
         return created
+    }
+
+    /// Every thread with more than one copy, merged (at launch and when
+    /// another device's data arrives).
+    func mergeDuplicateThreads() {
+        let all = (try? context.fetch(FetchDescriptor<ChatConversation>(sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)]))) ?? []
+        for (_, copies) in Dictionary(grouping: all, by: \.roleId) where copies.count > 1 {
+            merge(copies.dropFirst(), into: copies[0])
+        }
+    }
+
+    private func merge(_ copies: ArraySlice<ChatConversation>, into oldest: ChatConversation) {
+        for copy in copies {
+            for message in copy.messages ?? [] { message.conversation = oldest }
+            if let read = copy.lastReadAt, read > (oldest.lastReadAt ?? .distantPast) { oldest.lastReadAt = read }
+            oldest.updatedAt = max(oldest.updatedAt, copy.updatedAt)
+            copy.messages = []
+            context.delete(copy)
+        }
+        save()
     }
 
     @discardableResult

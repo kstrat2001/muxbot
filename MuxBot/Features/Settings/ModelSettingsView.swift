@@ -24,10 +24,15 @@ struct ModelSettingsView: View {
                         else { Text("Always \(name)").tag(ModelMode.model(name)) }
                     }
                 }
+                .disabled(brain.runs.knownMachine == nil)
                 Text(explanation).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                if brain.runs.knownMachine == nil {
+                    Text("These are saved for darkmux's machine, so they wait until darkmux on your Mac has answered once.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                }
                 listingNote
             } header: {
-                Text(brain.runs.machine.map { "On \($0.name)" } ?? "On this Mac")
+                Text("On \(brain.runs.machinePhrase)")
             } footer: {
                 Text("Each machine has its own models, so this is set per machine and shared with your other devices.").font(AppFont.caption())
             }
@@ -146,7 +151,11 @@ struct ModelSettingsView: View {
         save()
     }
 
-    private func save() { brain.runs.settingsStore.save(settings, machine: brain.runs.machineKey) }
+    /// Saved for darkmux's machine only once it's known (never a placeholder).
+    private func save() {
+        guard let machine = brain.runs.knownMachine else { return }
+        brain.runs.settingsStore.save(settings, machine: machine.id)
+    }
 
     private var modeBinding: Binding<ModelMode> {
         Binding(get: { settings.mode }, set: { settings.mode = $0; save() })

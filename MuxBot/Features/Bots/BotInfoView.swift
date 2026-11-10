@@ -15,6 +15,9 @@ struct BotInfoView: View {
     @Environment(GitHubAuth.self) private var github
     @State private var putPublic = false
     @State private var nameDraft: String?
+    /// This bot's model mode as shown; loaded on appear and written through,
+    /// so the picker shows what you picked.
+    @State private var botMode: String?
     private var putting: Bool { brain.runs.puttingOnGitHub.contains(bot.id) }
     @State private var putProblem: String?
     @State private var newValue = ""
@@ -70,13 +73,14 @@ struct BotInfoView: View {
                         Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
                     }
                     // A saved model this Mac doesn't list keeps a row, so the picker shows it.
-                    if let name = ModelMode.unlistedModel(ModelMode(stored: modelModeBinding.wrappedValue), listed: brain.runs.lastListed.map(\.name)) {
+                    if let name = ModelMode.unlistedModel(ModelMode(stored: botMode), listed: brain.runs.lastListed.map(\.name)) {
                         if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(Optional(ModelMode.model(name).stored)) }
                         else { Text("Always \(name)").tag(Optional(ModelMode.model(name).stored)) }
                     }
                 }
+                .disabled(brain.runs.knownMachine == nil)
             } header: {
-                Text(brain.runs.machine.map { "Model on \($0.name)" } ?? "Model on this Mac")
+                Text("Model on \(brain.runs.machinePhrase)")
             }
             if !bot.skills.isEmpty {
                 Section {
@@ -166,7 +170,11 @@ struct BotInfoView: View {
             }
         }
         .formStyle(.grouped)
-        .task { if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() } }
+        .task {
+            loadBotMode()
+            if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() }
+            loadBotMode()   // the listing may have named the machine
+        }
         .task {
             for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github, useCaseId: bot.useCaseId) }
             if bot.repoSlugs.isEmpty, let key = RecipeStore.key(for: bot) {
@@ -191,10 +199,15 @@ struct BotInfoView: View {
     /// darkmux owns the copy; the app knows its name, never a path.
     /// This bot's model mode on this machine (shared with your other devices).
     private var modelModeBinding: Binding<String?> {
-        let machine = brain.runs.machineKey
-        let store = brain.runs.settingsStore
-        return Binding(get: { store.botMode(bot: bot.id, machine: machine)?.stored },
-                       set: { store.setBotMode(ModelMode(stored: $0), bot: bot.id, machine: machine) })
+        Binding(get: { botMode }, set: { new in
+            guard let machine = brain.runs.knownMachine else { return }
+            botMode = new
+            brain.runs.settingsStore.setBotMode(ModelMode(stored: new), bot: bot.id, machine: machine.id)
+        })
+    }
+
+    private func loadBotMode() {
+        botMode = brain.runs.knownMachine.flatMap { brain.runs.settingsStore.botMode(bot: bot.id, machine: $0.id)?.stored }
     }
 
     /// A project that's on this Mac only: make its GitHub repo now.
