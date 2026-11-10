@@ -168,6 +168,15 @@ struct RESTGitHubClient: GitHubClient {
     }
 
     /// GET with If-None-Match; a 304 serves the cached body.
+    /// "Bearer <renewed token>", or the plain failure when it can't be.
+    static func renewedHeader() async throws -> String {
+        switch await GitHubSession.renewed() {
+        case let .token(fresh): return "Bearer \(fresh)"
+        case .expired: throw GitHubError(status: 401, signedIn: true)
+        case .unreachable: throw GitHubError(status: 0, signedIn: true)
+        }
+    }
+
     private func get(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -175,8 +184,14 @@ struct RESTGitHubClient: GitHubClient {
         if let token = await token() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let cached = cache[url]
         if let etag = cached?.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
-        let (data, response) = try await session.data(for: request)
-        let http = response as? HTTPURLResponse
+        var (data, response) = try await session.data(for: request)
+        var http = response as? HTTPURLResponse
+        // An expired sign-in renews once (`GitHubSession`), as writes do.
+        if http?.statusCode == 401, request.value(forHTTPHeaderField: "Authorization") != nil {
+            request.setValue(try await Self.renewedHeader(), forHTTPHeaderField: "Authorization")
+            (data, response) = try await session.data(for: request)
+            http = response as? HTTPURLResponse
+        }
         if http?.statusCode == 304, let body = cached?.body { return body }
         guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0, signedIn: request.value(forHTTPHeaderField: "Authorization") != nil) }
         if let etag = http?.value(forHTTPHeaderField: "ETag") { cache[url] = (etag, data) }
@@ -211,7 +226,7 @@ extension RESTGitHubClient {
     /// raw.githubusercontent.com, which doesn't count against the API rate
     /// limit.
     func file(repo: String, path: String) async throws -> Data? {
-        let request: URLRequest
+        var request: URLRequest
         if let token = await token() {
             guard let url = URL(string: "https://api.github.com/repos/\(repo)/contents/\(path)") else { return nil }
             var signed = URLRequest(url: url)
@@ -223,8 +238,13 @@ extension RESTGitHubClient {
             guard let url = URL(string: "https://raw.githubusercontent.com/\(repo)/HEAD/\(path)") else { return nil }
             request = URLRequest(url: url)
         }
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        var (data, response) = try await session.data(for: request)
+        var status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401, request.value(forHTTPHeaderField: "Authorization") != nil {
+            request.setValue(try await Self.renewedHeader(), forHTTPHeaderField: "Authorization")
+            (data, response) = try await session.data(for: request)
+            status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        }
         if status == 404 { return nil }
         guard status == 200 else { throw GitHubError(status: status, signedIn: request.value(forHTTPHeaderField: "Authorization") != nil) }
         return data

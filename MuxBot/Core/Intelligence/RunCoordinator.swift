@@ -349,6 +349,7 @@ final class RunCoordinator {
     /// the branch it moved to after someone else pushed to darkmux's.
     func pushStart(_ bot: Bot, changes: DarkmuxClient.Changes) -> GitHubPR.Start? {
         if let start = bot.githubStart { return start }
+        guard bot.useCaseId.isEmpty else { return nil }
         return LocalBotState.shared[bot.id]?.pushHead.map { GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: $0) }
     }
 
@@ -379,6 +380,7 @@ final class RunCoordinator {
     }
 
     func backUp(_ bot: Bot, store: BotStore) async {
+        if bot.githubStart == nil { await recoverStart(bot) }
         guard bot.githubStart != nil, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
               LocalBotState.shared[bot.id]?.putPending != true,
               changesFetcher != nil || connection?.token != nil else { return }
@@ -401,8 +403,10 @@ final class RunCoordinator {
                     try await pusher(changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, $0)
                 }
             } catch {
-                store.append(.system, String(localized: "Couldn't back up this work to \(bot.githubStart?.head ?? "its branch") on GitHub: \(error.localizedDescription)"),
-                             to: store.conversation(for: .bot(bot.id)))
+                let said = Self.plain(error)
+                let line = store.append(.system, String(localized: "Couldn't back up this work to \(bot.githubStart?.head ?? "its branch") on GitHub: \(said.sentence)"),
+                                        to: store.conversation(for: .bot(bot.id)))
+                messageDetails[line.id] = said.details
             }
         }
     }
@@ -901,7 +905,15 @@ final class RunCoordinator {
                 workCopySetup[bot.id] = .failed(String(localized: "its template (\(id)) isn't in the template list anymore"))
                 return
             }
-            if let repo = bot.repoSlugs.first, bot.githubStart == nil, let found = await findStart(repo: repo, template: entry, botName: bot.name) {
+            // Backed up to GitHub: made only once its start there is known,
+            // or it could never be backed up or opened as a PR.
+            if let repo = bot.repoSlugs.first, bot.githubStart == nil {
+                guard let found = await findStart(repo: repo, template: entry, botName: bot.name) else {
+                    workCopySetup[bot.id] = .failed(startFinder == nil && githubToken?() == nil
+                        ? String(localized: "Sign in with GitHub (Settings › GitHub) so I can find where this project starts on GitHub, then make the project again.")
+                        : String(localized: "I couldn't find where this project starts on GitHub (its “Start from …” commit), so I didn't make it here. Try again in a moment."))
+                    return
+                }
                 bot.githubStart = found.0
                 entry.ref = found.1
             }
@@ -1463,6 +1475,32 @@ final class RunCoordinator {
 
     // MARK: Pull requests
 
+    /// What GitHub or darkmux said behind a thread line, by message id
+    /// (Show details; on this Mac, for this launch).
+    var messageDetails: [UUID: String] = [:]
+
+    /// A template project goes to GitHub only on top of its start there:
+    /// never to darkmux's local branch name.
+    func canPush(_ bot: Bot) -> Bool { bot.githubStart != nil || bot.useCaseId.isEmpty }
+
+    /// Finds a template project's GitHub start when this Mac doesn't know it
+    /// (made on another device, or the sign-in was missing then).
+    @discardableResult
+    func recoverStart(_ bot: Bot) async -> Bool {
+        guard bot.githubStart == nil, !bot.useCaseId.isEmpty, let repo = bot.repoSlugs.first,
+              let entry = await template(for: bot.useCaseId),
+              let found = await findStart(repo: repo, template: entry, botName: bot.name) else { return bot.githubStart != nil }
+        bot.githubStart = found.0
+        return true
+    }
+
+    /// A failure in a plain sentence: darkmux's by status, GitHub's already
+    /// are; the raw text goes behind Show details.
+    static func plain(_ error: any Error) -> (sentence: String, details: String?) {
+        if error is DarkmuxClient.ClientError { return (DarkmuxPlain.sentence(error), DarkmuxPlain.details(error)) }
+        return (error.localizedDescription, String(describing: error))
+    }
+
     /// Bots with a PR being opened (their button waits).
     var openingPR: Set<UUID> = []
 
@@ -1506,6 +1544,12 @@ final class RunCoordinator {
         guard let workspace = bot.workspaceName, let repo = bot.repoSlugs.first, let connection, let darkmux = connection.token else {
             store.append(.system, "This bot needs a work copy and a GitHub repo to open a pull request.", to: thread); return
         }
+        // A template project needs its start on GitHub (never its local
+        // branch name): found again if this Mac doesn't know it.
+        if !canPush(bot), !(await recoverStart(bot)) {
+            store.append(.system, String(localized: "I don't know where this project starts on GitHub on this Mac, so I can't open a pull request for it yet. Sign in with GitHub (Settings › GitHub), then try again."), to: thread)
+            return
+        }
         openingPR.insert(bot.id)
         defer { openingPR.remove(bot.id) }
         await oneAtATime(bot.id) { [self] in
@@ -1543,7 +1587,9 @@ final class RunCoordinator {
             let install = await github.installState(for: repo)
             store.append(.system, Self.cantWriteText(repo, install), to: thread)
         } catch {
-            store.append(.system, "Couldn't open the PR: \(error.localizedDescription)", to: thread)
+            let said = Self.plain(error)
+            let line = store.append(.system, String(localized: "Couldn't open the PR: \(said.sentence)"), to: thread)
+            messageDetails[line.id] = said.details
         }
     }
 }

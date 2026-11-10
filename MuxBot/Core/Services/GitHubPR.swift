@@ -71,6 +71,11 @@ struct GitHubPR: Sendable {
         /// The branch on GitHub the bot's work goes to (`mux/<bot>`): the
         /// local project works on its own `main`.
         var head: String
+        /// The commit the branch goes on top of when it's new, when that
+        /// isn't `commit`: after Put it on GitHub, Put's work commit. `commit`
+        /// stays the template's start, the tree darkmux's changes are
+        /// against, so a file deleted after Put shows as deleted.
+        var parent: String? = nil
     }
 
     /// The pushed branch: its new commit and the approved files it holds.
@@ -146,7 +151,7 @@ struct GitHubPR: Sendable {
         }
         let base: Commit = try await send("GET", "\(api)/git/commits/\(baseCommit)", nil, repo: repo, missing: .baseMissing(baseCommit))
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
-        let parent = remote?.object.sha ?? baseCommit
+        let parent = remote?.object.sha ?? start?.parent ?? baseCommit
         let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": message, "tree": tree.sha, "parents": [parent]], repo: repo)
         if remote == nil {
             let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(head)", "sha": commit.sha], repo: repo)
@@ -190,7 +195,12 @@ struct GitHubPR: Sendable {
         let (data, response) = try await session.data(for: try request(method, url, body))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 401 else { return (data, status) }
-        guard let fresh = await GitHubSession.renewed() else { throw Failure.signInExpired }
+        let fresh: String
+        switch await GitHubSession.renewed() {
+        case let .token(token): fresh = token
+        case .expired: throw Failure.signInExpired
+        case .unreachable: throw Failure.refused(0)
+        }
         current.value = fresh
         let (again, retried) = try await session.data(for: try request(method, url, body))
         let second = (retried as? HTTPURLResponse)?.statusCode ?? 0

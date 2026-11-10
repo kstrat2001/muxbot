@@ -32,6 +32,9 @@ struct GitHubRepoMaker: Sendable {
         /// Put it on GitHub made the repo (and recorded it), but the
         /// project's work isn't in it yet: Put again finishes into it.
         case notPushedYet(repo: String, why: String)
+        /// Put it on GitHub made the repo but couldn't fill it: Put again
+        /// fills that repo, never a second one.
+        case notFilledYet(repo: String, why: String)
         /// GitHub stopped taking the sign-in and it couldn't be renewed.
         case signInExpired
         /// GitHub refused a request; `message` is its own reason.
@@ -52,6 +55,8 @@ struct GitHubRepoMaker: Sendable {
                 String(localized: "I made github.com/\(repo), but couldn't add the template's files to it (\(why)). It's empty: delete it on GitHub or try again with another name.")
             case let .notPushedYet(repo, why):
                 String(localized: "I made github.com/\(repo), but couldn't put this project's work in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
+            case let .notFilledYet(repo, why):
+                String(localized: "I made github.com/\(repo), but couldn't put the template's files in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
             case .signInExpired:
                 GitHubAuth.expiredMessage
             case let .refused(status, message):
@@ -64,6 +69,8 @@ struct GitHubRepoMaker: Sendable {
     }
 
     var session: URLSession = .shared
+    /// Waits between tries while a new repo's first commit lands (tests skip it).
+    var pause: @Sendable (Double) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
     private let current: GitHubToken
     var token: String { current.value }
 
@@ -204,18 +211,46 @@ struct GitHubRepoMaker: Sendable {
         var entries: [[String: Any]] = []
         for file in tree.tree where file.type == "blob" {
             let blob: Blob = try await send("GET", "\(source)/git/blobs/\(file.sha)", nil)
-            let copied: SHA = try await send("POST", "\(api)/git/blobs",
-                                             ["content": blob.content.replacingOccurrences(of: "\n", with: ""), "encoding": blob.encoding])
+            let copied: SHA = try await settling { try await send("POST", "\(api)/git/blobs",
+                                                                   ["content": blob.content.replacingOccurrences(of: "\n", with: ""), "encoding": blob.encoding]) }
             entries.append(["path": file.path, "mode": file.mode, "type": "blob", "sha": copied.sha])
         }
         // No base tree: the repo holds exactly the template's files.
-        let newTree: SHA = try await send("POST", "\(api)/git/trees", ["tree": entries])
-        let head: Ref = try await send("GET", "\(api)/git/ref/heads/\(branch)", nil)
+        let newTree: SHA = try await settling { try await send("POST", "\(api)/git/trees", ["tree": entries]) }
+        let head: Ref = try await settling { try await send("GET", "\(api)/git/ref/heads/\(branch)", nil) }
         let short = String(template.ref.prefix(7))
         let commit: SHA = try await send("POST", "\(api)/git/commits",
                                          ["message": "Start from \(template.repo)@\(short)", "tree": newTree.sha, "parents": [head.object.sha]])
         let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(branch)", ["sha": commit.sha, "force": false])
         return commit.sha
+    }
+
+    /// A new repo's first commit (auto_init) lands a moment after the repo:
+    /// until then GitHub answers 409 ("empty") or 404 on its branch. Tried
+    /// again a few times, waiting longer each time.
+    private func settling<T>(_ operation: () async throws -> T) async throws -> T {
+        var wait = 0.5
+        for _ in 0..<4 {
+            do {
+                return try await operation()
+            } catch Failure.refused(let status, _) where status == 409 || status == 404 {
+                await pause(wait)
+                wait *= 2
+            }
+        }
+        return try await operation()
+    }
+
+    /// Fills a repo made earlier that couldn't be filled then (Put it on
+    /// GitHub again): the template's files on its default branch.
+    func refill(repo: String, from template: TemplateEntry) async throws -> Made {
+        struct Repo: Decodable { var default_branch: String?; var html_url: String? }
+        let info: Repo = try await send("GET", "https://api.github.com/repos/\(repo)", nil)
+        let branch = info.default_branch ?? "main"
+        let tree = try await templateTree(template)
+        let start = try await fill(repo: repo, branch: branch, tree: tree, from: template)
+        return Made(repo: repo, url: URL(string: info.html_url ?? "https://github.com/\(repo)") ?? URL(string: "https://github.com/\(repo)")!,
+                    defaultBranch: branch, startCommit: start)
     }
 
     // MARK: - Requests
@@ -238,7 +273,12 @@ struct GitHubRepoMaker: Sendable {
         let (data, response) = try await session.data(for: try request(method, url, body))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 401 else { return (data, status) }
-        guard let fresh = await GitHubSession.renewed() else { throw Failure.signInExpired }
+        let fresh: String
+        switch await GitHubSession.renewed() {
+        case let .token(token): fresh = token
+        case .expired: throw Failure.signInExpired
+        case .unreachable: throw Failure.refused(status: 0, message: "")
+        }
         current.value = fresh
         let (again, retried) = try await session.data(for: try request(method, url, body))
         let second = (retried as? HTTPURLResponse)?.statusCode ?? 0
