@@ -41,7 +41,7 @@ struct ContentView: View {
             }
             brain.openBot = { router.navigate(to: .bot($0)) }
         }
-        .onChange(of: wantsSidebar) { router.layoutChanged(toSidebar: wantsSidebar) }
+        .onChange(of: wantsSidebar) { router.layoutChanged(toSidebar: wantsSidebar, botCount: bots.count) }
         // Runs an earlier build kept become committed results (Open PR).
         .task {
             BotStore(context: context).migrateKeptRuns()

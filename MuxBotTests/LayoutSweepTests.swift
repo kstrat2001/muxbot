@@ -87,10 +87,13 @@ struct LayoutSweepTests {
         let store = TestStore.fresh()
         let bot = store.add(name: "site", instructions: "")
         bot.workspaceMachine = "studio"
+        // Started runs (sweep 2: one that never started has no machine).
         let here = store.proposeRun(task: "x", crew: .coder, on: bot)
+        store.apply(.approve, to: here)
         RunCoordinator().markStartedHere(here)
         #expect(ActivityRow.machine(for: here) == "studio")
         let elsewhere = store.proposeRun(task: "y", crew: .coder, on: bot)
+        store.apply(.approve, to: elsewhere)
         #expect(ActivityRow.machine(for: elsewhere) == "Another Mac")
     }
 
