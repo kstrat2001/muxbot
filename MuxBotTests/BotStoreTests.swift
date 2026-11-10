@@ -57,14 +57,14 @@ struct BotStoreTests {
         #expect(role.sortedResources.isEmpty)
     }
 
-    @Test func handOffRecordsTaskSetsWorkingAndPostsInTargetThread() {
+    @Test func handOffPostsADispatchCardInTargetThread() {
         let store = TestStore.fresh()
         let role = store.add(name: "humancodereader", instructions: "Website")
         store.handOff(task: "Fix the login bug", from: LeadBot.name, to: role)
 
         let reloaded = try! #require(store.bot(id: role.id))
-        #expect(reloaded.state == .working)
-        #expect(reloaded.currentTask?.title == "Fix the login bug")
+        #expect(reloaded.state == .needsYou, "a dispatch card waits for Approve")
+        #expect(reloaded.runs?.first?.task == "Fix the login bug")
         let thread = store.conversation(for: .bot(role.id))
         #expect((thread.messages ?? []).contains { $0.content == "From \(LeadBot.name): Fix the login bug" })
     }
@@ -85,8 +85,8 @@ struct BotStoreTests {
         let card = store.proposeAction(.handOff(toId: role.id, toName: "darkmux", task: "Check PR 12"), in: .lead)
         brain.resolve(card, approve: true, store: store)
         #expect(card.actionState != .waiting)
-        #expect(store.bot(id: role.id)?.state == .working)
-        #expect((store.conversation(for: .lead).messages ?? []).contains { $0.content == "Handed to darkmux: Check PR 12" })
+        #expect(store.bot(id: role.id)?.state == .needsYou)
+        #expect((store.conversation(for: .lead).messages ?? []).contains { $0.content.hasPrefix("Handed to darkmux: Check PR 12") })
     }
 
     @Test func approvingANewBotSavesIt() {

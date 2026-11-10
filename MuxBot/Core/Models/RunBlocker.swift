@@ -37,7 +37,8 @@ enum RunBlocker: Equatable, Sendable {
         guard crew.darkmuxRole != nil else { return .noRole(crew.name) }
         if bot.workspaceName != nil {
             // Finished runs are committed, so only a run still working blocks.
-            let working = (bot.runs ?? []).first { $0.id != run && $0.phase == .running }
+            // Only a run in this Mac's work copy (another Mac's runs are in its own).
+            let working = (bot.runs ?? []).first { $0.id != run && $0.phase == .running && $0.startedHere }
             return working.map { .runWorking($0.id) }
         }
         if bot.folderBookmark != nil { return .needsWorkCopy(bot.folderName ?? bot.name) }

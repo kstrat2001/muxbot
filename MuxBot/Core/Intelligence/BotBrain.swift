@@ -1022,9 +1022,12 @@ final class BotBrain {
         let note: String
         switch action {
         case let .handOff(toId, toName, task):
-            guard let target = store.bot(id: toId) else { return }
+            guard let target = store.bot(id: toId) else {
+                store.append(.system, String(localized: "\(toName) isn't here anymore, so nothing was handed off."), to: store.conversation(for: chat))
+                return
+            }
             store.handOff(task: task, from: from, to: target)
-            note = "Handed to \(toName): \(task)"
+            note = "Handed to \(toName): \(task). It waits for Approve in \(toName)'s thread."
         case let .createBot(draft):
             let bot = store.add(name: draft.name, instructions: draft.instructions, systemImage: draft.systemImage)
             bot.look = BotLook.suggested(for: draft.name)

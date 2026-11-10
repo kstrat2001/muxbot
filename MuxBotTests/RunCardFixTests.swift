@@ -35,6 +35,7 @@ struct NoChangeResultTests {
         store.apply(.finish(summary: "I have a question."), to: run)
         let brain = BotBrain()
         brain.runs.deviceRuns = true
+        brain.runs.markStartedHere(run)   // this Mac's run (sweep batch 2)
         return (store, bot, run, brain)
     }
 

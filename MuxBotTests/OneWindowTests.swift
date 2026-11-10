@@ -20,6 +20,7 @@ struct OneWindowTests {
         let run = store.proposeRun(task: "Fix it", crew: .coder, on: bot)
         run.phase = .running
         run.darkmuxWorkId = "w-1"
+        runs.markStartedHere(run)   // this Mac's run (#56: only those are followed)
         let polls = Recorder()
         let gate = Gate()
         runs.pollInterval = 0.05

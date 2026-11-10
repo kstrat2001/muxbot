@@ -1,0 +1,264 @@
+import Foundation
+import Testing
+@testable import MuxBot
+
+/// Sweep batch 2: a run says what really happened. Stopped only when you
+/// (or darkmux, on request) stopped it; failures say why in plain words;
+/// another Mac's runs are left alone; a revoked pairing is noticed.
+@Suite(.serialized) @MainActor
+struct RunsSayWhatHappenedTests {
+    private func setUp(paired: Bool = true) -> (BotStore, Bot, RunCoordinator) {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "")
+        bot.workspaceName = "site-1"
+        let keychain = MemoryKeychain()
+        if paired { keychain.items["darkmux.client.token"] = "t0ken" }
+        let defaults = UserDefaults(suiteName: "muxbot-tests-runs-\(UUID().uuidString)")!
+        defaults.set("Mux Bot", forKey: "darkmux.client.name")
+        let runs = RunCoordinator()
+        runs.connection = FleetConnection(keychain: keychain, defaults: defaults)
+        runs.pollInterval = 0.02
+        return (store, bot, runs)
+    }
+
+    private func running(_ store: BotStore, _ bot: Bot, _ runs: RunCoordinator, workId: String? = "w-1", here: Bool = true) -> BotRun {
+        let run = store.proposeRun(task: "Fix it", crew: .coder, on: bot)
+        run.phase = .running
+        run.darkmuxWorkId = workId
+        if here { runs.markStartedHere(run) }
+        return run
+    }
+
+    private func status(_ json: String) -> DarkmuxClient.WorkStatus {
+        try! JSONDecoder().decode(DarkmuxClient.WorkStatus.self, from: Data(json.utf8))
+    }
+
+    private func until(_ condition: () -> Bool) async {
+        let end = Date().addingTimeInterval(3)
+        while !condition(), Date() < end { try? await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    private func said(_ store: BotStore, _ bot: Bot) -> [String] {
+        (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }.map(\.content)
+    }
+
+    // 1. "Stopped." only when it was stopped.
+
+    @Test func aRunDarkmuxForgotFailsPlainlyInsteadOfStopping() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs)
+        runs.workStatusFetcher = { _ in throw DarkmuxClient.ClientError(message: "no such work", status: 404) }
+        runs.resumeFollowing(store: store)
+        await until { run.phase != .running }
+        #expect(run.phase == .failed)
+        #expect(run.summary.contains(RunResultText.lostTrack), "\(run.summary)")
+        #expect(!said(store, bot).contains("Stopped."))
+    }
+
+    @Test func anErrorThatMentionsKilledIsAFailureNotAStop() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs)
+        runs.workStatusFetcher = { [self] _ in status(#"{"status":"error","error":"model server killed (signal 9)","reason":"failed","code":"model_start_failed"}"#) }
+        runs.resumeFollowing(store: store)
+        await until { run.phase != .running }
+        #expect(run.phase == .failed)
+        #expect(run.summary.contains("The model wouldn't start"), "\(run.summary)")
+        _ = bot
+    }
+
+    @Test func cancelledIsTheOnlyStop() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs)
+        runs.workStatusFetcher = { [self] _ in status(#"{"status":"cancelled","reason":"cancelled"}"#) }
+        runs.resumeFollowing(store: store)
+        await until { run.phase != .running }
+        #expect(run.phase == .canceled)
+        _ = bot
+    }
+
+    @Test(arguments: [("busy", "busy"), ("wont_fit", "doesn't fit"), ("engine_unavailable", "isn't running"), ("port_in_use", "port")])
+    func failuresAreWordedFromDarkmuxsCode(code: String, words: String) {
+        let why = RunResultText.failure(code: code, error: "Error: something internal at /Users/x", reason: "failed")
+        #expect(why.localizedCaseInsensitiveContains(words), "\(code): \(why)")
+        #expect(!why.contains("/Users/"))
+    }
+
+    @Test func classifyNoLongerGuessesAStopFromWords() {
+        #expect(RunResultText.classify(error: "the server got SIGTERM", reason: "failed") != .stopped)
+    }
+
+    // 2. Another Mac's runs.
+
+    @Test func anotherMacsRunIsNotFollowedHere() async {
+        let (store, bot, runs) = setUp()
+        _ = running(store, bot, runs, here: true)
+        let theirs = running(store, bot, runs, workId: "w-theirs", here: false)
+        let polled = Recorder()
+        runs.workStatusFetcher = { [self] id in polled.add(id); return status(#"{"status":"running"}"#) }
+        runs.resumeFollowing(store: store)
+        await until { !polled.values.isEmpty }
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(!polled.values.contains("w-theirs"), "darkmux here never knew it")
+        #expect(theirs.phase == .running, "left as the other Mac reports it")
+        for r in bot.runs ?? [] { r.phase = .canceled }
+    }
+
+    @Test func runsFromBeforeThisBuildAreAdoptedOnceIfFinished() {
+        let (store, bot, runs) = setUp()
+        let done = store.proposeRun(task: "old result", crew: .coder, on: bot)
+        done.phase = .result
+        let inFlight = store.proposeRun(task: "old running", crew: .coder, on: bot)
+        inFlight.phase = .running
+        runs.adoptLegacyRuns(store: store)
+        #expect(done.startedHere, "its Undo works on this Mac")
+        #expect(!inFlight.startedHere, "whose darkmux has it can't be told")
+    }
+
+    // 3. Stop that can't reach darkmux.
+
+    @Test func stopWithoutDarkmuxNeverMarksItStopped() async {
+        let (store, bot, runs) = setUp(paired: false)
+        let run = running(store, bot, runs)
+        await runs.stop(run, store: store)
+        #expect(run.phase == .running, "it's still running on darkmux")
+        #expect(said(store, bot).last == RunCoordinator.stopUnpaired)
+    }
+
+    @Test func anotherMacsRunSaysWhereToStopIt() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, here: false)
+        await runs.stop(run, store: store)
+        #expect(run.phase == .running)
+        #expect(said(store, bot).last == RunCoordinator.stopElsewhere)
+    }
+
+    // 4. Approved, then the app quit before darkmux had it.
+
+    @Test func aRunThatNeverReachedDarkmuxFailsOnResume() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, workId: nil)
+        runs.resumeFollowing(store: store)
+        #expect(run.phase == .failed)
+        #expect(run.summary.contains(RunResultText.quitBeforeStart))
+        _ = bot
+    }
+
+    // 5. A revoked pairing.
+
+    @Test func a401UnpairsWithAPlainSentence() async {
+        let connection = FleetConnection(keychain: { let k = MemoryKeychain(); k.items["darkmux.client.token"] = "t0ken"; return k }(),
+                                         defaults: UserDefaults(suiteName: "muxbot-tests-401-\(UUID().uuidString)")!)
+        var shown = false
+        connection.onRevoked = { shown = true }
+        connection.revoked()
+        #expect(connection.token == nil)
+        #expect(connection.state == .failed(FleetConnection.revokedMessage))
+        #expect(FleetConnection.revokedMessage == "darkmux no longer knows this app. Pair again.")
+        #expect(shown, "pairing is shown")
+    }
+
+    @Test func theClientReportsA401() async throws {
+        DarkmuxStub.status = 401
+        var client = DarkmuxClient()
+        client.session = DarkmuxStub.session
+        let seen = Recorder()
+        client.onUnauthorized = { seen.add("401") }
+        _ = try? await client.workStatus(token: "old", workId: "w-1")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(seen.values == ["401"])
+    }
+
+    @Test func unpairedThePreviewAsksForPairingInsteadOfWaiting() async {
+        let (_, bot, runs) = setUp(paired: false)
+        await runs.ensurePreview(for: bot)
+        #expect(runs.livePreviews[bot.id]?.status == .unavailable(.notPaired))
+    }
+
+    @Test func unpairedAWorkCopyIsNotAFailure() async {
+        let (store, bot, runs) = setUp(paired: false)
+        bot.workspaceName = nil
+        store.addResource(.repo, "https://github.com/kstrat2001/site", to: bot)
+        await runs.setUpWorkCopy(for: bot, store: store)
+        #expect(runs.workCopySetup[bot.id] == nil, "nothing stale to show once paired")
+    }
+
+    // 6. Deleting a bot.
+
+    @Test func deletingABotCancelsItsRunsFirst() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs)
+        let cancelled = Recorder()
+        runs.workCanceller = { cancelled.add($0) }
+        runs.previewStopper = { cancelled.add("preview:\($0)") }
+        runs.previewFetcher = { _ in LivePreview(status: .ready, url: URL(string: "http://127.0.0.1:5000/")!) }
+        await runs.ensurePreview(for: bot)
+        let problem = await runs.prepareToDelete(bot, store: store)
+        #expect(problem == nil)
+        #expect(cancelled.values.contains("w-1"))
+        #expect(cancelled.values.contains("preview:site-1"))
+        #expect(run.phase == .canceled)
+    }
+
+    @Test func aCancelThatFailsKeepsTheBot() async {
+        let (store, bot, runs) = setUp()
+        _ = running(store, bot, runs)
+        runs.workCanceller = { _ in throw DarkmuxClient.ClientError(message: "darkmux answered 500", status: 500) }
+        let problem = await runs.prepareToDelete(bot, store: store)
+        #expect(problem != nil, "the bot isn't deleted")
+    }
+
+    // 7. Clear Conversation.
+
+    @Test func clearingKeepsTheCardsOfOpenRuns() {
+        let (store, bot, _) = setUp()
+        let proposed = store.proposeRun(task: "Make it blue", crew: .coder, on: bot)
+        store.append(.user, "hello", to: store.conversation(for: .bot(bot.id)))
+        store.clearConversation(.bot(bot.id))
+        let left = store.conversation(for: .bot(bot.id)).messages ?? []
+        #expect(left.contains { $0.runId == proposed.id }, "the waiting dispatch card stays")
+        #expect(!left.contains { $0.content == "hello" })
+    }
+
+    // 8. Hand-off.
+
+    @Test func anApprovedHandOffIsADispatchCardNotAForeverWorking() {
+        let store = TestStore.fresh()
+        let from = store.add(name: "lead-ish", instructions: "")
+        let target = store.add(name: "hcr", instructions: "")
+        let brain = BotBrain()
+        let card = store.proposeAction(.handOff(toId: target.id, toName: "hcr", task: "fix the header"), in: .bot(from.id))
+        brain.resolve(card, approve: true, store: store)
+        #expect(target.runs?.first?.phase == .proposed, "a dispatch card waits in hcr's thread")
+        #expect(target.state != .working)
+        #expect((target.tasks ?? []).isEmpty)
+    }
+
+    @Test func aHandOffToABotThatsGoneSaysSo() {
+        let store = TestStore.fresh()
+        let from = store.add(name: "lead-ish", instructions: "")
+        let brain = BotBrain()
+        let card = store.proposeAction(.handOff(toId: UUID(), toName: "old", task: "x"), in: .bot(from.id))
+        brain.resolve(card, approve: true, store: store)
+        let said = (store.conversation(for: .bot(from.id)).messages ?? []).map(\.content)
+        #expect(said.contains { $0.contains("isn't here anymore") }, "\(said)")
+    }
+}
+
+/// Answers every darkmux request with one status.
+final class DarkmuxStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var status = 200
+    static var session: URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [DarkmuxStub.self]
+        return URLSession(configuration: config)
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: [:])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"error":"unknown token"}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}

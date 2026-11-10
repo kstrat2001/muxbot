@@ -6,6 +6,7 @@ import SwiftData
 /// threads) and Activity.
 struct ContentView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(FleetConnection.self) private var connection
     @Environment(BotBrain.self) private var brain
     @Environment(\.modelContext) private var context
     @Environment(NotificationService.self) private var notifications
@@ -30,8 +31,10 @@ struct ContentView: View {
         .onAppear {
             router.usesSidebar = wantsSidebar
             router.openOnStart(botCount: bots.count)
-            // "new project" in Mux Bot's thread opens Start (or a template's form).
+            // darkmux forgot this app (401): show pairing, which says why.
             let router = router
+            connection.onRevoked = { router.showPairing = true }
+            // "new project" in Mux Bot's thread opens Start (or a template's form).
             brain.openStart = { template in
                 router.startTemplateId = template
                 router.showStartProject = true

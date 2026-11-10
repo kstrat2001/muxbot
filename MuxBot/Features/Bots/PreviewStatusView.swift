@@ -9,6 +9,7 @@ struct PreviewStatusView: View {
     let retry: () -> Void
 
     @Environment(BotBrain.self) private var brain
+    @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
     @State private var pickingFolder = false
     @State private var folderProblem: String?
@@ -105,6 +106,9 @@ struct PreviewStatusView: View {
             Button("Try again", systemImage: "arrow.clockwise", action: retry)
         case .newProject:
             EmptyView()
+        case .notPaired:
+            Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
+                .buttonStyle(.borderedProminent)
         }
     }
 }

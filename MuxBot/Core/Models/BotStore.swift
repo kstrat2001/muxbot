@@ -67,16 +67,13 @@ struct BotStore {
         return role
     }
 
-    /// Records work handed to a bot, sets it Working, and posts the
-    /// handoff in the bot's thread. No fleet call yet.
+    /// Work handed to a bot: a note and a dispatch card in its thread, so
+    /// it runs only after Approve there (never a bot left "Working" with
+    /// nothing running).
     @discardableResult
-    func handOff(task title: String, from sender: String, to role: Bot) -> BotTask {
-        let task = BotTask(title: title, why: "From \(sender)")
-        context.insert(task)
-        task.bot = role
-        role.state = BotState.working
+    func handOff(task title: String, from sender: String, to role: Bot) -> BotRun {
         append(.system, "From \(sender): \(title)", to: conversation(for: .bot(role.id)))
-        return task
+        return proposeRun(task: title, crew: .coder, on: role)
     }
 
     /// Saves an action (hand-off, new bot, new resource) as an Approve card
@@ -177,7 +174,7 @@ struct BotStore {
         let phases = (bot.runs ?? []).map(\.phase)
         bot.state = (bot.runs ?? []).contains(where: \.needsYou) ? .needsYou
             : phases.contains(where: \.isActive) ? .working
-            : (bot.tasks ?? []).isEmpty ? .ready : .working
+            : .ready
         save()
     }
 
@@ -203,9 +200,19 @@ struct BotStore {
         save()
     }
 
-    /// Empties a thread. Runs stay (they're in Activity).
+    /// Empties a thread. Runs stay (they're in Activity), and an open run
+    /// (waiting for Approve, running, or a result that needs you) keeps its
+    /// latest card, so it can still be decided here.
     func clearConversation(_ chat: ChatContext) {
-        for message in conversation(for: chat).messages ?? [] { context.delete(message) }
+        let messages = conversation(for: chat).messages ?? []
+        var keep = Set<UUID>()
+        let byRun = Dictionary(grouping: messages.filter { $0.runId != nil }, by: { $0.runId! })
+        for (runId, cards) in byRun {
+            guard let run = run(id: runId), run.phase.isActive || run.needsYou,
+                  let latest = cards.max(by: { $0.timestamp < $1.timestamp }) else { continue }
+            keep.insert(latest.id)
+        }
+        for message in messages where !keep.contains(message.id) { context.delete(message) }
         save()
     }
 

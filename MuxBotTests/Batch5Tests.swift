@@ -29,7 +29,9 @@ struct BotEditingTests {
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
         store.append(.user, "hi", to: store.conversation(for: .bot(bot.id)))
         store.clearConversation(.bot(bot.id))
-        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).isEmpty)
+        // Sweep batch 2: the waiting dispatch card stays so it can still be
+        // decided; everything else goes.
+        #expect((store.conversation(for: .bot(bot.id)).messages ?? []).map(\.runId) == [run.id])
         #expect(store.run(id: run.id) != nil, "runs stay in Activity")
     }
 }

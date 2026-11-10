@@ -7,6 +7,7 @@ struct BotContextMenu: ViewModifier {
 
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
+    @Environment(BotBrain.self) private var brain
     @State private var confirmDelete = false
     @State private var confirmClear = false
 
@@ -37,17 +38,26 @@ struct BotContextMenu: ViewModifier {
             .confirmationDialog("Delete \(name)?", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) { delete() }
             } message: {
-                Text("Its conversation, runs and links go too. darkmux's work copy and your project folder are left alone.")
+                Text("Its running work and preview stop, and its conversation, runs and links go too. darkmux's work copy and your project folder are left alone.")
             }
     }
 
     private func delete() {
         guard let bot else { return }
-        if router.context.botId == bot.id {
-            router.sidebar = .lead
-            router.path = []
+        Task {
+            // Its runs are stopped on darkmux and its preview too, first; if
+            // darkmux won't stop a run, the bot stays and its thread says why.
+            let store = BotStore(context: context)
+            if let problem = await brain.runs.prepareToDelete(bot, store: store) {
+                store.append(.system, problem, to: store.conversation(for: .bot(bot.id)))
+                return
+            }
+            if router.context.botId == bot.id {
+                router.sidebar = .lead
+                router.path = []
+            }
+            store.delete(bot)
         }
-        BotStore(context: context).delete(bot)
     }
 }
 

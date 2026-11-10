@@ -77,6 +77,7 @@ struct AutoCommitFlowTests {
                 "a committed result blocks nothing")
         let working = store.proposeRun(task: "w", crew: .coder, on: bot)
         store.apply(.approve, to: working)
+        RunCoordinator().markStartedHere(working)   // this Mac's run blocks; another Mac's wouldn't
         #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot, deviceRuns: true, excluding: next.id) == .runWorking(working.id))
     }
 

@@ -31,13 +31,13 @@ struct ActionCardTests {
         brain.resolve(second, approve: true, store: store)
         #expect(first.actionState == .waiting)
         #expect(second.actionState == .approved)
-        #expect(b.tasks?.count == 1)
+        #expect(b.runs?.count == 1)
         // Deciding again does nothing.
         brain.resolve(second, approve: true, store: store)
-        #expect(b.tasks?.count == 1)
+        #expect(b.runs?.count == 1)
         brain.resolve(first, approve: false, store: store)
         #expect(first.actionState == .canceled)
-        #expect(a.tasks?.isEmpty ?? true)
+        #expect(a.runs?.isEmpty ?? true)
     }
 
     @Test func theActionSurvivesAReload() throws {

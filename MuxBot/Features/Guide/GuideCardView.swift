@@ -229,7 +229,11 @@ struct SettingCardView: View {
             listed = await brain.runs.listedProfiles()
             mode = brain.runs.currentModelSettings().mode
         case .darkmuxModels:
-            guard let token = connection.token, let who = try? await connection.client.whoami(token: token) else {
+            guard let token = connection.token else {
+                darkmuxValue = String(localized: "Pair Mux Bot to see this")
+                return
+            }
+            guard let who = try? await connection.client.whoami(token: token) else {
                 darkmuxValue = String(localized: "Can't reach darkmux")
                 return
             }

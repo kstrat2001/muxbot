@@ -86,6 +86,10 @@ final class RunCoordinator {
     /// Keep is never needed (darkmux committed the run when it finished).
     private func applyOnDisk(_ event: RunEvent, to run: BotRun, store: BotStore) async {
         guard event == .discard else { return }
+        guard run.startedHere else {
+            decisionErrors[run.id] = String(localized: "Undo it from the Mac it ran on.")
+            return
+        }
         guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
               let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
             if connection?.token == nil { decisionErrors[run.id] = "Can't do that yet: \(RunBlocker.unpaired.message)." }
@@ -157,7 +161,7 @@ final class RunCoordinator {
     /// Runs whose darkmux can't be reached right now (the card says so).
     var unreachableRuns: Set<UUID> = []
 
-    private func follow(_ run: BotRun, workId: String, token: String, client: DarkmuxClient, store: BotStore) async {
+    private func follow(_ run: BotRun, workId: String, store: BotStore) async {
         var backoff = PollBackoff()
         // One follower per run, however often following resumes.
         guard following.insert(run.id).inserted else { return }
@@ -166,13 +170,20 @@ final class RunCoordinator {
             try? await Task.sleep(for: .seconds(pollInterval ?? backoff.delay))
             let status: DarkmuxClient.WorkStatus
             do {
-                if let workStatusFetcher { status = try await workStatusFetcher(workId) } else { status = try await client.workStatus(token: token, workId: workId) }
+                if let workStatusFetcher {
+                    status = try await workStatusFetcher(workId)
+                } else {
+                    // The current token each time: a revoked pairing (401)
+                    // clears it, and following waits until you pair again.
+                    guard let connection, let token = connection.token else { continue }
+                    status = try await connection.client.workStatus(token: token, workId: workId)
+                }
                 backoff.succeeded()
                 unreachableRuns.remove(run.id)
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
-                // darkmux no longer knows this run (restarted, or it ended long ago):
-                // show it as stopped rather than spinning forever.
-                store.apply(.stop, to: run)
+                // darkmux no longer knows this run (restarted, or it ended long
+                // ago). Nobody stopped it: say what happened.
+                store.apply(.fail(reason: RunResultText.lostTrack, details: nil), to: run)
                 return
             } catch {
                 // darkmux unreachable: back off, say so after three misses, keep trying.
@@ -187,12 +198,11 @@ final class RunCoordinator {
                 await finishRun(run, status: status, store: store)
                 return
             default:
-                switch RunResultText.classify(error: status.error ?? "", reason: status.reason) {
-                case .stopped: store.apply(.stop, to: run)
-                case let .failed(why):
-                    store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
-                    if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
-                }
+                // An error is a failure, worded from darkmux's code; only
+                // "cancelled" (above) is a stop.
+                let why = RunResultText.failure(code: status.code, error: status.error ?? "", reason: status.reason)
+                store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
+                if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
             }
         }
@@ -306,7 +316,7 @@ final class RunCoordinator {
 
     /// After a relaunch, pick up runs that were still going on darkmux.
     func resumeFollowing(store: BotStore) {
-        guard let connection, let token = connection.token else { return }
+        guard workStatusFetcher != nil || connection?.token != nil else { return }
         let runs = (try? store.context.fetch(FetchDescriptor<BotRun>())) ?? []
         // Earlier builds stored a raw darkmux error as the result; show those as
         // a plain outcome now.
@@ -320,9 +330,15 @@ final class RunCoordinator {
             }
             if let bot = run.bot { store.refreshState(of: bot) }
         }
-        for run in runs where run.phase == .running {
-            guard let workId = run.darkmuxWorkId else { continue }
-            Task { await follow(run, workId: workId, token: token, client: connection.client, store: store) }
+        // Only runs this device started: another Mac's runs sync here too,
+        // and this Mac's darkmux never had them.
+        for run in runs where run.phase == .running && run.startedHere {
+            guard let workId = run.darkmuxWorkId else {
+                // Approved, but the app quit before darkmux had it.
+                if !starting.contains(run.id) { store.apply(.fail(reason: RunResultText.quitBeforeStart, details: nil), to: run) }
+                continue
+            }
+            Task { await follow(run, workId: workId, store: store) }
         }
     }
 
@@ -330,16 +346,29 @@ final class RunCoordinator {
     /// container); the card shows it stopped.
     func stop(_ run: BotRun, store: BotStore) async {
         guard run.phase == .running else { return }
-        if let workId = run.darkmuxWorkId, let connection, let token = connection.token {
+        let say: (String) -> Void = { text in
+            if let bot = run.bot { store.append(.system, text, to: store.conversation(for: .bot(bot.id))) }
+        }
+        // It's stopped only once darkmux accepts the cancel: never marked
+        // stopped while it keeps running somewhere.
+        guard run.startedHere else { say(Self.stopElsewhere); return }
+        if let workId = run.darkmuxWorkId {
             do {
-                try await connection.client.cancelWork(token: token, workId: workId)
-            } catch {
-                if let bot = run.bot {
-                    store.append(.system, "Couldn't stop it on darkmux: \(error.localizedDescription)", to: store.conversation(for: .bot(bot.id)))
+                if let workCanceller {
+                    try await workCanceller(workId)
+                } else if let connection, let token = connection.token {
+                    try await connection.client.cancelWork(token: token, workId: workId)
+                } else {
+                    say(Self.stopUnpaired)
+                    return
                 }
+            } catch {
+                say("Couldn't stop it on darkmux: \(FleetConnection.plainError(error))")
                 return
             }
         }
+        // No work id: still being handed to darkmux (the submit sees the stop
+        // and cancels it there), or it never got there.
         store.apply(.stop, to: run)
     }
 
@@ -444,6 +473,13 @@ final class RunCoordinator {
     func ensurePreview(for bot: Bot, clean: Bool = false) async {
         guard let name = bot.workspaceName else {
             Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
+            return
+        }
+        if let connection, connection.token == nil {
+            // Not paired (or darkmux forgot this app): say so, with Pair, and
+            // start it once you have (connectionAttached).
+            livePreviews[bot.id] = LivePreview(status: .unavailable(.notPaired))
+            waitingPreviews[bot.id] = bot
             return
         }
         guard let connection, let token = connection.token else {
@@ -644,7 +680,9 @@ final class RunCoordinator {
     func setUpWorkCopy(for bot: Bot, store: BotStore, sourcePath: String? = nil, template: TemplateEntry? = nil) async {
         let token = connection?.token
         guard workspaceMaker != nil || token != nil else {
-            workCopySetup[bot.id] = .failed(RunBlocker.unpaired.message)
+            // Not a failure: the card already asks you to pair, and nothing
+            // stale is left to show once you have.
+            workCopySetup[bot.id] = nil
             return
         }
         var template = template
@@ -704,6 +742,55 @@ final class RunCoordinator {
     var workStatusFetcher: ((String) async throws -> DarkmuxClient.WorkStatus)?
     /// Tests poll faster than darkmux's backoff.
     var pollInterval: Double?
+    /// Runs being handed to darkmux right now (approved, no work id yet).
+    private var starting: Set<UUID> = []
+
+    /// Records that this device started `run`: its darkmux is this Mac's.
+    func markStartedHere(_ run: BotRun) {
+        guard let bot = run.bot else { return }
+        let id = run.id.uuidString
+        LocalBotState.shared.update(bot.id) { entry in
+            var ids = entry.localRuns ?? []
+            if !ids.contains(id) { ids.append(id) }
+            entry.localRuns = Array(ids.suffix(500))
+        }
+    }
+
+    /// Runs from before this device recorded the runs it starts: a bot
+    /// with a work copy on this Mac adopts its finished runs (so Undo works
+    /// on them here), once. Running ones are left alone: whose darkmux has
+    /// them can't be told.
+    func adoptLegacyRuns(store: BotStore) {
+        for bot in store.allBots() where bot.workspaceName != nil && LocalBotState.shared[bot.id]?.localRuns == nil {
+            let ids = (bot.runs ?? []).filter { $0.phase != .running }.map(\.id.uuidString)
+            LocalBotState.shared.update(bot.id) { $0.localRuns = Array(ids.suffix(500)) }
+        }
+    }
+
+    static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
+    static let stopElsewhere = String(localized: "Stop it from the Mac it runs on.")
+
+    /// Before a bot is deleted: its runs on this Mac are cancelled on
+    /// darkmux and its preview stopped. A problem (darkmux wouldn't cancel a
+    /// run) is returned, and the bot must not be deleted.
+    func prepareToDelete(_ bot: Bot, store: BotStore) async -> String? {
+        for run in bot.runs ?? [] where run.phase == .running && run.startedHere {
+            if let workId = run.darkmuxWorkId {
+                do {
+                    if let workCanceller { try await workCanceller(workId) } else if let connection, let token = connection.token {
+                        try await connection.client.cancelWork(token: token, workId: workId)
+                    } else {
+                        return String(localized: "\(bot.name) still has a run on darkmux, and this app isn't paired to stop it. Pair again, then delete it.")
+                    }
+                } catch {
+                    return String(localized: "darkmux didn't stop “\(run.task)”, so \(bot.name) wasn't deleted: \(FleetConnection.plainError(error))")
+                }
+            }
+            store.apply(.stop, to: run)
+        }
+        await stopPreview(for: bot)
+        return nil
+    }
     var workUndoer: ((String) async throws -> DarkmuxClient.UndoResult)?
 
     /// Tests answer workspace requests here; nil asks darkmux.
@@ -788,7 +875,10 @@ final class RunCoordinator {
                                                    workspace: workspace, continues: continues)
         }
         let thread = store.conversation(for: .bot(bot.id))
+        markStartedHere(run)
+        starting.insert(run.id)
         Task { @MainActor in
+            defer { if run.darkmuxWorkId == nil { starting.remove(run.id) } }
             do {
                 // darkmux picks the profile for this role (its role binding, else
                 // the default) and checks it against what the owner granted.
@@ -806,9 +896,11 @@ final class RunCoordinator {
                     return
                 }
                 run.darkmuxWorkId = workId
+                starting.remove(run.id)
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
-                await follow(run, workId: workId, token: token, client: connection.client, store: store)
+                await follow(run, workId: workId, store: store)
             } catch {
+                starting.remove(run.id)
                 store.apply(Self.startFailure(error), to: run)
             }
         }
@@ -1022,5 +1114,14 @@ final class RunCoordinator {
         } catch {
             store.append(.system, "Couldn't open the PR: \(error.localizedDescription)", to: thread)
         }
+    }
+}
+
+extension BotRun {
+    /// Started from this device, so this Mac's darkmux has it. Runs synced
+    /// from another Mac aren't followed, stopped or undone from here.
+    @MainActor var startedHere: Bool {
+        guard let bot, let local = LocalBotState.shared[bot.id]?.localRuns else { return false }
+        return local.contains(id.uuidString)
     }
 }

@@ -60,11 +60,35 @@ enum RunResultText {
             .joined(separator: "\n")
     }
 
-    static func classify(error raw: String, reason: String?) -> RunEnd {
-        let lower = (raw + " " + (reason ?? "")).lowercased()
-        if reason == "cancelled" || ["cancelled", "sigterm", "sigkill", "exit 143", "signal 15", "signal 9", "killed"].contains(where: { lower.contains($0) }) {
-            return .stopped
+    /// darkmux answered 404 for a run it was running: it restarted, or it
+    /// ended long ago. Never "Stopped.": nobody stopped it.
+    static let lostTrack = String(localized: "darkmux restarted and lost track of this run. Check the project before running it again.")
+    /// Approved, but the app quit before darkmux had it.
+    static let quitBeforeStart = String(localized: "Mux Bot quit before darkmux started it.")
+
+    /// Why a run failed, in plain words, from darkmux's `code` (client_wire
+    /// `Error.code`); darkmux's own text only when the code says nothing more.
+    static func failure(code: String?, error: String, reason: String?) -> String {
+        switch code {
+        case "busy": String(localized: "The model was busy with another run. Run it again in a moment.")
+        case "wont_fit": String(localized: "The model doesn't fit on this Mac. Pick a smaller one in Settings › Models.")
+        case "model_start_failed": String(localized: "The model wouldn't start.")
+        case "model_stop_failed": String(localized: "darkmux couldn't free the model for this run.")
+        case "port_in_use": String(localized: "Another program is using the model's port.")
+        case "engine_unavailable": String(localized: "The model's server isn't running.")
+        case "engine_in_use": String(localized: "The model's server is busy with something else.")
+        default:
+            switch classify(error: error, reason: reason) {
+            case let .failed(why): why
+            case .stopped: String(localized: "darkmux stopped it.")
+            }
         }
+    }
+
+    /// Only darkmux's own "cancelled" is a stop; any error is a failure,
+    /// whatever words it uses (a killed model server is still a failure).
+    static func classify(error raw: String, reason: String?) -> RunEnd {
+        if reason == "cancelled" || raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "cancelled" { return .stopped }
         let lines = withoutPlumbing(raw).split(separator: "\n").map(String.init)
         let line = lines.last { $0.lowercased().hasPrefix("error") } ?? lines.last ?? reason ?? "darkmux didn't say why"
         var short = line
