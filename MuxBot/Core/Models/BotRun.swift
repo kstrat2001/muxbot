@@ -85,7 +85,8 @@ final class BotRun {
             || (phase == .result && !changedFiles.isEmpty && keptCommit == nil)
     }
 
-    var statusRank: Int { needsYou ? 0 : phase.isActive ? 1 : 2 }
+    /// Needs you (and not hidden here) first, then running, then the rest.
+    @MainActor var statusRank: Int { NeedsYou.isWaiting(self) ? 0 : phase.isActive ? 1 : 2 }
 
     var durationSeconds: Double? {
         guard let startedAt else { return nil }

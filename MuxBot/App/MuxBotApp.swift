@@ -28,12 +28,20 @@ struct MuxBotApp: App {
 
         #if os(macOS)
         Settings {
-            SettingsView()
-                .environment(router)
-                .environment(brain)
-                .environment(connection)
-                .environment(notifications)
-                .environment(github)
+            // The store too: pairing here counts the real bots, so it never
+            // moves the main window to Start.
+            Group {
+                if let container = store.container {
+                    SettingsView().modelContainer(container)
+                } else {
+                    SettingsView()
+                }
+            }
+            .environment(router)
+            .environment(brain)
+            .environment(connection)
+            .environment(notifications)
+            .environment(github)
         }
 
         MenuBarExtra {

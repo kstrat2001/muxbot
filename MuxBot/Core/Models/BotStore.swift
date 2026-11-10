@@ -87,6 +87,14 @@ struct BotStore {
         return message
     }
 
+    /// A waiting card's edited action, kept in the thread, so its edits
+    /// survive leaving and coming back (or a relaunch).
+    func updateAction(_ message: ChatMessage, to action: BotAction) {
+        guard message.actionState == .waiting else { return }
+        message.actionJSON = (try? JSONEncoder().encode(action)).flatMap { String(data: $0, encoding: .utf8) }
+        save()
+    }
+
     static func cardTitle(for action: BotAction) -> String {
         switch action {
         case let .handOff(_, toName, task): "Hand to \(toName): \(task)"

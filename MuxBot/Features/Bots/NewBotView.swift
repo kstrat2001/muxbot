@@ -6,6 +6,7 @@ struct NewBotView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(BotBrain.self) private var brain
+    @Environment(AppRouter.self) private var router
     @State private var name = ""
     @State private var instructions = ""
     @State private var resource = ""
@@ -116,5 +117,6 @@ struct NewBotView: View {
         }
         if let folder { Task { await brain.runs.addFolder(folder, to: bot, store: store) } }
         dismiss()
+        router.navigate(to: .bot(bot.id))
     }
 }

@@ -94,7 +94,7 @@ struct SetupChecklistView: View {
             Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }.buttonStyle(.borderedProminent).controlSize(.small)
         case .gitHubSignIn:
             #if os(macOS)
-            Button("Sign in with GitHub", systemImage: "person.badge.key") { openSettings() }.buttonStyle(.bordered).controlSize(.small)
+            Button("Sign in with GitHub", systemImage: "person.badge.key") { SettingsTab.select(.github); openSettings() }.buttonStyle(.bordered).controlSize(.small)
             #else
             Button("Sign in with GitHub", systemImage: "person.badge.key") { router.showPairing = true }.buttonStyle(.bordered).controlSize(.small)
             #endif
@@ -177,6 +177,7 @@ struct SettingCardView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(FleetConnection.self) private var connection
     @AppStorage(NotificationService.enabledKey) private var notify = true
+    @Environment(NotificationService.self) private var notifications
     @State private var mode: ModelMode = .auto
     @State private var listed: [DarkmuxClient.ProfileInfo] = []
     @State private var changed: String?
@@ -205,8 +206,12 @@ struct SettingCardView: View {
         case .notifications:
             Toggle("Tell me when a run has a result or didn't finish", isOn: Binding(get: { notify }, set: {
                 notify = $0
-                changed = $0 ? String(localized: "Notifications are on.") : String(localized: "Notifications are off.")
+                changed = NotificationService.cardText(enabled: $0, denied: notifications.isDenied)
             }))
+            if notify && notifications.isDenied {
+                Label(NotificationService.cardText(enabled: true, denied: true), systemImage: "bell.slash").font(AppFont.footnote())
+                Button("Open System Settings") { notifications.openSystemSettings() }.buttonStyle(.bordered).controlSize(.small)
+            }
         case .sync:
             LabeledContent("iCloud sync", value: GuideSettings.syncIsOn ? String(localized: "On") : String(localized: "Off"))
             Text("Set when the app is built.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
@@ -238,7 +243,9 @@ struct SettingCardView: View {
                 return
             }
             darkmuxValue = who.profiles.map { $0.joined(separator: ", ") } ?? String(localized: "Any model that runs on this Mac")
-        case .notifications, .sync:
+        case .notifications:
+            await notifications.checkAuthorizationStatus()
+        case .sync:
             break
         }
     }

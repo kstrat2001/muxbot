@@ -108,6 +108,7 @@ struct BotBar: View {
     }
 
     private func run(_ chip: ChatShortcut) {
+        if case .send = chip.action { router.showLeadBeforeSending() }
         let chat = router.context
         let store = BotStore(context: context)
         Task { await ChatShortcuts.run(chip, in: chat, brain: brain, store: store, router: router, preview: preview) }
@@ -133,6 +134,7 @@ struct BotBar: View {
         let element = router.context.botId == nil ? nil : preview.picked
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking(in: router.context) else { return }
         router.barDraft = ""
+        router.showLeadBeforeSending()
         let crop = element == nil ? nil : preview.pickedCrop
         preview.clearPick()   // a pick is about one message
         let chat = router.context

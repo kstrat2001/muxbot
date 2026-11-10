@@ -77,7 +77,7 @@ final class LeadGuide {
         let lead = GuideSettings.isChangeRequest(text.lowercased()) && !setting.isReadOnly
             ? String(localized: "Here's the switch. Changing it changes the setting right away.")
             : setting.isDarkmux ? String(localized: "This one is changed in darkmux on your Mac; here's its value.") : nil
-        store.append(.assistant, [explanation?.text, lead].compactMap { $0 }.joined(separator: "\n\n"), to: thread)
+        if let reply = Self.settingReply(explanation: explanation?.text, lead: lead) { store.append(.assistant, reply, to: thread) }
         store.postGuideCard(.setting(id), summary: setting.title)
     }
 
@@ -124,5 +124,14 @@ final class LeadGuide {
         #else
         return nil
         #endif
+    }
+}
+
+extension LeadGuide {
+    /// What Mux Bot says above a setting's card; nil when there's nothing to
+    /// say (the card speaks for itself), never an empty bubble.
+    static func settingReply(explanation: String?, lead: String?) -> String? {
+        let parts = [explanation, lead].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 }

@@ -56,7 +56,9 @@ struct SearchView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
             .onAppear { focused = true }
         }
+        #if os(macOS)
         .frame(minWidth: 420, minHeight: 420)
+        #endif
     }
 
     private func open(_ route: Route) {

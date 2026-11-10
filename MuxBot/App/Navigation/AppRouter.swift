@@ -109,6 +109,34 @@ final class AppRouter {
         if usesSidebar { path = []; sidebar = .bot(bot.id) } else { path = [.bot(bot.id)] }
     }
 
+    /// iPhone Home: the bar talks to Mux Bot, so sending opens his thread
+    /// and you see the reply.
+    func showLeadBeforeSending() {
+        if !usesSidebar, tab == .bots, path.isEmpty { path = [.lead] }
+    }
+
+    /// The size class changed (iPad split view, rotation): the same thread
+    /// (or Activity) stays on screen in the other layout.
+    func layoutChanged(toSidebar: Bool) {
+        guard toSidebar != usesSidebar else { return }
+        if toSidebar {
+            switch path.last {
+            case let .bot(id)?: sidebar = .bot(id)
+            case .lead?: sidebar = .lead
+            case nil: sidebar = tab == .activity ? .activity : .lead
+            }
+            path = []
+        } else {
+            switch sidebar {
+            case let .bot(id)?: tab = .bots; path = [.bot(id)]
+            case .lead?: tab = .bots; path = [.lead]
+            case .activity?: tab = .activity; path = []
+            case nil: tab = .bots; path = []
+            }
+        }
+        usesSidebar = toSidebar
+    }
+
     func navigate(to route: Route) {
         guard usesSidebar else { path.append(route); return }
         path = []

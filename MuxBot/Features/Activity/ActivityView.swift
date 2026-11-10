@@ -72,7 +72,7 @@ private struct ActivityTable: View {
                 Label(run.crew.name, systemImage: run.crew.systemImage)
             }
             .width(min: 90, ideal: 110)
-            TableColumn("Machine") { _ in Text(ActivityRow.machine).foregroundStyle(Color.secondaryText) }
+            TableColumn("Machine") { run in Text(ActivityRow.machine(for: run)).foregroundStyle(Color.secondaryText) }
                 .width(min: 80, ideal: 110)
             TableColumn("Started", value: \.createdAt) { run in
                 TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -146,7 +146,7 @@ struct ActivityRow: View {
                     if run.phase == .running {
                         Text("·")
                         TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(Self.elapsed(from: run.createdAt, to: context.date)).monospacedDigit()
+                            Text(Self.elapsed(from: Self.timerStart(run), to: context.date)).monospacedDigit()
                         }
                     }
                 }
@@ -181,12 +181,24 @@ struct ActivityRow: View {
         }
     }
 
-    static var machine: String {
-        ProcessInfo.processInfo.hostName.replacingOccurrences(of: ".local", with: "")
-    }
+    /// This Mac's name, looked up once (the lookup is slow).
+    @MainActor static let thisMac = FleetConnection.machineName
 
     static func elapsed(from start: Date, to now: Date) -> String {
         let s = max(0, Int(now.timeIntervalSince(start)))
         return s >= 3600 ? "\(s / 3600)h \((s % 3600) / 60)m" : "\(s / 60):\(String(format: "%02d", s % 60))"
+    }
+}
+
+extension ActivityRow {
+    /// A running run's timer counts from when it started, not from when its
+    /// card was proposed.
+    @MainActor static func timerStart(_ run: BotRun) -> Date { run.startedAt ?? run.createdAt }
+
+    /// The Mac the run is on: the bot's work copy's for one started here,
+    /// else another Mac (its own runs aren't followed from here).
+    @MainActor static func machine(for run: BotRun) -> String {
+        guard run.startedHere else { return String(localized: "Another Mac") }
+        return run.bot?.workspaceMachine ?? thisMac
     }
 }
