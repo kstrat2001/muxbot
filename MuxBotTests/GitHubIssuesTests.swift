@@ -42,6 +42,23 @@ struct GitHubIssueParsingTests {
         #expect(GitHubIssue.repoSlug(from: "~/de-projects/hcr") == nil)
     }
 
+    @Test(arguments: [
+        ("git@github.com:a/b.git", "a/b"),
+        ("ssh://git@github.com/a/b.git", "a/b"),
+        ("https://www.github.com/a/b", "a/b"),
+        ("https://GitHub.com/a/b?tab=readme", "a/b"),
+    ])
+    func gitHubsOwnAddresses(url: String, slug: String) {
+        #expect(GitHubIssue.repoSlug(from: url) == slug)
+    }
+
+    /// The host is github.com itself, never one that contains its name.
+    @Test(arguments: ["notgithub.com/a/b", "https://notgithub.com/a/b", "https://github.com.evil.example/a/b",
+                      "https://evil.example/github.com/a/b", "git@notgithub.com:a/b.git", "https://evil.example/?next=github.com/a/b"])
+    func aLookalikeHostIsNotGitHub(url: String) {
+        #expect(GitHubIssue.repoSlug(from: url) == nil, "\(url)")
+    }
+
     @Test func decodesRESTIssuesAndMarksPullRequests() throws {
         let json = #"[{"number":7,"title":"Footer link 404s","labels":[{"name":"bug"}]},{"number":8,"title":"Bump deps","labels":[],"pull_request":{"url":"x"}}]"#
         let issues = try JSONDecoder().decode([GitHubIssue].self, from: Data(json.utf8))

@@ -64,10 +64,19 @@ struct GitHubIssue: Sendable, Equatable, Decodable {
         case pullRequest = "pull_request"
     }
 
+    /// How a GitHub repo's address may start: the host is exactly
+    /// github.com (or www.github.com), with or without a scheme, or git's
+    /// ssh forms. Never a host that only ends in or contains "github.com".
+    static let repoPrefixes = ["https://github.com/", "http://github.com/", "https://www.github.com/", "http://www.github.com/",
+                               "github.com/", "www.github.com/", "git@github.com:", "ssh://git@github.com/"]
+
     /// "owner/repo" from a GitHub URL, or nil if it isn't one.
     static func repoSlug(from url: String) -> String? {
-        guard let range = url.range(of: "github.com/") else { return nil }
-        let parts = url[range.upperBound...].split(separator: "/").prefix(2)
+        let text = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = text.lowercased()
+        guard let prefix = repoPrefixes.first(where: { lowered.hasPrefix($0) }) else { return nil }
+        let path = text.dropFirst(prefix.count).prefix { $0 != "?" && $0 != "#" }
+        let parts = path.split(separator: "/").prefix(2)
         guard parts.count == 2 else { return nil }
         let repo = parts[1].hasSuffix(".git") ? String(parts[1].dropLast(4)) : String(parts[1])
         return "\(parts[0])/\(repo)"

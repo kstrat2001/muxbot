@@ -52,6 +52,12 @@ struct GitRemoteTests {
         #expect(GitRemote.originSlug(of: dir) == nil)
     }
 
+    @Test(arguments: ["https://notgithub.com/a/b.git", "git@notgithub.com:a/b.git", "https://example.com/mirror/github.com/a/b.git"])
+    func aLookalikeOriginHasNoSlug(url: String) throws {
+        let dir = try folder([".git/config": String(format: config, url)])
+        #expect(GitRemote.originSlug(of: dir) == nil, "\(url)")
+    }
+
     @Test func aNonGitHubOriginHasNoSlug() throws {
         let dir = try folder([".git/config": String(format: config, "git@gitlab.com:me/site.git")])
         #expect(GitRemote.isRepository(dir))
