@@ -479,21 +479,4 @@ struct ReviewFindingsPreviewTests {
         #expect(PreviewNavigation.isPreviewOrigin(scheme: "http", host: "site.ts.net", port: 0, home: URL(string: "http://site.ts.net:80/")!))
         #expect(!PreviewNavigation.isPreviewOrigin(scheme: "https", host: "site.tail1234.ts.net", port: 8443, home: site))
     }
-
-    @Test func onlyAClickedLinkLeavesThePreview() {
-        let elsewhere = URL(string: "https://evil.example/")!
-        // A script's redirect, a form or a meta refresh in the preview itself.
-        #expect(PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: elsewhere, home: home))
-        #expect(PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "http://127.0.0.1:6000/")!, home: home))
-        // A clicked link is the browser's (handled before this).
-        #expect(!PreviewNavigation.leavesPreview(isLink: true, targetsMainFrame: true, url: elsewhere, home: home))
-        // An iframe or embed from another site still loads.
-        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: false, url: elsewhere, home: home))
-        // The preview's own page: its first load, a reload, a move within the site.
-        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: home, home: home))
-        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "http://127.0.0.1:5000/about")!, home: home))
-        // Not a web address (about:blank, a blob), or no preview yet.
-        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: URL(string: "about:blank")!, home: home))
-        #expect(!PreviewNavigation.leavesPreview(isLink: false, targetsMainFrame: true, url: elsewhere, home: nil))
-    }
 }

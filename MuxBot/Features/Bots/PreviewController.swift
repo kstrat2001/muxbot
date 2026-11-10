@@ -304,16 +304,6 @@ struct PreviewNavigationDecider: WebPage.NavigationDeciding {
             #endif
             return .cancel
         }
-        // Anything else that would take the preview itself (its main frame;
-        // an iframe or embed loads as before) to another site, without a
-        // click on a link (a script's redirect, a form, a meta refresh), is
-        // refused: the preview stays on the bot's own page, so nothing
-        // from another site is ever shown, measured or picked as the bot's.
-        if PreviewNavigation.leavesPreview(isLink: action.navigationType == .linkActivated,
-                                           targetsMainFrame: action.target?.isMainFrame == true,
-                                           url: action.request.url, home: home.url) {
-            return .cancel
-        }
         return .allow
     }
 
@@ -362,14 +352,7 @@ enum PreviewNavigation {
         return scheme == homeScheme && host.lowercased() == homeHost
             && (port == 0 ? usual : port) == (home.port ?? defaultPort(home))
     }
-
-    /// A navigation that would take the preview's main frame to another
-    /// site without a click on a link. (A clicked link opens in the
-    /// browser; a subframe, and the preview's own page, load as usual.)
-    static func leavesPreview(isLink: Bool, targetsMainFrame: Bool, url: URL?, home: URL?) -> Bool {
-        guard !isLink, targetsMainFrame, let url, let home else { return false }
-        return opensElsewhere(url, home: home)
-    }
+}
 
 /// The preview's address, read by its navigation decider.
 @MainActor final class HomeBox {
