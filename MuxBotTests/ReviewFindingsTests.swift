@@ -289,6 +289,16 @@ struct ReviewFindingsClientTests {
         #expect(DarkmuxClient.bearerToken(nil) == nil)
     }
 
+    // c: pairing secrets are never zeros, even if the secure source fails.
+
+    @Test func randomHexFallsBackWhenTheSecureSourceFails() {
+        let hex = FleetConnection.randomHex(32, secure: { _ in false })
+        #expect(hex.count == 64)
+        #expect(hex.allSatisfy(\.isHexDigit))
+        #expect(hex != String(repeating: "0", count: 64))
+        #expect(FleetConnection.randomHex(32).count == 64)
+    }
+
     @Test func theRecipeGoesThroughTheClientsSession() async throws {
         ClientStub.status = 404
         var client = DarkmuxClient()

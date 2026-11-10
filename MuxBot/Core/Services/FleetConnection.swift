@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import OSLog
 
 /// This app's pairing with darkmux on this Mac, and the real runs it sends.
 /// Unpaired, runs can't start.
@@ -89,7 +90,9 @@ final class FleetConnection {
     /// Keeps the token and tells the app it's paired.
     func completePairing(token: String, name: String) {
         defaults.set(UUID().uuidString, forKey: Self.pairingIdKey)
-        keychain.save(key: Self.tokenKey, value: token)
+        // Not kept: the pairing still works until the app quits, and the
+        // log says why it will ask again after that.
+        if !keychain.save(key: Self.tokenKey, value: token) { Self.log.error("The pairing token couldn't be saved to the Keychain") }
         cachedToken = .some(token)
         state = .paired(name: name)
         onPaired?()
@@ -163,9 +166,23 @@ final class FleetConnection {
         return "\(pick())-\(pick())"
     }
 
-    private static func randomHex(_ bytes: Int) -> String {
+    private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "pairing")
+
+    /// Random bytes as hex. If the system's secure source fails, the
+    /// standard library's generator (also cryptographically secure on
+    /// Apple platforms) fills them: never zeros.
+    static func randomHex(_ bytes: Int, secure: (inout [UInt8]) -> Bool = FleetConnection.secureRandom) -> String {
         var raw = [UInt8](repeating: 0, count: bytes)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes, &raw)
+        if !secure(&raw) {
+            log.error("SecRandomCopyBytes failed; using the system random number generator")
+            var generator = SystemRandomNumberGenerator()
+            raw = (0..<bytes).map { _ in UInt8.random(in: UInt8.min...UInt8.max, using: &generator) }
+        }
         return raw.map { String(format: "%02x", $0) }.joined()
+    }
+
+    nonisolated static func secureRandom(_ buffer: inout [UInt8]) -> Bool {
+        let count = buffer.count
+        return SecRandomCopyBytes(kSecRandomDefault, count, &buffer) == errSecSuccess
     }
 }

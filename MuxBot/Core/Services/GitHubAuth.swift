@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Sign in with GitHub through the device flow (no client secret): you get
 /// a short code, approve it at github.com/login/device, and the token stays
@@ -97,8 +98,8 @@ final class GitHubAuth {
                 // Cancel can land while the token is on its way: it's dropped.
                 if Task.isCancelled { return canceled() }
                 if let token = p.access_token {
-                    _ = keychain.save(key: Self.tokenKey, value: token)
-                    if let refresh = p.refresh_token { _ = keychain.save(key: Self.refreshKey, value: refresh) } else { keychain.delete(key: Self.refreshKey) }
+                    keep(token, refresh: p.refresh_token)
+                    if p.refresh_token == nil { keychain.delete(key: Self.refreshKey) }
                     cachedToken = .some(token)
                     await loadUser()
                     return
@@ -187,8 +188,7 @@ final class GitHubAuth {
             ])
             // A 200 with an error (bad_refresh_token): the sign-in is gone.
             guard let token = reply.access_token else { expire(); return .expired }
-            _ = keychain.save(key: Self.tokenKey, value: token)
-            if let next = reply.refresh_token { _ = keychain.save(key: Self.refreshKey, value: next) }
+            keep(token, refresh: reply.refresh_token)
             cachedToken = .some(token)
             return .token(token)
         } catch let refusal as SignInRefusal where refusal.status == 400 || refusal.status == 401 {
@@ -201,6 +201,15 @@ final class GitHubAuth {
     }
 
     /// Signed out because GitHub stopped taking the sign-in.
+    private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "github")
+
+    /// Saves the sign-in's tokens to the Keychain; a failure is logged (the
+    /// sign-in still works until the app quits).
+    private func keep(_ token: String, refresh: String?) {
+        if !keychain.save(key: Self.tokenKey, value: token) { Self.log.error("The GitHub token couldn't be saved to the Keychain") }
+        if let refresh, !keychain.save(key: Self.refreshKey, value: refresh) { Self.log.error("The GitHub refresh token couldn't be saved to the Keychain") }
+    }
+
     private func expire() {
         signOut()
         failureDetails = nil
