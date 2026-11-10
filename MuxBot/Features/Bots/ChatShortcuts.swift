@@ -59,9 +59,10 @@ enum ChatShortcuts {
     /// and not while a card in this thread waits for Approve.
     /// Mux Bot's chips stay while you type in his thread (Start a project
     /// is what you're likely after); only a card waiting for Approve hides them.
-    // Red-first stub.
+    /// While a bot waits for the answer to its question, the chips hide:
+    /// a chip tap would be taken as the answer.
     static func showsRow(draft: String, tweaking: Bool, picked: Bool, waitingCard: Bool, lead: Bool, answerPending: Bool) -> Bool {
-        showsRow(draft: draft, tweaking: tweaking, picked: picked, waitingCard: waitingCard, lead: lead)
+        !answerPending && showsRow(draft: draft, tweaking: tweaking, picked: picked, waitingCard: waitingCard, lead: lead)
     }
 
     static func showsRow(draft: String, tweaking: Bool, picked: Bool, waitingCard: Bool, lead: Bool) -> Bool {
@@ -78,7 +79,7 @@ enum ChatShortcuts {
                     router: AppRouter, preview: PreviewController?) async {
         switch chip.action {
         case let .send(text):
-            guard !brain.isThinking else { return }
+            guard !brain.isThinking(in: chat) else { return }
             await brain.send(text, in: chat, store: store)
         case .startProject:
             router.showStartProject = true

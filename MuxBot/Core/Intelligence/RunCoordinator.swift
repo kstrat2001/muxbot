@@ -91,17 +91,26 @@ final class RunCoordinator {
             return
         }
         guard run.phase == .result, !deciding.contains(run.id), let bot = run.bot,
-              let workId = run.darkmuxWorkId, let connection, let token = connection.token else {
+              run.darkmuxWorkId != nil, let connection, let token = connection.token else {
             if connection?.token == nil { decisionErrors[run.id] = "Can't do that yet: \(RunBlocker.unpaired.message)." }
             return
         }
         let thread = store.conversation(for: .bot(bot.id))
         deciding.insert(run.id)
         defer { deciding.remove(run.id) }
+        // Every turn of the run (the run and each Tweak is its own darkmux
+        // commit), newest first.
+        var pending = Array(workIds(for: run).reversed())
+        var restored: [String] = []
         do {
-            let undone: DarkmuxClient.UndoResult
-            if let workUndoer { undone = try await workUndoer(workId) } else { undone = try await connection.client.undoWork(token: token, workId: workId) }
-            store.append(.system, RunResultText.discarded(restored: undone.files, removed: []).replacingOccurrences(of: "Put back", with: "Undone: put back"), to: thread)
+            while let workId = pending.first {
+                let undone: DarkmuxClient.UndoResult
+                if let workUndoer { undone = try await workUndoer(workId) } else { undone = try await connection.client.undoWork(token: token, workId: workId) }
+                restored += undone.files.filter { !restored.contains($0) }
+                pending.removeFirst()
+                forgetWork(workId, for: run)
+            }
+            store.append(.system, RunResultText.discarded(restored: restored, removed: []).replacingOccurrences(of: "Put back", with: "Undone: put back"), to: thread)
             decisionErrors[run.id] = nil
             Task { await self.refreshPreview(for: bot) }
             if run.phase == .result {
@@ -115,12 +124,18 @@ final class RunCoordinator {
             // darkmux restarted and no longer tracks the run; its commit is
             // still in the work copy's history.
             let commit = run.keptCommit.map { " Its commit is \($0)\(run.keptBranch.map { " on \($0)" } ?? "")." } ?? ""
-            decisionErrors[run.id] = "darkmux no longer tracks this run, so it can't undo it from here.\(commit)"
+            decisionErrors[run.id] = Self.partly(restored) + "darkmux no longer tracks this run, so it can't undo it from here.\(commit)"
         } catch let error as DarkmuxClient.ClientError {
-            decisionErrors[run.id] = RunResultText.undoRefusal(error.message, runs: bot.runs ?? [])
+            decisionErrors[run.id] = Self.partly(restored) + RunResultText.undoRefusal(error.message, runs: bot.runs ?? [])
         } catch {
-            decisionErrors[run.id] = "Couldn't undo it: \(error.localizedDescription)"
+            decisionErrors[run.id] = Self.partly(restored) + "Couldn't undo it: \(error.localizedDescription)"
         }
+    }
+
+    /// An Undo that got partway (the latest Tweak undone, an earlier turn
+    /// refused): said first, and the run stays a result.
+    nonisolated static func partly(_ restored: [String]) -> String {
+        restored.isEmpty ? "" : String(localized: "The latest change was undone, but not the earlier one. ")
     }
 
     /// Every darkmux run gets the same working rules after its task, plus
@@ -165,7 +180,11 @@ final class RunCoordinator {
         var backoff = PollBackoff()
         // One follower per run, however often following resumes.
         guard following.insert(run.id).inserted else { return }
-        defer { unreachableRuns.remove(run.id); following.remove(run.id) }
+        defer {
+            unreachableRuns.remove(run.id)
+            following.remove(run.id)
+            slotFreed(store: store)
+        }
         while run.phase == .running, run.darkmuxWorkId == workId {
             try? await Task.sleep(for: .seconds(pollInterval ?? backoff.delay))
             let status: DarkmuxClient.WorkStatus
@@ -183,7 +202,11 @@ final class RunCoordinator {
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
                 // darkmux no longer knows this run (restarted, or it ended long
                 // ago). Nobody stopped it: say what happened.
-                store.apply(.fail(reason: RunResultText.lostTrack, details: nil), to: run)
+                if tweakBases[run.id] != nil {
+                    restoreTweak(run, store: store, saying: RunResultText.lostTrack + " " + String(localized: "The result before the change is unchanged."))
+                } else {
+                    store.apply(.fail(reason: RunResultText.lostTrack, details: nil), to: run)
+                }
                 return
             } catch {
                 // darkmux unreachable: back off, say so after three misses, keep trying.
@@ -193,7 +216,13 @@ final class RunCoordinator {
             }
             switch status.status {
             case "running", "cancelling": continue
-            case "cancelled": store.apply(.stop, to: run); return
+            case "cancelled":
+                if tweakBases[run.id] != nil {
+                    restoreTweak(run, store: store, saying: String(localized: "The change was stopped. The result before it is unchanged."))
+                } else {
+                    store.apply(.stop, to: run)
+                }
+                return
             case "done":
                 await finishRun(run, status: status, store: store)
                 return
@@ -201,6 +230,10 @@ final class RunCoordinator {
                 // An error is a failure, worded from darkmux's code; only
                 // "cancelled" (above) is a stop.
                 let why = RunResultText.failure(code: status.code, error: status.error ?? "", reason: status.reason)
+                if tweakBases[run.id] != nil {
+                    restoreTweak(run, store: store, saying: String(localized: "The change didn't finish: \(why) The result before it is unchanged."))
+                    return
+                }
                 store.apply(.fail(reason: "Didn't finish: \(why)", details: RunResultText.withoutPlumbing(status.error ?? "")), to: run)
                 if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
@@ -213,10 +246,14 @@ final class RunCoordinator {
     func finishRun(_ run: BotRun, status: DarkmuxClient.WorkStatus, store: BotStore) async {
         let report = status.finalAssistant ?? ""
         run.notes = report.isEmpty ? nil : report
-        run.changedFiles = (status.changes?.files ?? []).map { f in
-            "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)"
-        }
-        run.diff = status.changes?.diff
+        // A Tweak's files join the run's (each turn is its own commit, and
+        // Undo reverts them all); a file changed again shows its latest line.
+        let now = (status.changes?.files ?? []).map { f in "\(f.path) +\(f.added ?? 0) −\(f.removed ?? 0)" }
+        let path: (String) -> String = { line in line.components(separatedBy: " +").first ?? line }
+        let newPaths = Set(now.map(path))
+        run.changedFiles = run.changedFiles.filter { !newPaths.contains(path($0)) } + now
+        if let diff = status.changes?.diff { run.diff = diff }
+        tweakBases[run.id] = nil
         // darkmux committed the changes to the work copy's branch. A tweak
         // that ended with nothing new to commit keeps the commit it was built
         // on (Open PR needs it); a commit error replaces any older one.
@@ -225,6 +262,10 @@ final class RunCoordinator {
             run.keptBranch = status.branch
         }
         run.details = status.commitError
+        // darkmux couldn't read what changed: never "changed nothing".
+        if status.changes == nil, let why = status.changesError {
+            run.details = [RunResultText.changesUnreadable + ": " + why, run.details].compactMap { $0 }.joined(separator: "\n")
+        }
         let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
         store.apply(.finish(summary: summary), to: run)
         // Show the change in the preview you have open.
@@ -366,6 +407,11 @@ final class RunCoordinator {
                 say("Couldn't stop it on darkmux: \(FleetConnection.plainError(error))")
                 return
             }
+        }
+        // A Tweak stops back to the result it continued.
+        if tweakBases[run.id] != nil {
+            restoreTweak(run, store: store, saying: String(localized: "Stopped the change. The result before it is unchanged."))
+            return
         }
         // No work id: still being handed to darkmux (the submit sees the stop
         // and cancels it there), or it never got there.
@@ -726,6 +772,7 @@ final class RunCoordinator {
             workCopySetup[bot.id] = nil
             let branch = made.branch.map { $0.isEmpty ? "" : ", branch \($0)" } ?? ""
             store.append(.system, "Work copy ready on \(FleetConnection.machineName)\(branch).", to: store.conversation(for: .bot(bot.id)))
+            if made.fetchError != nil { store.append(.system, Self.staleBase, to: store.conversation(for: .bot(bot.id))) }
             let key = RecipeStore.key(for: bot)
             if let key { recipes.recipes[key] = nil; await recipes.load(for: key, workspace: made.workspace, connection: connection, github: github, useCaseId: bot.useCaseId) }
         } catch {
@@ -767,11 +814,83 @@ final class RunCoordinator {
         }
     }
 
-    // Red-first stubs.
-    func recordWork(_ workId: String, for run: BotRun) {}
-    static let staleBase = "STUB-stale"
-    static let waitingForSlot = "STUB-wait"
-    func slotFreed(store: BotStore) {}
+    /// The darkmux work ids of a run, oldest first: the run and each Tweak
+    /// (its own commit). Kept on this Mac (LocalBotState), never synced.
+    func recordWork(_ workId: String, for run: BotRun) {
+        guard let bot = run.bot else { return }
+        LocalBotState.shared.update(bot.id) { entry in
+            var all = entry.runWorkIds ?? [:]
+            var ids = all[run.id.uuidString] ?? []
+            if !ids.contains(workId) { ids.append(workId) }
+            all[run.id.uuidString] = ids
+            entry.runWorkIds = all
+        }
+    }
+
+    func workIds(for run: BotRun) -> [String] {
+        let kept = run.bot.flatMap { LocalBotState.shared[$0.id]?.runWorkIds?[run.id.uuidString] } ?? []
+        if kept.isEmpty { return run.darkmuxWorkId.map { [$0] } ?? [] }
+        return kept
+    }
+
+    private func forgetWork(_ workId: String, for run: BotRun) {
+        guard let bot = run.bot else { return }
+        LocalBotState.shared.update(bot.id) { entry in
+            entry.runWorkIds?[run.id.uuidString]?.removeAll { $0 == workId }
+        }
+    }
+
+    /// The work copy's base couldn't be fetched (darkmux's fetch_error).
+    static let staleBase = String(localized: "darkmux couldn't get the latest from GitHub, so this work copy may be behind it.")
+    /// darkmux runs two at a time for this app (429 too_many_requests).
+    static let waitingForSlot = String(localized: "Waiting for a free slot: darkmux runs two of this app's runs at a time. It starts when one finishes.")
+
+    /// Runs darkmux had no room for, oldest first, with what to send.
+    private var queued: [(run: BotRun, message: String, continues: String?)] = []
+
+    /// One of this app's runs ended: start the next one waiting for a slot.
+    func slotFreed(store: BotStore) {
+        while let next = queued.first {
+            queued.removeFirst()
+            guard next.run.phase == .running else { continue }
+            _ = startRealRun(next.run, message: next.message, store: store, continues: next.continues)
+            return
+        }
+    }
+
+    /// Runs "Run again with these numbers" is planning (one tap at a time).
+    var rerunning: Set<UUID> = []
+
+    /// A result as it was before a Tweak: put back when the Tweak doesn't
+    /// start, fails or is stopped, so its Undo and Open PR are never lost.
+    struct TweakBase {
+        var summary: String
+        var changedFiles: [String]
+        var diff: String?
+        var keptCommit: String?
+        var keptBranch: String?
+        var details: String?
+        var finishedAt: Date?
+    }
+    private var tweakBases: [UUID: TweakBase] = [:]
+
+    /// Puts a Tweak's run back to the result it continued, saying why.
+    private func restoreTweak(_ run: BotRun, store: BotStore, saying line: String) {
+        guard let base = tweakBases.removeValue(forKey: run.id) else { return }
+        run.summary = base.summary
+        run.changedFiles = base.changedFiles
+        run.diff = base.diff
+        run.keptCommit = base.keptCommit
+        run.keptBranch = base.keptBranch
+        run.details = base.details
+        run.finishedAt = base.finishedAt
+        run.phase = .result
+        if let bot = run.bot {
+            store.append(.system, line, to: store.conversation(for: .bot(bot.id)))
+            store.refreshState(of: bot)
+        }
+        store.save()
+    }
 
     static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
     static let stopElsewhere = String(localized: "Stop it from the Mac it runs on.")
@@ -892,9 +1011,15 @@ final class RunCoordinator {
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 // Stopped while the model was chosen: it never reaches darkmux.
                 guard run.phase == .running else { return }
-                let (workId, profile) = try await submit(role, Self.workBrief(message, recipe: recipes.recipe(for: bot),
-                                                                              skills: BotSkill.relevant(bot.skills, to: run.task)),
-                                                         runProfiles[run.id], workspace, continues)
+                let brief = Self.workBrief(message, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
+                let workId: String, profile: String?
+                do {
+                    (workId, profile) = try await submit(role, brief, runProfiles[run.id], workspace, continues)
+                } catch let error as DarkmuxClient.ClientError where continues != nil && [404, 409].contains(error.status) {
+                    // darkmux won't continue that run (too old, or it restarted):
+                    // the change goes as a fresh run on the same work copy.
+                    (workId, profile) = try await submit(role, brief, runProfiles[run.id], workspace, nil)
+                }
                 // Stopped while it was being submitted: darkmux just started it,
                 // so stop it there too.
                 guard run.phase == .running else {
@@ -902,12 +1027,21 @@ final class RunCoordinator {
                     return
                 }
                 run.darkmuxWorkId = workId
+                recordWork(workId, for: run)
                 starting.remove(run.id)
                 store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
                 await follow(run, workId: workId, store: store)
+            } catch let error as DarkmuxClient.ClientError where error.status == 429 {
+                // darkmux is running two of this app's runs: wait for a slot.
+                queued.append((run, message, continues))
+                store.append(.system, Self.waitingForSlot, to: thread)
             } catch {
                 starting.remove(run.id)
-                store.apply(Self.startFailure(error), to: run)
+                if tweakBases[run.id] != nil {
+                    restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(FleetConnection.plainError(error))). The result before it is unchanged; reply to try again."))
+                } else {
+                    store.apply(Self.startFailure(error), to: run)
+                }
             }
         }
         return true
@@ -1046,7 +1180,10 @@ final class RunCoordinator {
             store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id)))
             return
         }
+        let base = TweakBase(summary: run.summary, changedFiles: run.changedFiles, diff: run.diff, keptCommit: run.keptCommit,
+                             keptBranch: run.keptBranch, details: run.details, finishedAt: run.finishedAt)
         guard store.apply(.tweak, to: run) else { return }
+        tweakBases[run.id] = base
         runChecks[run.id] = nil   // the last done-when result was about the earlier version
         // darkmux keeps a Tweak's changes together with the run it continues.
         let continues = run.darkmuxWorkId

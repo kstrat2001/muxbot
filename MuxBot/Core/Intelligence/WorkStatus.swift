@@ -20,12 +20,17 @@ enum WorkStatus {
     /// Results that have waited this long for Keep or Discard get a nudge.
     static let nudgeAfter: TimeInterval = 24 * 3600
 
+    /// "What's running?", "status?", "what needs me?": questions about the
+    /// work. A request that merely contains "status" or "need me" ("fix the
+    /// status bar") is work, not a status question.
     static func isWorkQuestion(_ lower: String) -> Bool {
         let phrases = ["what's running", "whats running", "what is running", "anything running",
-                       "what needs me", "needs my", "need me", "what's next", "whats next", "what is next",
-                       "what's waiting", "anything waiting", "status", "what's going on", "whats going on",
-                       "catch me up", "where are we"]
-        return phrases.contains { lower.contains($0) }
+                       "what needs me", "what's next", "whats next", "what is next",
+                       "what's waiting", "anything waiting", "what's the status", "whats the status", "what is the status",
+                       "what's going on", "whats going on", "catch me up", "where are we"]
+        if phrases.contains(where: { lower.contains($0) }) { return true }
+        let trimmed = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        return GuideRoute.isQuestion(trimmed) && ["status", "need me", "needs me", "needs my"].contains { trimmed.contains($0) }
     }
 
     /// "7 min", "3 h", "1 day", "4 days".

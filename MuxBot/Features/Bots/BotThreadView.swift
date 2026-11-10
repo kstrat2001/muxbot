@@ -221,7 +221,7 @@ struct BotThreadView: View {
             if context.botId != nil && bot == nil {
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
             } else if let conversation = conversations.first {
-                ChatView(conversation: conversation, isThinking: brain.isThinking)
+                ChatView(conversation: conversation, isThinking: brain.isThinking(in: context))
                     .safeAreaInset(edge: .top) { needsYouBanner }
             } else {
                 ProgressView()
@@ -241,7 +241,7 @@ struct BotThreadView: View {
                     router.focusRunId = first.id
                 } label: {
                     Text(items.count == 1
-                         ? (first.phase == .proposed ? "Waiting for your Approve: \(first.task)" : "\(first.crew.name) has a question: \(first.task)")
+                         ? NeedsYou.bannerLine(for: first)
                          : "\(items.count) things need you")
                         .font(AppFont.footnote(.semibold))
                         .lineLimit(1)

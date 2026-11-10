@@ -21,9 +21,12 @@ enum NeedsYou {
     }
 
     /// The thread's pinned banner, oldest first.
-    // Red-first stub.
+    /// The banner's line for one run: waiting for Approve, changes that
+    /// weren't saved (no checkpoint), or a question.
     @MainActor static func bannerLine(for run: BotRun) -> String {
-        run.phase == .proposed ? "Waiting for your Approve: \(run.task)" : "\(run.crew.name) has a question: \(run.task)"
+        if run.phase == .proposed { return String(localized: "Waiting for your Approve: \(run.task)") }
+        if RunCardState.checkpointProblem(run) != nil { return String(localized: "\(run.crew.name)'s changes weren't saved: \(run.task)") }
+        return String(localized: "\(run.crew.name) has a question: \(run.task)")
     }
 
     static func banner(_ runs: [BotRun], in local: LocalBotState = .shared) -> [BotRun] {

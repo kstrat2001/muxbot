@@ -60,8 +60,9 @@ enum RunResultText {
             .joined(separator: "\n")
     }
 
-    // Red-first stub.
-    static let changesUnreadable = "STUB-changes"
+    /// darkmux couldn't read a run's changes (`changes_error`): never
+    /// "changed nothing".
+    static let changesUnreadable = String(localized: "darkmux couldn't read what changed")
 
     /// darkmux answered 404 for a run it was running: it restarted, or it
     /// ended long ago. Never "Stopped.": nobody stopped it.

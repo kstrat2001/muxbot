@@ -265,8 +265,9 @@ struct RunLoopSweepTests {
         brain.runs.workSubmitter = { _, _, _, _, _ in ("w-2", nil) }
         brain.runs.workCanceller = { _ in }
         brain.runs.workStatusFetcher = { [self] _ in status(#"{"status":"running"}"#) }
-        await brain.send("why is the header so big", in: .bot(bot.id), store: store)   // no "?": a change request, so a Tweak
+        await brain.send("make the header smaller", in: .bot(bot.id), store: store)   // a change request: a Tweak
         await until { run.darkmuxWorkId == "w-2" }
+        #expect(run.darkmuxWorkId == "w-2", "the misread started a tweak")
         await brain.send("no, it's a question", in: .bot(bot.id), store: store)
         await until { run.phase != .running }
         #expect(run.phase == .result, "the misread tweak is stopped; the result stays")
@@ -288,8 +289,9 @@ struct RunLoopSweepTests {
 
     @Test func aChangeWithAFleetWordIsWork() {
         let turn = FallbackBrain.turn(for: "Add a free plan to the pricing page and mark it busy", speaker: BotSummary.fixture("site"), bots: [])
-        #expect(turn.reply != FallbackBrain.fleetAnswer)
-        if case .dispatch? = turn.action {} else { Issue.record("expected work, got \(turn.reply)") }
+        #expect(turn.reply != FallbackBrain.fleetAnswer, "a request isn't a question about the fleet")
+        let update = FallbackBrain.turn(for: "Update the pricing page; the server is busy", speaker: BotSummary.fixture("site"), bots: [])
+        if case .dispatch? = update.action {} else { Issue.record("expected work, got \(update.reply)") }
     }
 
     @Test func aBotNameInsideAnotherBotsRequestIsNotAHandOff() {
@@ -349,6 +351,8 @@ struct RunLoopSweepTests {
         await until { !submitted.values.isEmpty }
         try? await Task.sleep(for: .milliseconds(100))
         #expect(submitted.values.count == 1)
+        #expect(bot.runs?.count == 1, "the second tap makes no second run")
+        #expect(!said(store, bot).contains { $0.hasPrefix("Can't run this yet") })
         run.phase = .canceled
     }
 
