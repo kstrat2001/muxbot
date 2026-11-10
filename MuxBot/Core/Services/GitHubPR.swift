@@ -38,7 +38,8 @@ struct GitHubPR: Sendable {
             switch self {
             case let .cantWrite(repo): String(localized: "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it.")
             case let .branchMoved(branch): String(localized: "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it.")
-            case let .baseMissing(commit): String(localized: "This work builds on a commit GitHub doesn't have (\(String(commit.prefix(7)))), so I couldn't put it there. Push that commit to GitHub, then try again.")
+            // The commit's id stays behind Show details; never an instruction to push.
+            case .baseMissing: String(localized: "This project's work on this Mac builds on a version of the project that GitHub doesn't have yet, so I can't put it on GitHub from here.")
             case .signInExpired: GitHubAuth.expiredMessage
             case let .refused(status): GitHubPlain.sentence(status: status, signedIn: true)
             case let .github(why): String(localized: "GitHub said: \(why)")

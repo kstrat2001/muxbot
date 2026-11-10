@@ -18,8 +18,9 @@ struct GitHubRepoMaker: Sendable {
     }
 
     enum Failure: Error, Equatable, LocalizedError {
-        /// The Mux Bot GitHub App may not create repositories (it needs the
-        /// "Repository creation" permission).
+        /// The Mux Bot GitHub App may not create repositories for this
+        /// account (its "Repository creation" permission, which only the
+        /// App's owner sets; you approve an update when GitHub asks).
         case cantCreate
         /// No free name close to the one asked for.
         case noFreeName(String)
@@ -46,7 +47,7 @@ struct GitHubRepoMaker: Sendable {
         var errorDescription: String? {
             switch self {
             case .cantCreate:
-                String(localized: "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the \u{201C}Repository creation\u{201D} permission, then approve the update.")
+                String(localized: "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off.")
             case let .noFreeName(name):
                 String(localized: "You already have repos named \(name) and the next few after it. Pick another name.")
             case let .template(why):

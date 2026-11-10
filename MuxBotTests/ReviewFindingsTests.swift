@@ -349,3 +349,29 @@ struct ReviewFindingsLocalStateTests {
         #expect(names.isEmpty)
     }
 }
+
+/// 7: failures say what happened, never a technical step to take.
+struct ReviewFindingsCopyTests {
+    private let steps = ["push that commit", "git push", "checkout's remote", "in the app's settings", "permission, then"]
+
+    @Test func gitHubNotHavingTheBaseAsksForNoPush() {
+        let said = GitHubPR.Failure.baseMissing("abc1234def").localizedDescription
+        #expect(said.contains("GitHub doesn't have yet"), "\(said)")
+        #expect(!said.contains("abc1234"), "the commit's id isn't up front: \(said)")
+        for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(said)") }
+    }
+
+    @Test func aMissingDefaultBranchAsksForNoGitStep() {
+        let said = DarkmuxPlain.sentence(DarkmuxClient.ClientError(message: "no origin default branch", status: 409))
+        #expect(said.contains("default branch"), "\(said)")
+        #expect(!said.contains("busy"))
+        for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(said)") }
+    }
+
+    @Test func notBeingAllowedToCreateARepoAsksOnlyWhatYouCanDo() {
+        let said = GitHubRepoMaker.Failure.cantCreate.localizedDescription
+        #expect(said.contains("approve"), "\(said)")
+        #expect(said.contains("Back up to GitHub off"), "\(said)")
+        for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(said)") }
+    }
+}

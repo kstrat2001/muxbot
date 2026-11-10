@@ -526,16 +526,6 @@ final class RunCoordinator {
         #endif
     }
 
-    /// The app can't open pull requests yet (no GitHub sign-in): pass the
-    /// request to the lead bot's thread, honestly, and close the card.
-    func passPRToLead(_ run: BotRun, store: BotStore) {
-        guard let bot = run.bot else { return }
-        let workCopy = bot.workspaceName.map { " Work copy: darkmux workspace \($0) on \(bot.workspaceMachine ?? "this Mac")." } ?? ""
-        store.append(.system, "From \(bot.name): open a pull request for “\(run.task)”.\(workCopy)", to: store.conversation(for: .lead))
-        store.append(.system, "Passed to \(LeadBot.name).", to: store.conversation(for: .bot(bot.id)))
-        store.apply(.skipPR, to: run)
-    }
-
     /// After a relaunch, pick up runs that were still going on darkmux.
     func resumeFollowing(store: BotStore) {
         guard workStatusFetcher != nil || connection?.token != nil else { return }
