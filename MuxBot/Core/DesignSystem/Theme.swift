@@ -13,6 +13,16 @@ extension Color {
     /// Secondary text: the system's secondary label is about 3.4–4:1 in light
     /// mode, under the 4.5:1 text needs; this is at least 4.5:1 on the
     /// window and card backgrounds in both schemes (ContrastTests).
+    /// Green text on a chip or a light card: the darker green in light mode
+    /// (the brand green is about 2:1 there), a touch lighter than the brand
+    /// green in dark (at least 4.5:1 on a dark chip).
+    static let accentTextLightHex = "03613d"
+    static let accentTextDarkHex = "2bc295"
+    #if os(iOS)
+    static let accentText = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: accentTextDarkHex) : UIColor(hex: accentTextLightHex) })
+    #else
+    static let accentText = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: accentTextDarkHex) : NSColor(hex: accentTextLightHex) })
+    #endif
     static let secondaryTextLightHex = "5c5c62"
     static let secondaryTextDarkHex = "a1a1a8"
     #if os(iOS)

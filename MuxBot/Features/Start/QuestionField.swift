@@ -18,10 +18,12 @@ struct QuestionField: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Group {
                 // A name is one line (Return never adds a line break to it).
+                // The question is right above: the field doesn't repeat it as
+                // its placeholder (it's still the field's spoken label).
                 if lines.upperBound <= 1 {
-                    TextField(question.label, text: $text)
+                    TextField(question.label, text: $text, prompt: Text(""))
                 } else {
-                    TextField(question.label, text: $text, axis: .vertical).lineLimit(lines)
+                    TextField(question.label, text: $text, prompt: Text(""), axis: .vertical).lineLimit(lines)
                         #if os(iOS)
                         // An answer goes into the middle of a sentence ("The
                         // book is about a lighthouse…"): no capital first letter.
@@ -39,6 +41,7 @@ struct QuestionField: View {
                         Button(suggestion) { text = PlaybookQuestion.adding(suggestion, to: text) }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .tint(Color.accentText)
                             .accessibilityHint("Adds “\(suggestion)” to your answer")
                     }
                 }

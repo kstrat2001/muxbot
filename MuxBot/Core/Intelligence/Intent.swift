@@ -174,6 +174,16 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         return changeVerbs.contains(verb)
     }
 
+    /// A message that starts with a change ("make the header bigger"),
+    /// politely or not.
+    static func isChangeRequest(_ lower: String) -> Bool {
+        if isPoliteChangeRequest(lower) { return true }
+        let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = text.hasPrefix("please ") ? String(text.dropFirst(7)) : text
+        let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        return changeVerbs.contains(verb)
+    }
+
     /// A message about a picked element that starts with one of these asks
     /// for a change.
     private static let changeVerbs: Set<String> = [
