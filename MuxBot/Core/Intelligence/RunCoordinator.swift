@@ -208,6 +208,28 @@ final class RunCoordinator {
     /// Runs whose darkmux can't be reached right now (the card says so).
     var unreachableRuns: Set<UUID> = []
 
+    /// What a running run is doing besides its turns, as darkmux says it
+    /// (`activity` on its status): the live card says it in plain words.
+    enum RunActivity: String, Equatable, Sendable {
+        case startingModel = "starting_model"
+        case queued
+
+        /// Only while darkmux says the run is running.
+        init?(status: DarkmuxClient.WorkStatus) {
+            guard status.status == "running", let activity = status.activity else { return nil }
+            self.init(rawValue: activity)
+        }
+
+        var line: String {
+            switch self {
+            case .startingModel: String(localized: "Starting the model…")
+            case .queued: String(localized: "Waiting for the model to be free…")
+            }
+        }
+    }
+    /// By run, while it runs here (in memory; cleared when the run ends).
+    var runActivity: [UUID: RunActivity] = [:]
+
     func follow(_ run: BotRun, workId: String, store: BotStore) async {
         var backoff = PollBackoff()
         // One follower per run, however often following resumes.
@@ -218,6 +240,7 @@ final class RunCoordinator {
         var endedOnDarkmux = false
         defer {
             unreachableRuns.remove(run.id)
+            runActivity[run.id] = nil
             following.remove(run.id)
             followed[run.id] = nil
             if endedOnDarkmux { slotFreed(store: store) }
@@ -264,6 +287,8 @@ final class RunCoordinator {
                 if backoff.isUnreachable { unreachableRuns.insert(run.id) }
                 continue
             }
+            let activity = RunActivity(status: status)
+            if runActivity[run.id] != activity { runActivity[run.id] = activity }
             switch status.status {
             case "running", "cancelling": continue
             case "cancelled":
@@ -282,7 +307,7 @@ final class RunCoordinator {
                 endedOnDarkmux = true
                 await finishRun(run, status: status, store: store)
                 return
-            default:
+            case "error":
                 // An error is a failure, worded from darkmux's code; only
                 // "cancelled" (above) is a stop.
                 endedOnDarkmux = true
@@ -300,9 +325,17 @@ final class RunCoordinator {
                 keepLeftBehind(run, status: status, workId: workId, store: store)
                 if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
+            default:
+                // A status this app doesn't know (a newer darkmux): the run
+                // hasn't ended as far as it can tell, so it keeps asking,
+                // never a failure it made up.
+                continue
             }
         }
     }
+
+    /// The statuses darkmux ends a run with (`GET /client/work/{id}`).
+    static let endedStatuses: Set<String> = ["done", "error", "cancelled"]
 
     /// A darkmux run that finished: its report, changes and commit go on the
     /// run, and it becomes the bot's result.
@@ -1394,7 +1427,9 @@ final class RunCoordinator {
                 status = nil
             }
             guard let status else { break }
-            if status.status == "running" || status.status == "cancelling" {
+            // Still going, or a status this app doesn't know: ask again
+            // (only a run darkmux says ended has anything left behind).
+            guard Self.endedStatuses.contains(status.status) else {
                 try? await Task.sleep(for: .seconds(pollInterval ?? 1.5))
                 continue
             }

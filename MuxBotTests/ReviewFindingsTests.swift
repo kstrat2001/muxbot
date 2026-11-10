@@ -97,6 +97,87 @@ struct ReviewFindingsRunTests {
         first.phase = .canceled
         second.phase = .canceled
     }
+
+    // 6: what a running run is doing, and statuses this app doesn't know.
+
+    @Test func theStatusCarriesWhatTheRunIsDoing() {
+        #expect(status(#"{"status":"running","activity":"starting_model","activity_elapsed_ms":1200}"#).activity == "starting_model")
+        #expect(RunCoordinator.RunActivity(status: status(#"{"status":"running","activity":"starting_model"}"#)) == .startingModel)
+        #expect(RunCoordinator.RunActivity(status: status(#"{"status":"running","activity":"queued"}"#)) == .queued)
+        #expect(RunCoordinator.RunActivity(status: status(#"{"status":"running"}"#)) == nil)
+        // A value from a newer darkmux, or one that isn't text: nothing shown, never a failed decode.
+        #expect(RunCoordinator.RunActivity(status: status(#"{"status":"running","activity":"warming_up"}"#)) == nil)
+        #expect(status(#"{"status":"running","activity":7}"#).activity == nil)
+        #expect(RunCoordinator.RunActivity.startingModel.line == "Starting the model…")
+        #expect(RunCoordinator.RunActivity.queued.line == "Waiting for the model to be free…")
+    }
+
+    @Test func theLiveRunKnowsItsActivityUntilItEnds() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, workId: "w-1")
+        let step = Counter()
+        runs.workStatusFetcher = { [self] _ in
+            step.add()
+            switch step.count {
+            case ...3: return status(#"{"status":"running","activity":"starting_model"}"#)
+            case 4...8: return status(#"{"status":"running","activity":"queued"}"#)
+            case 9...12: return status(#"{"status":"running"}"#)
+            default: return status(#"{"status":"done","changes":{"files":[]}}"#)
+            }
+        }
+        var seen: [RunCoordinator.RunActivity?] = []
+        let following = Task { await runs.follow(run, workId: "w-1", store: store) }
+        while run.phase == .running, step.count < 40 {
+            let now = runs.runActivity[run.id]
+            if seen.isEmpty || seen.last! != now { seen.append(now) }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        await following.value
+        #expect(seen.contains(.startingModel) && seen.contains(.queued), "\(seen)")
+        #expect(run.phase == .result)
+        #expect(runs.runActivity[run.id] == nil, "cleared when the run ends")
+        _ = bot
+    }
+
+    @Test func anUnknownStatusKeepsPollingAndIsNeverAFailure() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, workId: "w-1")
+        let step = Counter()
+        runs.workStatusFetcher = { [self] _ in
+            step.add()
+            return step.count < 4 ? status(#"{"status":"finishing_up"}"#) : status(#"{"status":"done","changes":{"files":[]}}"#)
+        }
+        await runs.follow(run, workId: "w-1", store: store)
+        #expect(step.count == 4, "asked again until darkmux said it ended")
+        #expect(run.phase == .result, "\(run.phase)")
+        _ = bot
+    }
+
+    @Test func anErrorIsStillAFailure() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, workId: "w-1")
+        runs.workStatusFetcher = { [self] _ in status(#"{"status":"error","error":"model crashed","reason":"error","code":"dispatch_failed"}"#) }
+        await runs.follow(run, workId: "w-1", store: store)
+        #expect(run.phase == .failed)
+        _ = bot
+    }
+
+    @Test func aStopWaitsThroughAnUnknownStatusForTheRealEnd() async {
+        let (store, bot, runs) = setUp()
+        let run = running(store, bot, runs, workId: "w-1")
+        let step = Counter()
+        runs.workCanceller = { _ in }
+        runs.workStatusFetcher = { [self] _ in
+            step.add()
+            return step.count < 3 ? status(#"{"status":"winding_down"}"#)
+                : status(#"{"status":"cancelled","reason":"cancelled","commit":"c9","branch":"mux/site","files":["a.css"]}"#)
+        }
+        await runs.stop(run, store: store)
+        #expect(run.phase == .canceled)
+        await until { run.keptCommit == "c9" }
+        #expect(run.keptCommit == "c9", "what it left behind is kept once darkmux says it ended")
+        _ = bot
+    }
 }
 
 /// 3: a UI-test launch is isolated like a unit test.

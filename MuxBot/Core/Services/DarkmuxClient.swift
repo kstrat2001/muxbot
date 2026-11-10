@@ -54,7 +54,11 @@ struct DarkmuxClient: Sendable {
         /// What a failed or stopped run left behind (darkmux 5.10 commits
         /// it as the run's own commit): the files, with `commit`/`branch`.
         var leftFiles: [String]?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files; case commitError = "commit_error"; case changesError = "changes_error" }
+        /// While running: what the run is doing besides its turns
+        /// (`starting_model`, `queued`); absent otherwise. Kept as darkmux
+        /// spells it: a value this app doesn't know shows nothing.
+        var activity: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files, activity; case commitError = "commit_error"; case changesError = "changes_error" }
         private struct PathOnly: Decodable { var path: String }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
@@ -68,6 +72,7 @@ struct DarkmuxClient: Sendable {
             commit = try? c.decodeIfPresent(String.self, forKey: .commit)
             branch = try? c.decodeIfPresent(String.self, forKey: .branch)
             commitError = try? c.decodeIfPresent(String.self, forKey: .commitError)
+            activity = try? c.decodeIfPresent(String.self, forKey: .activity)
             if let names = try? c.decodeIfPresent([String].self, forKey: .files) {
                 leftFiles = names
             } else if let files = try? c.decodeIfPresent([PathOnly].self, forKey: .files) {
