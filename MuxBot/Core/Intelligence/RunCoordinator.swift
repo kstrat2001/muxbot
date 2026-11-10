@@ -381,8 +381,10 @@ final class RunCoordinator {
             Task { await post(notice, runId) }
         }
         // A project the app made on GitHub: its committed work is backed up
-        // to the bot's branch there (no PR until you open one).
-        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { await backUp(bot, store: store) }
+        // to the bot's branch there (no PR until you open one). On its own:
+        // the run's slot is free without waiting for GitHub (a bot's pushes
+        // still go one at a time, in order: `oneAtATime`).
+        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
     }
 
     /// A use case's template, from the registry (or the test seam).

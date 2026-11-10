@@ -98,6 +98,36 @@ struct ReviewFindingsRunTests {
         second.phase = .canceled
     }
 
+    // a: a finished run's slot is free before its backup to GitHub is done.
+
+    @Test func theSlotIsFreeBeforeTheBackupFinishes() async {
+        let (store, bot, runs) = setUp()
+        store.addResource(.repo, "https://github.com/kain/site", to: bot)
+        bot.githubStart = GitHubPR.Start(commit: "start1", branch: "main", head: "mux/site")
+        runs.githubToken = { "ghu_abc" }
+        runs.noticePoster = { _, _ in }
+        runs.changesFetcher = { _ in
+            DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
+                                  files: [.init(path: "a.css", mode: "100644", content: "YQo=", deleted: nil)])
+        }
+        let started = Counter(), finished = Counter()
+        runs.prPusher = { _, _, _, _, _ in
+            started.add()
+            try? await Task.sleep(for: .milliseconds(400))
+            finished.add()
+            return GitHubPR.Pushed(commit: "c1")
+        }
+        let run = running(store, bot, runs, workId: "w-1")
+        runs.workStatusFetcher = { [self] _ in
+            status(#"{"status":"done","commit":"c1","branch":"main","changes":{"files":[{"path":"a.css","added":1,"removed":0}]}}"#)
+        }
+        await runs.follow(run, workId: "w-1", store: store)
+        #expect(run.phase == .result)
+        #expect(finished.count == 0, "following ended (and freed the slot) while GitHub was still busy")
+        await until { finished.count == 1 }
+        #expect(started.count == 1 && finished.count == 1, "and the backup still happened")
+    }
+
     // 6: what a running run is doing, and statuses this app doesn't know.
 
     @Test func theStatusCarriesWhatTheRunIsDoing() {
