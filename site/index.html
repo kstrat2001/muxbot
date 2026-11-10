@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mux Bot: build your website with AI that runs on your Mac</title>
+<meta name="description" content="Mux Bot is a free, open-source app for Mac, iPhone and iPad. Start a website or a book from a template and keep improving it by chatting with your bots. The AI runs on your own Apple silicon Mac through darkmux.">
+<meta property="og:title" content="Mux Bot">
+<meta property="og:description" content="Build your website with AI that runs on your Mac.">
+<meta property="og:image" content="https://muxbot.darkmux.com/img/icon-512.png">
+<meta property="og:url" content="https://muxbot.darkmux.com/">
+<link rel="canonical" href="https://muxbot.darkmux.com/">
+<link rel="icon" href="img/icon-64.png">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<style>
+:root{
+  --indigo:#5b5bd6; --indigo-deep:#4343b8; --ink:#1d1f27; --headset:#2b2f3a; --led:#3fdcff;
+  --bg:#f4f4fd; --lav1:#eef0ff; --lav2:#c9cdf5; --panel:#fff; --fg:#1b1d24; --muted:#565b6e; --line:#dcdff0;
+  --night1:#232845; --night2:#12131f; --need:#d6453d; --muzzle:#fff4e8; --go:#3ad07a;
+  --display:"Bricolage Grotesque",ui-rounded,"SF Pro Rounded",system-ui,sans-serif;
+  --body:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 var(--body);-webkit-font-smoothing:antialiased}
+img{max-width:100%;height:auto;display:block}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.02em}
+h1{font-weight:800;font-size:clamp(40px,6.4vw,72px);line-height:1.02}
+h2{font-weight:700;font-size:clamp(30px,4.2vw,46px);line-height:1.08}
+h3{font-weight:700;font-size:20px;line-height:1.2;letter-spacing:-.01em}
+p{margin:0}
+.eyebrow{font:600 13px/1 var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--indigo)}
+.lede{font-size:clamp(18px,2vw,21px);color:var(--muted);max-width:56ch}
+section{padding-block:clamp(56px,9vw,104px)}
+.head{display:grid;gap:14px;margin-bottom:40px;max-width:720px}
+
+/* nav */
+nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--lav1) 82%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font:700 20px var(--display);text-decoration:none;margin-right:auto}
+.brand img{width:34px;height:34px;border-radius:9px}
+nav a.l{font-size:15px;text-decoration:none;color:var(--muted)}
+nav a.l:hover{color:var(--fg)}
+.pill{font:600 13px var(--body);padding:7px 12px;border-radius:99px;background:var(--ink);color:#fff;white-space:nowrap}
+@media (max-width:720px){nav a.l{display:none}}
+
+/* hero */
+.hero{background:linear-gradient(180deg,var(--lav1),var(--lav2));padding-block:clamp(40px,7vw,84px) clamp(56px,8vw,96px);overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero h1 em{font-style:normal;color:var(--indigo)}
+.hero .lede{margin-top:22px;color:#3d4156}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:9px;font:600 16px var(--body);padding:13px 20px;border-radius:14px;text-decoration:none;border:2px solid var(--ink)}
+.btn.soon{background:var(--ink);color:#fff;cursor:default}
+.btn.ghost{background:transparent}
+.btn.ghost:hover{background:#fff}
+.btn svg{width:18px;height:18px}
+.fine{margin-top:16px;font-size:14.5px;color:#4b5068}
+.stage{position:relative;display:grid;justify-items:center}
+.stage .lead{width:min(78%,340px);filter:drop-shadow(0 22px 26px rgba(43,47,90,.28))}
+.stage .side{position:absolute;width:26%;filter:drop-shadow(0 10px 14px rgba(43,47,90,.25))}
+.stage .s1{left:0;top:2%;transform:rotate(-8deg)}
+.stage .s2{right:0;top:8%;transform:rotate(7deg)}
+.thread{width:min(100%,400px);margin-top:-34px;background:var(--panel);border-radius:22px;padding:16px;box-shadow:0 24px 50px rgba(43,47,90,.22);display:grid;gap:10px;font-size:15px;position:relative}
+.bub{justify-self:end;background:var(--indigo);color:#fff;padding:9px 14px;border-radius:18px 18px 4px 18px;max-width:85%}
+.card{border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:10px}
+.card .who{display:flex;gap:8px;align-items:center;font-weight:600;font-size:14px}
+.card .who svg{width:26px;height:26px}
+.card .acts{display:flex;gap:8px}
+.card .acts span{font:600 14px var(--body);padding:7px 16px;border-radius:10px;background:#eceef8}
+.card .acts .ok{background:var(--indigo);color:#fff}
+.card small{color:var(--muted);font-size:13px}
+@media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.stage{max-width:420px;margin-inline:auto}}
+
+/* bots */
+.bots{background:linear-gradient(180deg,var(--night1),var(--night2));color:#eceefa}
+.bots .eyebrow{color:var(--led)}
+.bots .lede{color:#b4b9d3}
+.roster{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.roster button{all:unset;cursor:pointer;display:grid;justify-items:center;gap:6px;padding:14px 6px 12px;border-radius:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);transition:transform .15s,background .15s;font-size:14px;color:#cfd3ea}
+.roster button:hover{transform:translateY(-4px);background:rgba(255,255,255,.1)}
+.roster button:focus-visible{outline:3px solid var(--led);outline-offset:2px}
+.roster svg{width:100%;max-width:104px;height:auto}
+.hint{margin-top:14px;font-size:14.5px;color:#9aa0c0}
+.states{margin-top:44px;display:grid;grid-template-columns:1fr 1.3fr;gap:36px;align-items:center;padding:28px;border-radius:24px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.states p{color:#b4b9d3;margin-top:10px}
+.strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.strip div{display:grid;justify-items:center;gap:6px;font-size:13px;color:#b4b9d3;text-align:center}
+.strip svg{width:100%;max-width:92px;height:auto}
+@media (max-width:860px){.roster{grid-template-columns:repeat(4,minmax(0,1fr))}.states{grid-template-columns:1fr;padding:20px}}
+@media (max-width:480px){.roster{grid-template-columns:repeat(3,minmax(0,1fr))}.roster button:nth-child(n+13){display:none}}
+
+/* features */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.feat{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:24px;display:grid;gap:10px;align-content:start}
+.feat svg{width:64px;height:64px;margin-bottom:4px}
+.feat p{color:var(--muted);font-size:16px}
+.feat.wide{grid-column:span 2;background:var(--indigo);color:#fff;border-color:transparent}
+.feat.wide p{color:#e3e4ff;font-size:17px;max-width:52ch}
+.feat.wide h3{font-size:26px}
+@media (max-width:860px){.grid{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.grid{grid-template-columns:1fr}.feat.wide{grid-column:auto}}
+
+/* templates */
+.tpl{background:#fff;border-block:1px solid var(--line)}
+.themes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.themes figure{margin:0;display:grid;gap:8px}
+.themes img{border-radius:10px;border:1px solid var(--line);box-shadow:0 6px 16px rgba(43,47,90,.08);aspect-ratio:16/10;object-fit:cover;width:100%;transition:transform .2s}
+.themes figure:hover img{transform:scale(1.04)}
+.themes figcaption{font:600 14px var(--body);text-transform:capitalize;color:var(--muted)}
+.book{margin-top:64px;display:grid;grid-template-columns:.8fr 1.2fr;gap:40px;align-items:center}
+.book .txt{display:grid;gap:14px}
+.book .txt p{color:var(--muted)}
+.book .shots{position:relative}
+.book .shots img{border-radius:12px;border:1px solid var(--line);box-shadow:0 14px 34px rgba(43,47,90,.14)}
+.book .shots img+img{position:absolute;width:44%;right:-10px;bottom:-28px}
+@media (max-width:860px){.themes{grid-template-columns:repeat(2,minmax(0,1fr))}.book{grid-template-columns:1fr}.book .shots{margin-bottom:28px}}
+
+.dm{padding-block:clamp(56px,8vw,88px)}
+.dmgrid{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
+.dmcards{display:grid;gap:12px}
+.dmcards div{padding:18px 20px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.dmcards b{font:700 18px var(--display);color:#fff}
+.dmcards p{color:#b4b9d3;font-size:16px;margin-top:4px}
+.btn.light{background:#fff;color:var(--ink);border-color:#fff}
+.btn.line{border-color:rgba(255,255,255,.4);color:#fff}
+.btn.line:hover{background:rgba(255,255,255,.1)}
+@media (max-width:860px){.dmgrid{grid-template-columns:1fr}}
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;counter-reset:s}
+.step{counter-increment:s;padding:24px;border-radius:22px;background:var(--lav1);display:grid;gap:8px;align-content:start}
+.step::before{content:counter(s);font:800 22px var(--display);width:40px;height:40px;border-radius:50%;background:var(--indigo);color:#fff;display:grid;place-items:center;margin-bottom:6px}
+.step p{color:var(--muted);font-size:16px}
+.need{margin-top:28px;padding:22px 24px;border-radius:22px;border:1px dashed #b9bde6;display:grid;gap:8px}
+.need p{color:var(--muted);font-size:16px}
+@media (max-width:760px){.steps{grid-template-columns:1fr}}
+
+/* footer */
+.end{background:linear-gradient(180deg,var(--lav1),var(--lav2));text-align:center}
+.end .wrap{display:grid;justify-items:center;gap:18px}
+.end svg.big{width:150px;height:150px}
+footer{background:var(--night2);color:#9aa0c0;font-size:14.5px;padding-block:28px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
+footer a{color:#cfd3ea;text-decoration:none}
+footer a:hover{text-decoration:underline}
+footer span:first-child{margin-right:auto}
+
+/* character motion */
+.blink{animation:blink 4s infinite;transform-origin:center;transform-box:fill-box}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+.bob{animation:bob 1.2s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-3px)}}
+.dots circle{animation:dot 1.2s infinite}
+.dots circle:nth-child(2){animation-delay:.2s}.dots circle:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.pulse{animation:pulse 1s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+@keyframes pulse{50%{transform:scale(1.12)}}
+.scan{animation:scan 1.4s ease-in-out infinite alternate}
+@keyframes scan{from{transform:translateX(-5px)}to{transform:translateX(5px)}}
+.float{animation:float 5s ease-in-out infinite}
+@keyframes float{50%{translate:0 -8px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="#top"><img src="img/icon-64.png" alt="">Mux Bot</a>
+  <a class="l" href="#bots">Bots</a>
+  <a class="l" href="#features">Features</a>
+  <a class="l" href="#templates">Templates</a>
+  <a class="l" href="#darkmux">darkmux</a>
+  <span class="pill">Coming soon</span>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <div>
+    <p class="eyebrow">For Mac, iPhone and iPad</p>
+    <h1 style="margin-top:14px">Build your website with AI that runs <em>on your Mac</em>.</h1>
+    <p class="lede">Pick a template, name a bot, and tell it what you want. Mux Bot's crew of robot animals builds your site or your book with local AI, and nothing changes until you tap Approve.</p>
+    <div class="cta">
+      <span class="btn soon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.500 2.100-3.600-1.100-1.700-2.900-1.900-3.500-1.900-1.500-.2-2.900.9-3.700.9-.800 0-1.900-.9-3.200-.8-1.600 0-3.100 1-4 2.400-1.700 3-.4 7.300 1.200 9.700.8 1.200 1.800 2.500 3 2.400 1.200 0 1.700-.8 3.100-.8 1.500 0 1.900.8 3.200.8 1.300 0 2.200-1.200 3-2.400.9-1.400 1.300-2.700 1.300-2.800-.100 0-2.500-1-2.500-3.900zM14 5.400c.7-.8 1.100-1.900 1-3-1 0-2.100.6-2.800 1.400-.6.700-1.200 1.900-1 3 1.100.1 2.100-.6 2.800-1.400z"/></svg>Coming soon to the App Store</span>
+      <a class="btn ghost" href="https://github.com/kstrat2001/muxbot">View the source</a>
+    </div>
+    <p class="fine">Free and open source, like <a href="https://darkmux.com">darkmux</a>, the engine underneath. For Apple silicon Macs.</p>
+  </div>
+  <div class="stage">
+    <div class="side s1 float" data-a="1" data-c="#e0732d"></div>
+    <div class="side s2 float" style="animation-delay:-2.5s" data-a="2" data-c="#0e9f8e"></div>
+    <div class="lead" data-a="0" data-c="#5b5bd6"></div>
+    <div class="thread" aria-label="An example conversation with a bot">
+      <div class="bub">Make the opening hours easier to find</div>
+      <div class="card">
+        <div class="who"><span data-a="1" data-c="#e0732d" data-s="needs you"></span>Bakery site</div>
+        <div>Coder will put the hours in the header and repeat them in the footer.</div>
+        <div class="acts"><span class="ok">Approve</span><span>Cancel</span></div>
+        <small>Nothing runs until you approve it.</small>
+      </div>
+    </div>
+  </div>
+</div></header>
+
+<section class="bots" id="bots"><div class="wrap">
+  <div class="head">
+    <p class="eyebrow">Meet the bots</p>
+    <h2>A crew of robot animals at the controls</h2>
+    <p class="lede">Every project gets its own bot with a name you choose. Each one wears a controller's headset and watches through glowing LED eyes. Mux Bot, the octopus, leads the crew with an arm in every job.</p>
+  </div>
+  <div class="roster" id="roster"></div>
+  <p class="hint">Fourteen animals, any color you like. Tap one to try a new look.</p>
+  <div class="states">
+    <div>
+      <h3 style="font-size:26px">You can tell how it's going from across the room</h3>
+      <p>Bots show what they are doing with their eyes and the light on their headset, so you never have to read a status line. Red means a bot is waiting for you.</p>
+    </div>
+    <div class="strip" id="strip"></div>
+  </div>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <div class="head">
+    <p class="eyebrow">What it does</p>
+    <h2>Say what you want. Approve it. See it live.</h2>
+  </div>
+  <div class="grid">
+    <div class="feat wide">
+      <h3>Local AI, on the Mac you already own</h3>
+      <p>The models that write your pages run on your own Apple silicon Mac through darkmux. The app is free, the engine is free, and there is no subscription and no meter running. Your project lives on your Mac.</p>
+    </div>
+    <div class="feat"><span data-a="5" data-c="#e3a12a" data-s="needs you"></span><h3>Only bots act, and only after Approve</h3><p>A bot tells you what it plans to do on a card. You approve it or cancel it. Everything else in the app is there to read.</p></div>
+    <div class="feat"><span data-a="2" data-c="#0e9f8e" data-s="running"></span><h3>Live preview beside the chat</h3><p>Your site runs next to the conversation and refreshes when a bot finishes, on the Mac's window or full screen on iPhone and iPad.</p></div>
+    <div class="feat"><span data-a="4" data-c="#7b5fc7"></span><h3>Point, don't describe</h3><p>Click anything in the preview and choose Chat about this. Your bot knows exactly which heading, button or picture you mean.</p></div>
+    <div class="feat"><span data-a="7" data-c="#c96b9b" data-s="done"></span><h3>One tap to undo</h3><p>Every finished run is saved as a checkpoint. If you don't like a change, Undo takes it back, or just reply to adjust it.</p></div>
+    <div class="feat"><span data-a="3" data-c="#a0703f" data-s="thinking"></span><h3>Bots measure, they don't guess</h3><p>Tell a bot something looks cut off and it measures the page to find out. After a fix it measures again and tells you whether it worked.</p></div>
+    <div class="feat"><span data-a="10" data-c="#2f6fb5"></span><h3>No Terminal, ever</h3><p>The app never asks you to type a command. When something needs setting up it says so in plain words and gives you a button or a guide.</p></div>
+    <div class="feat"><span data-a="9" data-c="#7c8494"></span><h3>Backed up to GitHub, if you want</h3><p>Mux Bot can keep each project in a private repo in your own account and open a pull request when you're ready. Or keep it all on your Mac.</p></div>
+  </div>
+</div></section>
+
+<section class="tpl" id="templates"><div class="wrap">
+  <div class="head">
+    <p class="eyebrow">Templates</p>
+    <h2>Start with something that already looks good</h2>
+    <p class="lede">The website template comes in ten designs. Choose one to begin with and ask your bot to switch whenever you like. Your words and pictures stay put.</p>
+  </div>
+  <div class="themes" id="themes"></div>
+  <div class="book">
+    <div class="txt">
+      <p class="eyebrow">Also new</p>
+      <h2>Write a book</h2>
+      <p>The book template turns a folder of chapters into a real paged book with a cover, facing pages and proper type. A desk view keeps count of your words and the notes page remembers your outline and style choices.</p>
+      <p>Ask your bot to tighten a paragraph or redraft a chapter. Your earlier version is always kept.</p>
+    </div>
+    <div class="shots">
+      <img src="img/book-spread.jpg" alt="The book template showing two facing pages" loading="lazy" width="1200" height="750">
+      <img src="img/book-cover.jpg" alt="The book template's cover" loading="lazy" width="1200" height="750">
+    </div>
+  </div>
+</div></section>
+
+<section class="bots dm" id="darkmux"><div class="wrap">
+  <div class="dmgrid">
+    <div class="head" style="margin:0">
+      <p class="eyebrow">The engine underneath</p>
+      <h2>Powered by darkmux</h2>
+      <p class="lede">darkmux is the free, open-source engine that runs AI models on your Mac. It picks the right model for each job, starts it when a bot needs it and keeps your Mac's memory in check. Mux Bot is the friendly face on top.</p>
+      <div class="cta" style="margin-top:8px">
+        <a class="btn light" href="https://darkmux.com">Explore darkmux</a>
+        <a class="btn line" href="https://evals.darkmux.com">See how local models compare</a>
+      </div>
+    </div>
+    <div class="dmcards">
+      <div><b>New in darkmux 5.10</b><p>Works with Tensorfold and Flint as well as LM Studio, and starts their models for you when a run needs one.</p></div>
+      <div><b>Free and open source, all of it</b><p>Mux Bot, darkmux and the templates are open for anyone to read, use and improve.</p></div>
+      <div><b>Want the details?</b><p>darkmux.com is the home for the technical side: the command line, missions and the lab.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="start"><div class="wrap">
+  <div class="head">
+    <p class="eyebrow">How it works</p>
+    <h2>Three steps to a first version</h2>
+  </div>
+  <div class="steps">
+    <div class="step"><h3>Pick what to make</h3><p>Mux Bot asks "What do you want to get done?" Choose a website, a book, or a project you already have.</p></div>
+    <div class="step"><h3>Answer a few questions</h3><p>Give it a name, say what it's for and how it should feel. A new bot shows up with its own look and a first plan.</p></div>
+    <div class="step"><h3>Approve, look, reply</h3><p>Tap Approve and watch the preview. Then keep talking: every message is a change you can see and undo.</p></div>
+  </div>
+  <div class="need">
+    <h3>What you need</h3>
+    <p>An Apple silicon Mac with <a href="https://darkmux.com">darkmux</a> set up on it. Mux Bot checks your setup and walks you through anything that's missing. Runs start from the Mac app; your bots and conversations sync to iPhone and iPad through iCloud.</p>
+  </div>
+</div></section>
+
+<section class="end"><div class="wrap">
+  <div class="big-holder" data-a="0" data-c="#5b5bd6" data-s="done" data-big></div>
+  <h2>Mux Bot is almost ready</h2>
+  <p class="lede">The app is in its final testing before the App Store. It is MIT licensed, so you can read the code and build it yourself today.</p>
+  <a class="btn ghost" href="https://github.com/kstrat2001/muxbot">Mux Bot on GitHub</a>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Mux Bot is part of the darkmux project.</span>
+  <a href="https://darkmux.com">darkmux</a>
+  <a href="https://evals.darkmux.com">darkmux evals</a>
+  <a href="https://github.com/kstrat2001/muxbot">GitHub</a>
+  <a href="support.html">Support</a>
+  <a href="privacy.html">Privacy</a>
+</div></footer>
+
+<script>
+/* The same character drawing the app uses: one face, the animal changes ears, snout and extras. */
+function animal(c,state,shape,led){
+  const M="var(--muzzle)",K="var(--ink)";
+  let head,extra="",post="",ey=50,my=66;
+  if(shape===0){const t=[22,36,50,64,78].map((x,i)=>`<path d="M${x} 66 q${i%2?4:-4} 12 0 22" stroke="${c}" stroke-width="9" stroke-linecap="round" fill="none"/>`).join("");
+    head=`${t}<ellipse cx="50" cy="46" rx="32" ry="30" fill="${c}"/><circle cx="36" cy="30" r="3" fill="${M}" opacity=".5"/><circle cx="64" cy="26" r="2.2" fill="${M}" opacity=".5"/>`;ey=48;my=62;
+  }else if(shape===1){head=`<path d="M22 40 L28 10 L46 30 Z M78 40 L72 10 L54 30 Z" fill="${c}" stroke="${c}" stroke-width="4" stroke-linejoin="round"/><path d="M29 18 L33 30 L40 31 Z M71 18 L67 30 L60 31 Z" fill="${K}" opacity=".35"/><circle cx="50" cy="54" r="32" fill="${c}"/><path d="M22 58 Q50 50 78 58 Q70 88 50 88 Q30 88 22 58 Z" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="68" rx="4.5" ry="3.2" fill="${K}"/>`;my=74;
+  }else if(shape===2){head=`<circle cx="24" cy="34" r="8" fill="${c}"/><circle cx="76" cy="34" r="8" fill="${c}"/><circle cx="50" cy="56" r="32" fill="${c}"/><ellipse cx="50" cy="70" rx="17" ry="12" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="64" rx="5" ry="3.5" fill="${K}"/><path d="M32 68 h-12 M32 72 l-11 4 M68 68 h12 M68 72 l11 4" stroke="${K}" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>`;my=76;
+  }else if(shape===4){head=`<path d="M22 36 L20 14 L38 28 Z M78 36 L80 14 L62 28 Z" fill="${c}" stroke="${c}" stroke-width="4" stroke-linejoin="round"/><circle cx="50" cy="55" r="32" fill="${c}"/><circle cx="38" cy="50" r="14" fill="${M}"/><circle cx="62" cy="50" r="14" fill="${M}"/><path d="M38 76 q12 8 24 0" fill="none" stroke="${M}" stroke-width="3" opacity=".5"/>`;
+    extra=`<path d="M45 62 L55 62 L50 71 Z" fill="#f2b632" stroke="#f2b632" stroke-width="2" stroke-linejoin="round"/>`;my=999;
+  }else if(shape===5){head=`<path d="M22 42 L26 16 L44 30 Z M78 42 L74 16 L56 30 Z" fill="${c}" stroke="${c}" stroke-width="5" stroke-linejoin="round"/><path d="M28 24 L30 32 L37 31 Z M72 24 L70 32 L63 31 Z" fill="#ff9fb0"/><circle cx="50" cy="56" r="32" fill="${c}"/>`;
+    extra=`<path d="M46 64 h8 l-4 4 Z" fill="#ff8fa0" stroke="#ff8fa0" stroke-width="1.5" stroke-linejoin="round"/><path d="M30 66 h-12 M30 70 l-11 3 M70 66 h12 M70 70 l11 3" stroke="${K}" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>`;my=72;
+  }else if(shape===6){head=`<circle cx="24" cy="30" r="11" fill="${c}"/><circle cx="76" cy="30" r="11" fill="${c}"/><circle cx="24" cy="30" r="5" fill="${M}" opacity=".7"/><circle cx="76" cy="30" r="5" fill="${M}" opacity=".7"/><circle cx="50" cy="56" r="32" fill="${c}"/><ellipse cx="50" cy="70" rx="14" ry="11" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="65" rx="5.5" ry="4" fill="${K}"/>`;my=75;
+  }else if(shape===7){head=`<ellipse cx="38" cy="18" rx="8" ry="20" fill="${c}"/><ellipse cx="62" cy="18" rx="8" ry="20" fill="${c}"/><ellipse cx="38" cy="18" rx="3.5" ry="14" fill="#ff9fb0"/><ellipse cx="62" cy="18" rx="3.5" ry="14" fill="#ff9fb0"/><circle cx="50" cy="57" r="31" fill="${c}"/><ellipse cx="50" cy="71" rx="12" ry="9" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="66" rx="4" ry="3" fill="#ff8fa0"/>`;my=73;
+  }else if(shape===8){head=`<circle cx="24" cy="30" r="11" fill="${c}"/><circle cx="76" cy="30" r="11" fill="${c}"/><circle cx="50" cy="56" r="32" fill="${M}"/><ellipse cx="37" cy="52" rx="13" ry="11" fill="${c}" transform="rotate(-20 37 52)"/><ellipse cx="63" cy="52" rx="13" ry="11" fill="${c}" transform="rotate(20 63 52)"/>`;
+    extra=`<ellipse cx="50" cy="66" rx="5" ry="3.5" fill="${K}"/>`;my=73;
+  }else if(shape===9){head=`<path d="M20 40 L24 16 L42 30 Z M80 40 L76 16 L58 30 Z" fill="${c}" stroke="${c}" stroke-width="6" stroke-linejoin="round"/><circle cx="50" cy="56" r="32" fill="${c}"/><path d="M20 50 Q50 34 80 50 Q76 62 50 58 Q24 62 20 50 Z" fill="${K}" opacity=".55"/><ellipse cx="50" cy="72" rx="14" ry="10" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="66" rx="5" ry="3.5" fill="${K}"/>`;my=76;
+  }else if(shape===10){head=`<circle cx="50" cy="55" r="32" fill="${c}"/><path d="M50 44 C40 30 22 40 26 56 C28 72 40 84 50 84 C60 84 72 72 74 56 C78 40 60 30 50 44 Z" fill="${M}"/>`;
+    extra=`<path d="M44 63 L56 63 L50 70 Z" fill="#f2a032" stroke="#f2a032" stroke-width="2" stroke-linejoin="round"/>`;my=999;
+  }else if(shape===11){head=`<circle cx="36" cy="38" r="15" fill="${c}"/><circle cx="64" cy="38" r="15" fill="${c}"/><ellipse cx="50" cy="62" rx="35" ry="26" fill="${c}"/><circle cx="26" cy="68" r="4" fill="#ff8fa0" opacity=".5"/><circle cx="74" cy="68" r="4" fill="#ff8fa0" opacity=".5"/>`;ey=40;my=72;
+  }else if(shape===12){head=`<circle cx="50" cy="55" r="31" fill="${c}"/><ellipse cx="62" cy="47" rx="12" ry="10" fill="${K}" opacity=".15"/><ellipse cx="50" cy="70" rx="15" ry="11" fill="${M}"/><path d="M45.5 76.5 q0 9 4.5 9 q4.5 0 4.5 -9 Z" fill="#ff8fa0"/>`;
+    extra=`<ellipse cx="50" cy="64" rx="6" ry="4.5" fill="${K}"/>`;my=75;
+    post=`<ellipse cx="27" cy="34" rx="10" ry="17" fill="${c}" transform="rotate(48 27 34)"/><ellipse cx="73" cy="34" rx="10" ry="17" fill="${c}" transform="rotate(-48 73 34)"/><ellipse cx="27" cy="34" rx="10" ry="17" fill="${K}" opacity=".22" transform="rotate(48 27 34)"/><ellipse cx="73" cy="34" rx="10" ry="17" fill="${K}" opacity=".22" transform="rotate(-48 73 34)"/>`;
+  }else if(shape===13){head=`<ellipse cx="84" cy="36" rx="14" ry="24" fill="${c}" transform="rotate(25 84 36)"/><ellipse cx="86" cy="34" rx="6" ry="16" fill="${M}" opacity=".35" transform="rotate(25 86 34)"/><path d="M24 36 L28 10 L42 28 Z M76 36 L72 10 L58 28 Z" fill="${c}" stroke="${c}" stroke-width="5" stroke-linejoin="round"/><circle cx="50" cy="56" r="32" fill="${c}"/><ellipse cx="31" cy="68" rx="8" ry="6" fill="${M}"/><ellipse cx="69" cy="68" rx="8" ry="6" fill="${M}"/><ellipse cx="50" cy="71" rx="10" ry="8" fill="${M}"/>`;
+    extra=`<ellipse cx="50" cy="65" rx="4" ry="3" fill="${K}"/>`;my=74;
+  }else{head=`<circle cx="25" cy="32" r="7" fill="${c}"/><circle cx="75" cy="32" r="7" fill="${c}"/><circle cx="50" cy="55" r="32" fill="${c}"/><ellipse cx="50" cy="68" rx="15" ry="10" fill="${M}"/><rect x="45" y="74" width="10" height="9" rx="2" fill="#fff" stroke="${K}" stroke-width="1.4"/><line x1="50" y1="74" x2="50" y2="83" stroke="${K}" stroke-width="1.2"/>`;
+    extra=`<ellipse cx="50" cy="64" rx="5" ry="3.5" fill="${K}"/>`;my=999;}
+  const cy=shape===0?46:55,H="var(--headset)",mouthY=my<200?my:ey+20;
+  const lamp=state==="needs you"?"var(--need)":(state==="running"||state==="done")?"var(--go)":"#7a8090";
+  head+=`<path d="M13 ${cy} A37 37 0 0 1 87 ${cy}" fill="none" stroke="${H}" stroke-width="5" stroke-linecap="round"/><rect x="8" y="${cy-11}" width="13" height="22" rx="6" fill="${H}"/><rect x="79" y="${cy-11}" width="13" height="22" rx="6" fill="${H}"/><rect x="11" y="${cy-6}" width="3" height="12" rx="1.5" fill="${c}" opacity=".8"/><path d="M16 ${cy+9} Q18 ${mouthY+6} 36 ${mouthY+3}" fill="none" stroke="${H}" stroke-width="3" stroke-linecap="round"/><rect x="34" y="${mouthY-1}" width="9" height="7" rx="3.5" fill="${H}"/><circle cx="85.5" cy="${cy}" r="2.6" fill="${lamp}"/>`+post;
+  const LED=state==="needs you"?"var(--need)":(led||"var(--led)");
+  const plate=x=>`<rect x="${x-10}" y="${ey-9}" width="20" height="18" rx="6" fill="${K}"/><rect x="${x-10}" y="${ey-9}" width="20" height="18" rx="6" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.5"/>`;
+  const eye=(x,dx=0,dy=0,r=5)=>plate(x)+`<rect x="${x+dx-r*.75}" y="${ey+dy-r}" width="${r*1.5}" height="${r*2}" rx="${r*.75}" fill="${LED}"/>`;
+  const smile=my<200?`<path d="M44 ${my} q6 5 12 0" fill="none" stroke="${K}" stroke-width="2.4" stroke-linecap="round"/>`:"";
+  let face,cls="",badge="";
+  switch(state){
+    case"thinking":face=eye(38,2,-2.5)+eye(62,2,-2.5)+(my<200?`<path d="M45 ${my+1} h10" stroke="${K}" stroke-width="2.4" stroke-linecap="round"/>`:"");badge=`<g class="dots" fill="${c}"><circle cx="82" cy="14" r="3"/><circle cx="90" cy="8" r="3.5"/><circle cx="97" cy="3" r="2.5"/></g>`;break;
+    case"running":cls="bob";face=`<g class="scan">`+plate(38)+plate(62)+`<rect x="31" y="${ey-2}" width="14" height="4" rx="2" fill="${LED}"/><rect x="55" y="${ey-2}" width="14" height="4" rx="2" fill="${LED}"/></g>`+smile;break;
+    case"needs you":face=`<g class="pulse">${eye(38,0,0,6)+eye(62,0,0,6)}</g>`+(my<200?`<ellipse cx="50" cy="${my+1}" rx="3.5" ry="4" fill="${K}"/>`:"");badge=`<circle cx="84" cy="16" r="10" fill="var(--need)"/><rect x="82.5" y="9.5" width="3" height="9" rx="1.5" fill="#fff"/><circle cx="84" cy="22" r="1.7" fill="#fff"/>`;break;
+    case"done":face=plate(38)+plate(62)+`<path d="M32 ${ey+3} q6 -9 12 0 M56 ${ey+3} q6 -9 12 0" fill="none" stroke="${LED}" stroke-width="3.2" stroke-linecap="round"/>`+(my<200?`<path d="M42 ${my-1} q8 9 16 0 Z" fill="${K}"/>`:"")+`<circle cx="28" cy="${ey+11}" r="4" fill="#ff8fa0" opacity=".6"/><circle cx="72" cy="${ey+11}" r="4" fill="#ff8fa0" opacity=".6"/>`;break;
+    default:face=`<g class="blink">${eye(38)+eye(62)}</g>`+smile;
+  }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><g class="${cls}">${head}${extra}${face}</g>${badge}</svg>`;
+}
+const ROSTER=[["Octopus","#5b5bd6"],["Fox","#e0732d"],["Otter","#8a5a3c"],["Beaver","#a0703f"],["Owl","#7b5fc7"],["Cat","#e3a12a"],["Bear","#6e4b34"],["Rabbit","#c96b9b"],["Panda","#2b2f3a"],["Raccoon","#7c8494"],["Penguin","#2f6fb5"],["Frog","#3d9a4a"],["Dog","#b07a45"],["Squirrel","#c0652b"]];
+const BODY=["#5b5bd6","#2f6fb5","#0e9f8e","#3d9a4a","#e3a12a","#e0732d","#c96b9b","#7b5fc7","#8a5a3c","#7c8494"];
+const EYES=["#3fdcff","#5cf28a","#ffc23d","#ffffff","#ff7fd0","#b18cff"];
+document.querySelectorAll("[data-a]").forEach(el=>{
+  el.innerHTML=animal(el.dataset.c,el.dataset.s||"idle",+el.dataset.a);
+  if("big" in el.dataset)el.firstChild.setAttribute("class","big");
+});
+const roster=document.getElementById("roster");
+roster.innerHTML=ROSTER.map(([n,c],i)=>`<button type="button" data-i="${i}" aria-label="${n}, tap for a new look">${animal(c,"idle",i)}<span>${n}</span></button>`).join("");
+let turn=0;
+roster.onclick=e=>{const b=e.target.closest("button");if(!b)return;turn++;const i=+b.dataset.i;
+  b.querySelector("svg").outerHTML=animal(BODY[(i*3+turn)%BODY.length],"done",i,EYES[(i+turn)%EYES.length]);};
+document.getElementById("strip").innerHTML=[["idle","Idle"],["thinking","Thinking"],["running","Working"],["needs you","Needs you"],["done","Done"]].map(([s,l])=>`<div>${animal("#5b5bd6",s,0)}<span>${l}</span></div>`).join("");
+document.getElementById("themes").innerHTML="editorial modern bold friendly minimal luxe retro natural terminal playful".split(" ").map(n=>`<figure><img src="img/site-${n}.jpg" alt="The ${n} website design" loading="lazy" width="960" height="600"><figcaption>${n}</figcaption></figure>`).join("");
+</script>
+</body>
+</html>
