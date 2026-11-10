@@ -52,11 +52,13 @@ final class LocalBotState: @unchecked Sendable {
         /// Each Tweak in flight's result before it, by run id: a Tweak that
         /// doesn't make it (after a relaunch too) goes back to it.
         var tweakBases: [String: RunCoordinator.TweakBase]?
+        /// The pairing each run was submitted under (`FleetConnection.pairingId`).
+        var runPairings: [String: String]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
         }
     }
 

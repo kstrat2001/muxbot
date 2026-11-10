@@ -20,6 +20,9 @@ final class FleetConnection {
     @ObservationIgnored private let defaults: UserDefaults
     private static let tokenKey = "darkmux.client.token"
     private static let nameKey = "darkmux.client.name"
+    /// A new id for each pairing: runs remember the one they started under.
+    static let pairingIdKey = "darkmux.client.pairing"
+    var pairingId: String? { defaults.string(forKey: Self.pairingIdKey) }
     private var pairing: Task<Void, Never>?
 
     /// `defaults` holds the paired name (tests pass their own, never the
@@ -84,6 +87,7 @@ final class FleetConnection {
                 }
             } catch is CancellationError {
             } catch {
+                failureDetails = DarkmuxPlain.details(error)
                 state = .failed(Self.plainError(error))
             }
         }
@@ -94,6 +98,7 @@ final class FleetConnection {
 
     /// Keeps the token and tells the app it's paired.
     func completePairing(token: String, name: String) {
+        defaults.set(UUID().uuidString, forKey: Self.pairingIdKey)
         keychain.save(key: Self.tokenKey, value: token)
         cachedToken = .some(token)
         state = .paired(name: name)
@@ -101,6 +106,11 @@ final class FleetConnection {
     }
 
     /// What the pairing screen says when darkmux forgot this app.
+    /// The name darkmux gave this app's pairing.
+    /// What darkmux said when pairing failed, for Show details.
+    var failureDetails: String?
+    var pairedName: String? { if case let .paired(name) = state { name } else { nil } }
+
     static let revokedMessage = String(localized: "darkmux no longer knows this app. Pair again.")
     /// Shows pairing (set by the app).
     var onRevoked: (() -> Void)?
@@ -133,7 +143,11 @@ final class FleetConnection {
            [.cannotConnectToHost, .networkConnectionLost, .timedOut, .cannotFindHost].contains(url.code) {
             return "darkmux isn't answering on this Mac. Start it in Terminal with the command below, then try again."
         }
-        return "Pairing didn't work: \(error.localizedDescription)"
+        // darkmux's own words go behind Show details (`failureDetails`).
+        if let client = error as? DarkmuxClient.ClientError, client.status == 429 {
+            return String(localized: "Pairing didn't work: darkmux has too many pairing requests waiting. Try again in a moment.")
+        }
+        return "Pairing didn't work: \(DarkmuxPlain.sentence(error))"
     }
 
     /// The real home folder (a sandboxed app's NSHomeDirectory is its container).
