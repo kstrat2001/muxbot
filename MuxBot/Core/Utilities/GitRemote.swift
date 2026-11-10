@@ -43,11 +43,7 @@ enum GitRemote {
 
     /// "owner/repo" when `origin` is on GitHub (https or ssh).
     static func originSlug(of folder: URL) -> String? {
-        guard let url = originURL(of: folder) else { return nil }
-        let normalized = url.hasPrefix("git@github.com:")
-            ? "github.com/" + url.dropFirst("git@github.com:".count)
-            : url
-        guard normalized.contains("github.com/") else { return nil }
-        return GitHubIssue.repoSlug(from: normalized)
+        // Only github.com itself (`GitHubIssue.repoPrefixes`), https or ssh.
+        originURL(of: folder).flatMap(GitHubIssue.repoSlug(from:))
     }
 }

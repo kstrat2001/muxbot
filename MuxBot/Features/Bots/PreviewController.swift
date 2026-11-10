@@ -21,6 +21,7 @@ final class PreviewController: PageInspecting {
         let home = HomeBox()
         self.home = home
         page = Self.makePage(relay: relay, home: home)
+        relay.home = home
         relay.onPick = { [weak self] element in self?.received(element) }
         watchForMarks()
     }
@@ -310,11 +311,20 @@ struct PreviewNavigationDecider: WebPage.NavigationDeciding {
 }
 
 /// Receives the page's posted picks (WebKit calls it on the main thread).
+/// A pick counts only when the preview's own page posted it: from the main
+/// frame, on the preview's own site (`HomeBox.url`). An iframe, or a page
+/// from anywhere else, can post to the handler too; those are dropped.
 final class PickRelay: NSObject, WKScriptMessageHandler {
     @MainActor var onPick: ((PickedElement) -> Void)?
+    /// The preview's own address.
+    @MainActor var home: HomeBox?
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         MainActor.assumeIsolated {
+            let frame = message.frameInfo
+            let origin = frame.securityOrigin
+            guard frame.isMainFrame,
+                  PreviewNavigation.isPreviewOrigin(scheme: origin.`protocol`, host: origin.host, port: origin.port, home: home?.url) else { return }
             if let element = BugReport.decodePick(message.body) { onPick?(element) }
         }
     }
@@ -331,6 +341,21 @@ enum PreviewNavigation {
     }
 
     private static func defaultPort(_ url: URL) -> Int { url.scheme?.lowercased() == "https" ? 443 : 80 }
+
+    /// Whether an origin (as WebKit reports a frame's: scheme, host, and a
+    /// port of 0 for the scheme's own) is the preview's own page's.
+    static func isPreviewOrigin(scheme: String, host: String, port: Int, home: URL?) -> Bool {
+        guard let home, let homeScheme = home.scheme?.lowercased() else { return false }
+        let scheme = scheme.lowercased()
+        let web = ["http", "https"]
+        // A page with no site of its own (a data: page) has no host to
+        // compare: its picks count only while no web site is showing.
+        guard web.contains(homeScheme) else { return !web.contains(scheme) && host.isEmpty }
+        guard let homeHost = home.host()?.lowercased() else { return false }
+        let usual = scheme == "https" ? 443 : 80
+        return scheme == homeScheme && host.lowercased() == homeHost
+            && (port == 0 ? usual : port) == (home.port ?? defaultPort(home))
+    }
 }
 
 /// The preview's address, read by its navigation decider.

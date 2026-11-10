@@ -62,10 +62,16 @@ protocol KeyValueBacking: AnyObject {
     func array(forKey key: String) -> [Any]?
     func set(_ value: Any?, forKey key: String)
     func removeObject(forKey key: String)
+    /// Every key it holds (to remove a deleted bot's settings).
+    var storedKeys: [String] { get }
 }
 
-extension UserDefaults: KeyValueBacking {}
-extension NSUbiquitousKeyValueStore: KeyValueBacking {}
+extension UserDefaults: KeyValueBacking {
+    var storedKeys: [String] { Array(dictionaryRepresentation().keys) }
+}
+extension NSUbiquitousKeyValueStore: KeyValueBacking {
+    var storedKeys: [String] { Array(dictionaryRepresentation.keys) }
+}
 
 final class ModelSettingsStore: @unchecked Sendable {
     let backing: any KeyValueBacking
@@ -83,8 +89,11 @@ final class ModelSettingsStore: @unchecked Sendable {
     }
 
     static let shared: ModelSettingsStore = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            return ModelSettingsStore(backing: UserDefaults(suiteName: "muxbot-tests-models") ?? .standard)
+        // Under tests (unit or a UI-test launch): never iCloud, never the
+        // app's own defaults.
+        if TestIsolation.isTesting {
+            let suite = TestIsolation.isUITesting ? nil : UserDefaults(suiteName: "muxbot-tests-models")
+            return ModelSettingsStore(backing: suite ?? TestIsolation.defaults)
         }
         let sync = (Bundle.main.object(forInfoDictionaryKey: "MuxBotCloudSync") as? String) == "YES"
         let kvs = (Bundle.main.object(forInfoDictionaryKey: "MuxBotKeyValueSync") as? String) == "YES"
@@ -137,6 +146,15 @@ final class ModelSettingsStore: @unchecked Sendable {
 
     func setBotMode(_ mode: ModelMode?, bot: UUID, machine: String) {
         if let mode { backing.set(mode.stored, forKey: botKey(bot, machine)) } else { backing.removeObject(forKey: botKey(bot, machine)) }
+        flush()
+    }
+
+    /// A deleted bot's own modes, on every machine.
+    func removeBotModes(bot: UUID) {
+        let prefix = "models.bot.\(bot.uuidString)."
+        let keys = backing.storedKeys.filter { $0.hasPrefix(prefix) }
+        guard !keys.isEmpty else { return }
+        for key in keys { backing.removeObject(forKey: key) }
         flush()
     }
 

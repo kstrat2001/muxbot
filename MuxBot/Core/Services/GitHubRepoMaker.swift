@@ -18,8 +18,9 @@ struct GitHubRepoMaker: Sendable {
     }
 
     enum Failure: Error, Equatable, LocalizedError {
-        /// The Mux Bot GitHub App may not create repositories (it needs the
-        /// "Repository creation" permission).
+        /// The Mux Bot GitHub App may not create repositories for this
+        /// account (its "Repository creation" permission, which only the
+        /// App's owner sets; you approve an update when GitHub asks).
         case cantCreate
         /// No free name close to the one asked for.
         case noFreeName(String)
@@ -46,7 +47,7 @@ struct GitHubRepoMaker: Sendable {
         var errorDescription: String? {
             switch self {
             case .cantCreate:
-                String(localized: "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the \u{201C}Repository creation\u{201D} permission, then approve the update.")
+                String(localized: "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off.")
             case let .noFreeName(name):
                 String(localized: "You already have repos named \(name) and the next few after it. Pick another name.")
             case let .template(why):
@@ -108,27 +109,79 @@ struct GitHubRepoMaker: Sendable {
         return ascii.isEmpty ? "project" : String(ascii.prefix(90))
     }
 
-    /// A repo made from `template` (its "Start from <template>@<commit>"
-    /// commit on the default branch): where the bot's work builds on GitHub,
+    /// A repo made from `template`: where the bot's work builds on GitHub,
     /// and the template commit it started from (the pinned one, or the
-    /// older pin it was made at). nil when the repo has no such commit.
+    /// older pin it was made at). The start is the repo's second commit
+    /// (`fill` puts it on GitHub's own first one) and must say "Start from
+    /// <template>@<commit>": a later commit with that message is never
+    /// taken for it. A commit named there that isn't the current pin counts
+    /// only when it's in the template's own history. nil otherwise.
     func findStart(repo: String, template: TemplateEntry, botName: String) async throws -> (start: GitHubPR.Start, ref: String)? {
         struct Repo: Decodable { var default_branch: String? }
-        struct Commit: Decodable { struct Inner: Decodable { var message: String }; var sha: String; var commit: Inner }
         struct SHA: Decodable { var sha: String }
+        struct Compared: Decodable { var status: String }
         let info: Repo = try await send("GET", "https://api.github.com/repos/\(repo)", nil)
         let branch = info.default_branch ?? "main"
-        let commits: [Commit] = try await send("GET", "https://api.github.com/repos/\(repo)/commits?sha=\(branch)&per_page=100", nil)
         let prefix = "Start from \(template.repo)@"
-        guard let start = commits.first(where: { $0.commit.message.hasPrefix(prefix) }) else { return nil }
-        let short = String(start.commit.message.dropFirst(prefix.count).prefix { $0.isHexDigit })
-        guard !short.isEmpty else { return nil }
-        var ref = template.ref
-        if !template.ref.hasPrefix(short) {
-            let full: SHA = try await send("GET", "https://api.github.com/repos/\(template.repo)/commits/\(short)", nil)
-            ref = full.sha
+        guard let start = try await secondCommit(repo: repo, branch: branch), start.commit.message.hasPrefix(prefix) else { return nil }
+        let short = String(start.commit.message.dropFirst(prefix.count).prefix { $0.isHexDigit }).lowercased()
+        guard short.count >= 7 else { return nil }
+        let found = GitHubPR.Start(commit: start.sha, branch: branch, head: "mux/\(Self.slug(botName))")
+        if template.ref.lowercased().hasPrefix(short) { return (found, template.ref) }
+        // An older pin: only a commit the template's default branch has.
+        let source = "https://api.github.com/repos/\(template.repo)"
+        guard let full: SHA = try await sendOptional("GET", "\(source)/commits/\(short)"),
+              full.sha.lowercased().hasPrefix(short) else { return nil }
+        let templateInfo: Repo = try await send("GET", source, nil)
+        guard let compared: Compared = try await sendOptional("GET", "\(source)/compare/\(full.sha)...\(templateInfo.default_branch ?? "main")"),
+              ["ahead", "identical"].contains(compared.status) else { return nil }
+        return (found, full.sha)
+    }
+
+    struct ListedCommit: Decodable, Sendable {
+        struct Inner: Decodable, Sendable { var message: String }
+        struct Parent: Decodable, Sendable { var sha: String }
+        var sha: String
+        var commit: Inner
+        var parents: [Parent]?
+    }
+
+    /// Pages of 100 followed when GitHub doesn't name the list's last page.
+    static let commitPageCap = 50
+
+    /// The commit on `branch` whose only parent is a first commit of the
+    /// repo. GitHub lists commits newest first, so it's on the list's last
+    /// page (or the one before it); nil when there's none, or more than one.
+    func secondCommit(repo: String, branch: String) async throws -> ListedCommit? {
+        var components = URLComponents(string: "https://api.github.com/repos/\(repo)/commits")
+        components?.queryItems = [URLQueryItem(name: "sha", value: branch), URLQueryItem(name: "per_page", value: "100")]
+        guard let first = components?.string else { return nil }
+        var (commits, link) = try await commitsPage(first)
+        if let last = GitHubAuth.linkedPage(link, rel: "last") {
+            (commits, link) = try await commitsPage(last)
+        } else {
+            var pages = 1
+            while let next = GitHubAuth.linkedPage(link, rel: "next") {
+                guard pages < Self.commitPageCap else { return nil }
+                (commits, link) = try await commitsPage(next)
+                pages += 1
+            }
         }
-        return (GitHubPR.Start(commit: start.sha, branch: branch, head: "mux/\(Self.slug(botName))"), ref)
+        if let found = Self.secondCommit(in: commits) { return found }
+        // The first commit alone on the last page: the start is on the one before.
+        guard let previous = GitHubAuth.linkedPage(link, rel: "prev") else { return nil }
+        let (earlier, _) = try await commitsPage(previous)
+        return Self.secondCommit(in: earlier + commits)
+    }
+
+    private func commitsPage(_ url: String) async throws -> ([ListedCommit], String?) {
+        try await page(url)
+    }
+
+    static func secondCommit(in commits: [ListedCommit]) -> ListedCommit? {
+        let roots = Set(commits.filter { $0.parents?.isEmpty == true }.map(\.sha))
+        let second = commits.filter { $0.parents?.count == 1 && roots.contains($0.parents?.first?.sha ?? "") }
+        return second.count == 1 ? second.first : nil
     }
 
     /// Your login.
@@ -270,9 +323,21 @@ struct GitHubRepoMaker: Sendable {
 
     /// One request; a 401 renews the sign-in once and retries with it.
     private func load(_ method: String, _ url: String, _ body: [String: Any]?) async throws -> (Data, Int) {
+        let (data, status, _) = try await loadLinked(method, url, body)
+        return (data, status)
+    }
+
+    /// One page of a list, with its Link header (the other pages).
+    private func page<T: Decodable>(_ url: String) async throws -> (T, String?) {
+        let (data, status, link) = try await loadLinked("GET", url, nil)
+        guard (200..<300).contains(status) else { throw Failure.refused(status: status, message: Self.reason(data)) }
+        return (try JSONDecoder().decode(T.self, from: data), link)
+    }
+
+    private func loadLinked(_ method: String, _ url: String, _ body: [String: Any]?) async throws -> (Data, Int, String?) {
         let (data, response) = try await session.data(for: try request(method, url, body))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 401 else { return (data, status) }
+        guard status == 401 else { return (data, status, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Link")) }
         let fresh: String
         switch await GitHubSession.renewed() {
         case let .token(token): fresh = token
@@ -283,7 +348,7 @@ struct GitHubRepoMaker: Sendable {
         let (again, retried) = try await session.data(for: try request(method, url, body))
         let second = (retried as? HTTPURLResponse)?.statusCode ?? 0
         if second == 401 { throw Failure.signInExpired }
-        return (again, second)
+        return (again, second, (retried as? HTTPURLResponse)?.value(forHTTPHeaderField: "Link"))
     }
 
     private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?) async throws -> T {

@@ -9,14 +9,6 @@ enum RunEnd: Equatable, Sendable {
 /// Turns darkmux's raw run output into what the chat shows: a short,
 /// friendly line; never plumbing (runtime images, liveness, out-dirs).
 enum RunResultText {
-    /// No GitHub sign-in yet, so the app can't push or open a PR itself.
-    static func prUnavailable(branch: String?) -> String {
-        guard let branch else {
-            return "I can't open pull requests from the app yet: that needs GitHub sign-in, which isn't here. I can pass it to Mux Bot."
-        }
-        return "I can't open pull requests from the app yet (no GitHub sign-in). The change is committed on \(branch) on this Mac: push that branch and open a PR on GitHub, or pass it to Mux Bot."
-    }
-
     /// darkmux refusing an Undo, in plain words: a later run that changed
     /// the same files is named by its task.
     /// A later run (named by darkmux's work id or its commit) that changed
@@ -181,7 +173,7 @@ enum DarkmuxPlain {
         case 409 where client.message.localizedCaseInsensitiveContains("isn't on a branch") || client.message.localizedCaseInsensitiveContains("not on a branch"):
             return String(localized: "The work copy isn't on a branch, so darkmux can't hand over its changes.")
         case 409 where client.message.localizedCaseInsensitiveContains("default branch"):
-            return String(localized: "darkmux couldn't find the repo's default branch on GitHub. Check the checkout's remote, then try again.")
+            return String(localized: "darkmux couldn't find this project's default branch on GitHub, so it can't do that for it yet. Show details has what darkmux said.")
         case 409: return String(localized: "darkmux is busy with that right now. Try again in a moment.")
         case 429: return String(localized: "darkmux is already running two of this app's runs. This one waits for a free slot.")
         case 400..<500: return String(localized: "darkmux didn't accept that. Show details has why.")

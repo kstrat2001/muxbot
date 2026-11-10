@@ -16,7 +16,7 @@ struct TestIsolationTests {
         let before = UserDefaults.standard.string(forKey: "darkmux.client.name")
         let connection = FleetConnection(keychain: keychain, defaults: defaults)
         #expect(connection.isPaired)
-        connection.revoked()
+        connection.revoked(token: "t0ken")
         #expect(defaults.string(forKey: "darkmux.client.name") == nil, "the given defaults lose the name")
         #expect(UserDefaults.standard.string(forKey: "darkmux.client.name") == before, "the app's own are untouched")
     }

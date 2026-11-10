@@ -60,9 +60,4 @@ struct RunEndingTests {
         #expect(bot.state == .ready)
         #expect(RunPhase.failed.next(on: .keep) == nil)
     }
-
-    @Test func prCardNeverClaimsAPullRequestWasOpened() {
-        #expect(!RunResultText.prUnavailable(branch: nil).localizedCaseInsensitiveContains("opened"))
-        #expect(RunResultText.prUnavailable(branch: nil).contains("GitHub"))
-    }
 }

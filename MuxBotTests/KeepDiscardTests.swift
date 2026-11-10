@@ -18,13 +18,6 @@ struct KeepDiscardTextTests {
         #expect(RunResultText.discarded(restored: [], removed: []) == "Nothing had changed.")
     }
 
-    @Test func thePullRequestCardNamesTheBranch() {
-        let text = RunResultText.prUnavailable(branch: "mux/x")
-        #expect(text.contains("mux/x"))
-        #expect(text.contains("push"))
-        #expect(!RunResultText.prUnavailable(branch: nil).contains("mux/"))
-    }
-
     @Test func keepAndDiscardRepliesDecode() throws {
         let kept = try JSONDecoder().decode(DarkmuxClient.KeepResult.self,
             from: Data(#"{"commit":"abc1234","branch":"mux/x","files":["README.md"]}"#.utf8))

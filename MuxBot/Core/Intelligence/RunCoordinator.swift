@@ -208,6 +208,28 @@ final class RunCoordinator {
     /// Runs whose darkmux can't be reached right now (the card says so).
     var unreachableRuns: Set<UUID> = []
 
+    /// What a running run is doing besides its turns, as darkmux says it
+    /// (`activity` on its status): the live card says it in plain words.
+    enum RunActivity: String, Equatable, Sendable {
+        case startingModel = "starting_model"
+        case queued
+
+        /// Only while darkmux says the run is running.
+        init?(status: DarkmuxClient.WorkStatus) {
+            guard status.status == "running", let activity = status.activity else { return nil }
+            self.init(rawValue: activity)
+        }
+
+        var line: String {
+            switch self {
+            case .startingModel: String(localized: "Starting the model…")
+            case .queued: String(localized: "Waiting for the model to be free…")
+            }
+        }
+    }
+    /// By run, while it runs here (in memory; cleared when the run ends).
+    var runActivity: [UUID: RunActivity] = [:]
+
     func follow(_ run: BotRun, workId: String, store: BotStore) async {
         var backoff = PollBackoff()
         // One follower per run, however often following resumes.
@@ -218,6 +240,7 @@ final class RunCoordinator {
         var endedOnDarkmux = false
         defer {
             unreachableRuns.remove(run.id)
+            runActivity[run.id] = nil
             following.remove(run.id)
             followed[run.id] = nil
             if endedOnDarkmux { slotFreed(store: store) }
@@ -264,6 +287,8 @@ final class RunCoordinator {
                 if backoff.isUnreachable { unreachableRuns.insert(run.id) }
                 continue
             }
+            let activity = RunActivity(status: status)
+            if runActivity[run.id] != activity { runActivity[run.id] = activity }
             switch status.status {
             case "running", "cancelling": continue
             case "cancelled":
@@ -282,7 +307,7 @@ final class RunCoordinator {
                 endedOnDarkmux = true
                 await finishRun(run, status: status, store: store)
                 return
-            default:
+            case "error":
                 // An error is a failure, worded from darkmux's code; only
                 // "cancelled" (above) is a stop.
                 endedOnDarkmux = true
@@ -300,9 +325,17 @@ final class RunCoordinator {
                 keepLeftBehind(run, status: status, workId: workId, store: store)
                 if let notice = RunNotice.make(for: run) { await notifier?.post(notice, runId: run.id) }
                 return
+            default:
+                // A status this app doesn't know (a newer darkmux): the run
+                // hasn't ended as far as it can tell, so it keeps asking,
+                // never a failure it made up.
+                continue
             }
         }
     }
+
+    /// The statuses darkmux ends a run with (`GET /client/work/{id}`).
+    static let endedStatuses: Set<String> = ["done", "error", "cancelled"]
 
     /// A darkmux run that finished: its report, changes and commit go on the
     /// run, and it becomes the bot's result.
@@ -348,8 +381,10 @@ final class RunCoordinator {
             Task { await post(notice, runId) }
         }
         // A project the app made on GitHub: its committed work is backed up
-        // to the bot's branch there (no PR until you open one).
-        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { await backUp(bot, store: store) }
+        // to the bot's branch there (no PR until you open one). On its own:
+        // the run's slot is free without waiting for GitHub (a bot's pushes
+        // still go one at a time, in order: `oneAtATime`).
+        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
     }
 
     /// A use case's template, from the registry (or the test seam).
@@ -493,16 +528,6 @@ final class RunCoordinator {
         #endif
     }
 
-    /// The app can't open pull requests yet (no GitHub sign-in): pass the
-    /// request to the lead bot's thread, honestly, and close the card.
-    func passPRToLead(_ run: BotRun, store: BotStore) {
-        guard let bot = run.bot else { return }
-        let workCopy = bot.workspaceName.map { " Work copy: darkmux workspace \($0) on \(bot.workspaceMachine ?? "this Mac")." } ?? ""
-        store.append(.system, "From \(bot.name): open a pull request for “\(run.task)”.\(workCopy)", to: store.conversation(for: .lead))
-        store.append(.system, "Passed to \(LeadBot.name).", to: store.conversation(for: .bot(bot.id)))
-        store.apply(.skipPR, to: run)
-    }
-
     /// After a relaunch, pick up runs that were still going on darkmux.
     func resumeFollowing(store: BotStore) {
         guard workStatusFetcher != nil || connection?.token != nil else { return }
@@ -571,7 +596,10 @@ final class RunCoordinator {
         }
         // Not on darkmux yet (waiting for a slot, or being handed over):
         // nothing to cancel there, and it never starts later.
-        if run.darkmuxWorkId == nil { queued.removeAll { $0.run.id == run.id } }
+        if run.darkmuxWorkId == nil {
+            queued.removeAll { $0.run.id == run.id }
+            saidWaiting.remove(run.id)
+        }
         // A Tweak stops back to the result it continued.
         if tweakBase(run) != nil {
             restoreTweak(run, store: store, saying: String(localized: "Stopped the change. The result before it is unchanged."))
@@ -1210,12 +1238,15 @@ final class RunCoordinator {
 
     /// Runs darkmux had no room for, oldest first, with what to send.
     private var queued: [(run: BotRun, message: String, continues: String?)] = []
+    /// Runs whose thread already says they're waiting for a slot (until
+    /// they start, fail or are stopped).
+    private var saidWaiting: Set<UUID> = []
 
     /// One of this app's runs ended: start the next one waiting for a slot.
     func slotFreed(store: BotStore) {
         while let next = queued.first {
             queued.removeFirst()
-            guard next.run.phase == .running else { continue }
+            guard next.run.phase == .running else { saidWaiting.remove(next.run.id); continue }
             _ = startRealRun(next.run, message: next.message, store: store, continues: next.continues)
             return
         }
@@ -1388,7 +1419,9 @@ final class RunCoordinator {
                 status = nil
             }
             guard let status else { break }
-            if status.status == "running" || status.status == "cancelling" {
+            // Still going, or a status this app doesn't know: ask again
+            // (only a run darkmux says ended has anything left behind).
+            guard Self.endedStatuses.contains(status.status) else {
                 try? await Task.sleep(for: .seconds(pollInterval ?? 1.5))
                 continue
             }
@@ -1525,6 +1558,7 @@ final class RunCoordinator {
                     return
                 }
                 run.darkmuxWorkId = workId
+                saidWaiting.remove(run.id)
                 recordWork(workId, for: run)
                 if let pairing = connection.pairingId { recordPairing(pairing, for: run) }
                 starting.remove(run.id)
@@ -1532,11 +1566,18 @@ final class RunCoordinator {
                 await follow(run, workId: workId, store: store)
             } catch let error as DarkmuxClient.ClientError where error.status == 429 {
                 // darkmux is running two of this app's runs: wait for a slot.
-                queued.append((run, message, continues))
-                store.append(.system, Self.waitingForSlot, to: thread)
+                // Said once per wait: a retry darkmux refuses again is quiet
+                // and keeps its place at the front of the line.
+                if saidWaiting.insert(run.id).inserted {
+                    queued.append((run, message, continues))
+                    store.append(.system, Self.waitingForSlot, to: thread)
+                } else {
+                    queued.insert((run, message, continues), at: 0)
+                }
                 scheduleQueueRetry(store: store)
             } catch {
                 starting.remove(run.id)
+                saidWaiting.remove(run.id)
                 if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(DarkmuxPlain.sentence(error))) The result before it is unchanged; reply to try again."))
                 } else {

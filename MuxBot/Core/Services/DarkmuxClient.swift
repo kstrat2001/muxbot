@@ -5,11 +5,24 @@ import Foundation
 /// darkmux build only.
 struct DarkmuxClient: Sendable {
     var baseURL = URL(string: "http://127.0.0.1:8767")!
-    /// Tests answer here instead of darkmux.
-    var session: URLSession = .shared
+    /// Tests answer here instead of darkmux. Under tests the default never
+    /// reaches the network (`defaultSession`).
+    var session: URLSession = DarkmuxClient.defaultSession
     /// darkmux answered 401 to a call with this app's token: it no longer
-    /// knows this app (the pairing was revoked).
-    var onUnauthorized: (@Sendable () -> Void)?
+    /// knows that token (the pairing was revoked). Called with the token
+    /// that was refused: a late answer about an old one must never undo a
+    /// newer pairing.
+    var onUnauthorized: (@Sendable (_ refused: String) -> Void)?
+
+    /// The app's shared session; under tests (`TestIsolation`) one whose
+    /// every request fails as "can't connect", so a test that forgot its
+    /// stub never reaches a darkmux really running on this Mac.
+    static let defaultSession: URLSession = {
+        guard TestIsolation.isTesting else { return .shared }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [NoNetworkProtocol.self]
+        return URLSession(configuration: config)
+    }()
 
     struct PairStatus: Decodable, Sendable {
         var status: String
@@ -41,7 +54,11 @@ struct DarkmuxClient: Sendable {
         /// What a failed or stopped run left behind (darkmux 5.10 commits
         /// it as the run's own commit): the files, with `commit`/`branch`.
         var leftFiles: [String]?
-        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files; case commitError = "commit_error"; case changesError = "changes_error" }
+        /// While running: what the run is doing besides its turns
+        /// (`starting_model`, `queued`); absent otherwise. Kept as darkmux
+        /// spells it: a value this app doesn't know shows nothing.
+        var activity: String?
+        enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files, activity; case commitError = "commit_error"; case changesError = "changes_error" }
         private struct PathOnly: Decodable { var path: String }
         enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
         init(from decoder: any Decoder) throws {
@@ -55,6 +72,7 @@ struct DarkmuxClient: Sendable {
             commit = try? c.decodeIfPresent(String.self, forKey: .commit)
             branch = try? c.decodeIfPresent(String.self, forKey: .branch)
             commitError = try? c.decodeIfPresent(String.self, forKey: .commitError)
+            activity = try? c.decodeIfPresent(String.self, forKey: .activity)
             if let names = try? c.decodeIfPresent([String].self, forKey: .files) {
                 leftFiles = names
             } else if let files = try? c.decodeIfPresent([PathOnly].self, forKey: .files) {
@@ -158,17 +176,13 @@ struct DarkmuxClient: Sendable {
     /// The preview recipe in a workspace; nil when it has none.
     func recipe(token: String, workspace: String) async throws -> PreviewManifest? {
         struct Reply: Decodable { var recipe: PreviewManifest }
-        var parts = URLComponents(url: baseURL.appending(path: "/client/recipe"), resolvingAgainstBaseURL: false)
-        parts?.queryItems = [URLQueryItem(name: "workspace", value: workspace)]
-        guard let url = parts?.url else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 404 { return nil }
-        guard status == 200 else { throw ClientError(message: "darkmux answered \(status)") }
-        return try JSONDecoder().decode(Reply.self, from: data).recipe
+        do {
+            let data = try await send("GET", "/client/recipe", headers: ["Authorization": "Bearer \(token)"],
+                                      query: [URLQueryItem(name: "workspace", value: workspace)])
+            return try JSONDecoder().decode(Reply.self, from: data).recipe
+        } catch let error as ClientError where error.status == 404 {
+            return nil
+        }
     }
 
     struct Preview: Decodable, Sendable {
@@ -373,6 +387,13 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(WorkStatus.self, from: data)
     }
 
+    /// The token in an `Authorization: Bearer <token>` header.
+    static func bearerToken(_ header: String?) -> String? {
+        guard let header, header.hasPrefix("Bearer ") else { return nil }
+        let token = String(header.dropFirst("Bearer ".count))
+        return token.isEmpty ? nil : token
+    }
+
     private func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
                       headers: [String: String] = [:], query: [URLQueryItem] = [], timeout: TimeInterval = 5) async throws -> Data {
         // The query goes in as query items: in the path, `?` would be encoded.
@@ -388,7 +409,7 @@ struct DarkmuxClient: Sendable {
         }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 401, headers["Authorization"] != nil { onUnauthorized?() }
+        if status == 401, let refused = Self.bearerToken(headers["Authorization"]) { onUnauthorized?(refused) }
         guard (200..<300).contains(status) else {
             let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let detail = body?["error"] as? String
@@ -409,4 +430,15 @@ extension CrewRole {
         case .evalRunner: nil
         }
     }
+}
+
+/// Fails every request as "can't connect": the only protocol of
+/// `DarkmuxClient.defaultSession` under tests.
+final class NoNetworkProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+    }
+    override func stopLoading() {}
 }

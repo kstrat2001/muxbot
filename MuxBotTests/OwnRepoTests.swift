@@ -77,7 +77,9 @@ struct OwnRepoTests {
         await #expect(throws: GitHubRepoMaker.Failure.cantCreate) {
             _ = try await maker().make(name: "tides", isPrivate: true, description: "", from: Self.template)
         }
-        #expect(GitHubRepoMaker.Failure.cantCreate.localizedDescription.contains("Repository creation"))
+        let said = GitHubRepoMaker.Failure.cantCreate.localizedDescription
+        #expect(said.contains("can't create repositories"), "\(said)")
+        #expect(!said.contains("settings"), "never a step only the App's owner can take: \(said)")
     }
 
     @Test func aRepoMadeButNotFilledIsReportedByName() async {

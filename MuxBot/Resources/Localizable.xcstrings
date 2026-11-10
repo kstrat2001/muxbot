@@ -1101,10 +1101,10 @@
     "Mux Bot quit before darkmux started it." : {
 
     },
-    "Mux Bot's GitHub App is installed on %@, but GitHub still refused to let it write there. Check that the App has read and write access to the repo's contents and pull requests, then try again." : {
+    "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off." : {
 
     },
-    "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the “Repository creation” permission, then approve the update." : {
+    "Mux Bot's GitHub App is installed on %@, but GitHub still refused to let it write there. Check that the App has read and write access to the repo's contents and pull requests, then try again." : {
 
     },
     "Mux Bot, your guide" : {
@@ -1732,6 +1732,9 @@
     "Started" : {
 
     },
+    "Starting the model…" : {
+
+    },
     "Starts with its %@ script" : {
 
     },
@@ -1995,6 +1998,9 @@
     "This project's template has no preview" : {
 
     },
+    "This project's work on this Mac builds on a version of the project that GitHub doesn't have yet, so I can't put it on GitHub from here." : {
+
+    },
     "This run is from an earlier pairing with darkmux, so it can't be undone from here." : {
 
     },
@@ -2082,9 +2088,6 @@
     "This template's PLAYBOOK.md is too large." : {
 
     },
-    "This work builds on a commit GitHub doesn't have (%@), so I couldn't put it there. Push that commit to GitHub, then try again." : {
-
-    },
     "This work copy belongs to an earlier pairing with darkmux. Claim it for this app with darkmux's claim command, or set up a new work copy (a new branch; the earlier commits stay on the old one)." : {
 
     },
@@ -2138,6 +2141,9 @@
       }
     },
     "Waiting for a free slot: darkmux runs two of this app's runs at a time. It starts when one finishes." : {
+
+    },
+    "Waiting for the model to be free…" : {
 
     },
     "Waiting for you to approve… code expires in %lld:%@" : {
@@ -2282,7 +2288,7 @@
     "darkmux clones %@. A clone gets no preview: darkmux runs a preview only from your own checkout. You can add yours later with Add folder." : {
 
     },
-    "darkmux couldn't find the repo's default branch on GitHub. Check the checkout's remote, then try again." : {
+    "darkmux couldn't find this project's default branch on GitHub, so it can't do that for it yet. Show details has what darkmux said." : {
 
     },
     "darkmux couldn't free the model for this run." : {

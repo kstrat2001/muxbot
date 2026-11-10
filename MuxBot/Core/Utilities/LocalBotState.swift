@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import Synchronization
 
 /// What a bot has on this machine only: its darkmux workspace and the
@@ -71,12 +72,46 @@ final class LocalBotState: @unchecked Sendable {
     /// `nil` keeps it in memory only (tests).
     init(fileURL: URL?) {
         self.fileURL = fileURL
-        var saved: [String: Entry] = [:]
-        if let fileURL, let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) {
-            saved = decoded
+        entries = Mutex(fileURL.map(Self.read) ?? [:])
+    }
+
+    private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "local-state")
+
+    /// One bot's entry, or nothing when it can't be read: a bad entry costs
+    /// only itself, never the others.
+    private struct Lossy: Decodable {
+        var entry: Entry?
+        init(from decoder: any Decoder) throws { entry = try? Entry(from: decoder) }
+    }
+
+    /// The file's entries. One that can't be read is left out (and said in
+    /// the log). A file that isn't this state at all is moved aside next to
+    /// itself, never deleted, so the next save doesn't write over it.
+    static func read(_ fileURL: URL) -> [String: Entry] {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [:] }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let decoded = try JSONDecoder().decode([String: Lossy].self, from: data)
+            let bad = decoded.filter { $0.value.entry == nil }.keys.sorted()
+            if !bad.isEmpty { log.error("local-bots.json: \(bad.count) entries couldn't be read and were left out: \(bad.joined(separator: ", "), privacy: .public)") }
+            return decoded.compactMapValues(\.entry)
+        } catch {
+            let aside = unreadableURL(for: fileURL, at: Date())
+            do {
+                try FileManager.default.moveItem(at: fileURL, to: aside)
+                log.error("local-bots.json couldn't be read (\(error.localizedDescription, privacy: .public)); kept as \(aside.lastPathComponent, privacy: .public)")
+            } catch let moveError {
+                log.error("local-bots.json couldn't be read (\(error.localizedDescription, privacy: .public)) or moved aside (\(moveError.localizedDescription, privacy: .public))")
+            }
+            return [:]
         }
-        entries = Mutex(saved)
+    }
+
+    /// `local-bots.json.unreadable-<timestamp>`, beside the file.
+    static func unreadableURL(for fileURL: URL, at date: Date) -> URL {
+        let stamp = date.formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true))
+            .replacingOccurrences(of: ":", with: "")
+        return fileURL.deletingLastPathComponent().appendingPathComponent("\(fileURL.lastPathComponent).unreadable-\(stamp)")
     }
 
     /// What views observe: any entry changing.
@@ -85,7 +120,7 @@ final class LocalBotState: @unchecked Sendable {
     /// The app's own: Application Support/MuxBot/local-bots.json, or in
     /// memory under tests so they never touch the real file.
     static let shared: LocalBotState = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return LocalBotState(fileURL: nil) }
+        if TestIsolation.isTesting { return LocalBotState(fileURL: nil) }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = support.appendingPathComponent("MuxBot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -115,7 +150,11 @@ final class LocalBotState: @unchecked Sendable {
     }
 
     private func save(_ all: [String: Entry]) {
-        guard let fileURL, let data = try? JSONEncoder().encode(all) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        guard let fileURL else { return }
+        do {
+            try JSONEncoder().encode(all).write(to: fileURL, options: .atomic)
+        } catch {
+            Self.log.error("local-bots.json couldn't be saved: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

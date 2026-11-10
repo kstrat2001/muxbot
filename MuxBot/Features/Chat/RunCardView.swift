@@ -127,6 +127,11 @@ struct RunCardView: View {
             if isLatest && brain.runs.unreachableRuns.contains(run.id) {
                 Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
                     .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
+            } else if isLatest, run.phase == .running, let activity = brain.runs.runActivity[run.id] {
+                // The model is loading, or busy with another run: said, so a
+                // slow start doesn't look stuck.
+                Label(activity.line, systemImage: activity == .queued ? "hourglass" : "cpu")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             leftBehindUndo(run)
