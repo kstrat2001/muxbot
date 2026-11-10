@@ -63,6 +63,15 @@ struct LivePreview: Equatable, Sendable {
         case noRecipe
         /// This app isn't paired with darkmux (or darkmux forgot it).
         case notPaired
+        /// darkmux isn't answering on this Mac (not running).
+        case notAnswering
+        /// The template this project came from has no preview recipe.
+        case templateNoRecipe
+        /// A template project made by an older darkmux, which can't preview it.
+        case remakeProject
+        /// Your checkout moved or was deleted: darkmux's workspace is no
+        /// longer a worktree of it.
+        case checkoutMoved
 
         /// The command that turns previews on (run by you: the app can't).
         static let enableCommand = "darkmux config set clients.preview.enabled true"
@@ -73,6 +82,10 @@ struct LivePreview: Equatable, Sendable {
             case .notYourCheckout: String(localized: "No checkout of yours to preview")
             case .newProject: String(localized: "No preview for new projects yet")
             case .notPaired: String(localized: "Mux Bot isn't paired with darkmux")
+            case .notAnswering: String(localized: "darkmux isn't answering on this Mac")
+            case .templateNoRecipe: String(localized: "This project's template has no preview")
+            case .remakeProject: String(localized: "This project can't be previewed")
+            case .checkoutMoved: String(localized: "Your checkout moved")
             case .noRecipe: String(localized: "This project has no preview setup")
             }
         }
@@ -89,6 +102,14 @@ struct LivePreview: Equatable, Sendable {
                 return String(localized: "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update.")
             case .notPaired:
                 return String(localized: "Pair Mux Bot with darkmux on this Mac to see the preview.")
+            case .notAnswering:
+                return String(localized: "darkmux's app connection isn't running. Start it in Terminal, then try again:")
+            case .templateNoRecipe:
+                return String(localized: "The template this project was made from has no preview settings, so darkmux can't run a preview for it.")
+            case .remakeProject:
+                return String(localized: "It was made by an older darkmux, which didn't keep what a preview needs. Start the project again from its template to get a preview.")
+            case .checkoutMoved:
+                return String(localized: "darkmux's copy of \(repo) is no longer linked to your checkout (it moved, or was deleted). Add your checkout again.")
             case .noRecipe:
                 let folder = folder ?? String(localized: "your checkout")
                 return String(localized: "darkmux starts a preview from .darkmux/preview.json in \(folder), and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again.")
@@ -98,6 +119,20 @@ struct LivePreview: Equatable, Sendable {
         /// darkmux's refusal of a preview start or status, as a reason; nil
         /// for any other error. darkmux answers in words, so this matches
         /// its status code and the start of its sentence.
+        /// darkmux's `code` decides (client_pairing/client_workspace); its
+        /// wording is only the fallback for an older darkmux without codes.
+        static func from(status: Int, message: String, template: Bool, code: String?) -> Unavailable? {
+            switch code {
+            case "preview_disabled": return .previewsOff
+            case "template_no_recipe": return .templateNoRecipe
+            case "no_recipe": return .noRecipe
+            case "no_source_checkout":
+                if message.lowercased().contains("no longer a worktree") { return .checkoutMoved }
+                return template ? .remakeProject : .notYourCheckout
+            default: return from(status: status, message: message, template: template)
+            }
+        }
+
         static func from(status: Int, message: String, template: Bool) -> Unavailable? {
             let m = message.lowercased()
             switch status {
@@ -121,6 +156,14 @@ struct PreviewFailure: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         /// The project needs a newer Node than the preview has.
         case nodeTooOld
+        /// Docker (darkmux runs previews in a container) isn't running.
+        case docker
+        /// The preview's container didn't start.
+        case containerFailed
+        /// The dev server listens only on 127.0.0.1 inside its container.
+        case loopbackOnly
+        /// The dev server never answered on its port.
+        case notAnswering
         /// Installing the project's packages didn't work.
         case installFailed
         /// Something else was using the preview's port.
@@ -143,14 +186,27 @@ struct PreviewFailure: Equatable, Sendable {
         details = log.isEmpty ? reason : reason + "\n\n" + log
         // The cause before its symptoms: a Node too old for the project makes
         // npm skip packages, which then can't be found.
-        kind = if all.contains("ebadengine") || all.contains("unsupported engine") || all.contains("requires node") {
+        // darkmux's own reasons first (client_preview.rs), then the server's output.
+        kind = if all.contains("requires docker") || all.contains("docker isn't running") || all.contains("docker is not running")
+                    || all.contains("cannot connect to the docker daemon") {
+            .docker
+        } else if all.contains("container did not start") {
+            .containerFailed
+        } else if all.contains("container stopped itself") {
+            .serverStopped
+        } else if all.contains("listens on 127.0.0.1") || all.contains("bind 0.0.0.0") {
+            .loopbackOnly
+        } else if all.contains("didn't answer on port") {
+            .notAnswering
+        } else if all.contains("ebadengine") || all.contains("unsupported engine") || all.contains("requires node") {
             .nodeTooOld
         } else if all.contains("eaddrinuse") || all.contains("address already in use") {
             .portInUse
         } else if all.contains("preview.json") || all.contains("schema_version") {
             .settings
         } else if all.contains("cannot find module") || all.contains("native binding") || all.contains("npm err")
-                    || all.contains("npm error") || all.contains("install failed") {
+                    || all.contains("npm error") || all.contains("install failed")
+                    || (all.contains("install (") && all.contains("exited")) {
             .installFailed
         } else if all.contains("didn't start within") {
             .tooSlow
@@ -172,7 +228,12 @@ struct PreviewFailure: Equatable, Sendable {
     var headline: String { String(localized: "The preview couldn't start.") }
 
     /// One plain sentence on what happened and what to do.
-    var explanation: String {
+    var explanation: String { explanation(template: false) }
+
+    /// For a template project the recipe is the template's (its first
+    /// commit); otherwise it's the one in your own checkout. Never the
+    /// bot's copy: darkmux doesn't read that.
+    func explanation(template: Bool) -> String {
         switch kind {
         case .nodeTooOld:
             String(localized: "This project needs a newer version of Node than the preview has. darkmux needs an update for it.")
@@ -181,11 +242,21 @@ struct PreviewFailure: Equatable, Sendable {
         case .portInUse:
             String(localized: "Another program was using the preview's port. Try again.")
         case .settings:
-            String(localized: "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them.")
+            template
+                ? String(localized: "The template's preview settings aren't in a form darkmux can use, so this project's preview can't start until the template is fixed.")
+                : String(localized: "The preview settings file in your checkout isn't in a form darkmux can use. Fix it in your checkout (darkmux never reads the bot's copy), then try again.")
         case .tooSlow:
             String(localized: "The preview took too long to start. Try again.")
         case .serverStopped:
             String(localized: "The project's own server stopped right after it started. Ask the bot to look at it, or try again.")
+        case .docker:
+            String(localized: "darkmux runs previews in a container, and Docker isn't running on this Mac. Open Docker, then try again.")
+        case .containerFailed:
+            String(localized: "The preview's container didn't start. Try again; if it keeps happening, restart Docker.")
+        case .loopbackOnly:
+            String(localized: "The project's server only listens inside its container. It needs to listen on 0.0.0.0 (set HOST in the preview settings).")
+        case .notAnswering:
+            String(localized: "The project's server started but never answered. Try again, or ask the bot to look at its dev script.")
         case .other:
             String(localized: "Something went wrong while starting it. Try again.")
         }

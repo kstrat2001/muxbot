@@ -112,7 +112,7 @@ struct RunCardView: View {
                             Button("Keep running", role: .cancel) {}
                         }
                 }
-                if run.bot?.previewURL != nil {
+                if let bot = run.bot, brain.runs.canPreview(bot) {
                     Button("Live", systemImage: "play.rectangle") { router.showPreview = true }
                 }
             }
@@ -308,6 +308,13 @@ struct RunCardView: View {
         if brain.runs.checking.contains(run.id) {
             Label("Checking the done-when in the preview…", systemImage: "ruler")
                 .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+        } else if brain.runs.runChecks[run.id] == nil, let problem = brain.runs.checkProblems[run.id] {
+            // Never silent: it checks by itself once the preview is running.
+            HStack {
+                Label(problem, systemImage: "ruler").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Spacer()
+                Button("Check again") { Task { await brain.runs.check(run) } }.buttonStyle(.bordered)
+            }
         } else if let check = brain.runs.runChecks[run.id] {
             if check.met {
                 Label("Done when: met (measured in the preview)", systemImage: "checkmark.seal.fill")

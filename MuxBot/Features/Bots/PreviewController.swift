@@ -1,5 +1,10 @@
 import Foundation
 import WebKit
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Owns the preview's web page so bots can read facts from it and take a
 /// snapshot, while the panel shows it.
@@ -13,22 +18,26 @@ final class PreviewController: PageInspecting {
     private(set) var botId: UUID?
 
     init() {
-        page = Self.makePage(relay: relay)
+        let home = HomeBox()
+        self.home = home
+        page = Self.makePage(relay: relay, home: home)
         relay.onPick = { [weak self] element in self?.received(element) }
         watchForMarks()
     }
+    /// The preview's own address, for the navigation decider.
+    private let home: HomeBox
 
     /// A page with the app's scripts: picks are posted to the app the moment
     /// they happen, and the selection menu is installed on every load. Back
     /// and forward are refused (a key or swipe must never bring back an
     /// older page, or a stopped preview's cached one).
-    private static func makePage(relay: PickRelay) -> WebPage {
+    private static func makePage(relay: PickRelay, home: HomeBox) -> WebPage {
         var config = WebPage.Configuration()
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: BugReport.pageScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         scripts.add(relay, name: BugReport.handlerName)
         config.userContentController = scripts
-        return WebPage(configuration: config, navigationDecider: NoBackForward())
+        return WebPage(configuration: config, navigationDecider: PreviewNavigationDecider(home: home))
     }
 
     /// Shows `url` as `bot`'s preview. Another bot's preview gets a fresh
@@ -40,8 +49,10 @@ final class PreviewController: PageInspecting {
             picked = nil
             pickedCrop = nil
             loadedURL = nil
-            page = Self.makePage(relay: relay)
+            page = Self.makePage(relay: relay, home: home)
             watchForMarks()
+            // A pick asked for this bot (its chip) waits for its page.
+            if pickRequestedFor == bot { isPicking = true }
         }
         show(url)
     }
@@ -56,8 +67,14 @@ final class PreviewController: PageInspecting {
             do {
                 for try await event in page.navigations where event == .finished {
                     guard !Task.isCancelled else { return }
-                    guard let self, self.page === page, let picked = self.picked else { continue }
-                    await self.mark(picked)
+                    guard let self, self.page === page else { continue }
+                    // Pick mode survives a load (a reload, HMR, the first load
+                    // after the chip): its script is put back on the new page.
+                    if self.isPicking {
+                        self.pickRequestedFor = nil
+                        _ = try? await page.callJavaScript(BugReport.pickerScript)
+                    }
+                    if let picked = self.picked { await self.mark(picked) }
                 }
             } catch {}
         }
@@ -79,8 +96,29 @@ final class PreviewController: PageInspecting {
     /// that show it; every copy is made at this scale.
     var displayScale: CGFloat = 2
 
+    /// Back to the preview's own page (Reload / Home): loads it again even
+    /// when it's the same address, after a broken page or a link elsewhere.
+    func goHome() {
+        guard let loadedURL else { return }
+        _ = page.load(URLRequest(url: loadedURL))
+    }
+
+    /// The bot whose chip asked for Pick before its page was there.
+    private var pickRequestedFor: UUID?
+
+    /// Pick from the chip: on as soon as `bot`'s page has loaded (now, if it
+    /// already has).
+    func startPicking(for bot: UUID?) {
+        pickRequestedFor = bot
+        isPicking = true
+        guard loadedURL != nil, botId == bot, !page.isLoading else { return }
+        pickRequestedFor = nil
+        Task { _ = try? await page.callJavaScript(BugReport.pickerScript) }
+    }
+
     func togglePicking() {
         isPicking.toggle()
+        if !isPicking { pickRequestedFor = nil }
         Task { _ = try? await page.callJavaScript(isPicking ? BugReport.pickerScript : BugReport.cancelPickScript) }
     }
 
@@ -109,6 +147,7 @@ final class PreviewController: PageInspecting {
     func show(_ url: URL) {
         guard loadedURL != url else { return }
         loadedURL = url
+        home.url = url
         _ = page.load(URLRequest(url: url))
         #if DEBUG
         // `-checkPagePick YES`: once loaded, pick the first heading from inside
@@ -200,9 +239,22 @@ final class PreviewController: PageInspecting {
 
 /// Refuses back and forward navigations in the preview (Delete, a swipe,
 /// a menu): the preview always shows the bot's current page.
-struct NoBackForward: WebPage.NavigationDeciding {
+struct PreviewNavigationDecider: WebPage.NavigationDeciding {
+    let home: HomeBox
+
     func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
-        action.navigationType == .backForward ? .cancel : .allow
+        if action.navigationType == .backForward { return .cancel }
+        // A link to another site opens in the browser; the preview stays put.
+        if action.navigationType == .linkActivated, let url = action.request.url, let base = home.url,
+           PreviewNavigation.opensElsewhere(url, home: base) {
+            #if os(macOS)
+            NSWorkspace.shared.open(url)
+            #else
+            await UIApplication.shared.open(url)
+            #endif
+            return .cancel
+        }
+        return .allow
     }
 
     func decidePolicy(for response: WebPage.NavigationResponse) async -> WKNavigationResponsePolicy { .allow }
@@ -217,4 +269,22 @@ final class PickRelay: NSObject, WKScriptMessageHandler {
             if let element = BugReport.decodePick(message.body) { onPick?(element) }
         }
     }
+}
+
+/// Where a link in the preview goes.
+enum PreviewNavigation {
+    /// A web address on another site (scheme, host or port) than the
+    /// preview's: it opens in the browser, never inside the preview.
+    static func opensElsewhere(_ url: URL, home: URL) -> Bool {
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        return url.scheme?.lowercased() != home.scheme?.lowercased() || url.host()?.lowercased() != home.host()?.lowercased()
+            || (url.port ?? defaultPort(url)) != (home.port ?? defaultPort(home))
+    }
+
+    private static func defaultPort(_ url: URL) -> Int { url.scheme?.lowercased() == "https" ? 443 : 80 }
+}
+
+/// The preview's address, read by its navigation decider.
+@MainActor final class HomeBox {
+    var url: URL?
 }
