@@ -469,7 +469,11 @@ struct ReviewFindingsPreviewTests {
         #expect(!PreviewNavigation.isPreviewOrigin(scheme: "http", host: "127.0.0.1", port: 5000, home: nil), "no preview, no pick")
         // An opaque origin (a sandboxed frame, about:blank, a data: page).
         #expect(!PreviewNavigation.isPreviewOrigin(scheme: "", host: "", port: 0, home: home))
-        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "about", host: "", port: 0, home: URL(string: "about:blank")!))
+        // A page with no site of its own picks only while no web site shows.
+        let dataPage = URL(string: "data:text/html;base64,PHA+")!
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "", host: "", port: 0, home: dataPage))
+        #expect(PreviewNavigation.isPreviewOrigin(scheme: "data", host: "", port: 0, home: dataPage))
+        #expect(!PreviewNavigation.isPreviewOrigin(scheme: "https", host: "evil.example", port: 0, home: dataPage))
     }
 
     @Test func webKitsPortZeroIsTheSchemesOwn() {

@@ -345,9 +345,13 @@ enum PreviewNavigation {
     /// Whether an origin (as WebKit reports a frame's: scheme, host, and a
     /// port of 0 for the scheme's own) is the preview's own page's.
     static func isPreviewOrigin(scheme: String, host: String, port: Int, home: URL?) -> Bool {
-        guard let home, let homeScheme = home.scheme?.lowercased(), let homeHost = home.host()?.lowercased(),
-              ["http", "https"].contains(homeScheme) else { return false }
+        guard let home, let homeScheme = home.scheme?.lowercased() else { return false }
         let scheme = scheme.lowercased()
+        let web = ["http", "https"]
+        // A page with no site of its own (a data: page) has no host to
+        // compare: its picks count only while no web site is showing.
+        guard web.contains(homeScheme) else { return !web.contains(scheme) && host.isEmpty }
+        guard let homeHost = home.host()?.lowercased() else { return false }
         let usual = scheme == "https" ? 443 : 80
         return scheme == homeScheme && host.lowercased() == homeHost
             && (port == 0 ? usual : port) == (home.port ?? defaultPort(home))
