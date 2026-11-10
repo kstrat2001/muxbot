@@ -83,7 +83,7 @@ struct TemplateSchema2Tests {
         for id in ["website", "book"] {
             let files = try #require(TemplateRegistry.bundledFiles(for: id))
             let playbook = try #require(TemplateRegistry.check(playbook: files.playbook, preview: files.preview).playbook, "\(id) is ready")
-            #expect(playbook.schema == 2)
+            #expect(playbook.schema >= 2, "schema 2 or later (the website is 3)")
             #expect(playbook.hints.pageFile != nil)
             #expect(playbook.hints.conventions != nil)
             let recipe = try #require(try JSONSerialization.jsonObject(with: files.preview) as? [String: Any])
