@@ -248,7 +248,7 @@ struct BotInfoView: View {
             _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), pr: GitHubPR(token: token),
                                           store: BotStore(context: context), runs: brain.runs)
         } catch {
-            putProblem = error.localizedDescription
+            putProblem = PutOnGitHub.problem(error)
         }
     }
 
