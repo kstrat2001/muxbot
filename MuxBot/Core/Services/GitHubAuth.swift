@@ -21,6 +21,11 @@ final class GitHubAuth {
     }
 
     nonisolated static let tokenKey = "github.user.token"
+    /// The refresh token GitHub gives with an expiring sign-in.
+    nonisolated static let refreshKey = "github.user.refresh"
+    /// What you see when GitHub no longer takes the sign-in and it can't be
+    /// renewed: you're signed out, with Sign in with GitHub next to it.
+    nonisolated static let expiredMessage = String(localized: "Your GitHub sign-in expired. Sign in again.")
     /// Pages of 100 read per list when checking an install (1,000 entries):
     /// past that it says it couldn't tell rather than "not installed".
     static let installPageCap = 10
@@ -77,7 +82,7 @@ final class GitHubAuth {
             showCode(code.user_code, url)
             var interval = Double(code.interval ?? 5)
             let deadline = Date().addingTimeInterval(Double(code.expires_in))
-            struct Poll: Decodable { var access_token: String?; var error: String?; var interval: Int? }
+            struct Poll: Decodable { var access_token: String?; var refresh_token: String?; var error: String?; var interval: Int? }
             while Date() < deadline {
                 try await sleep(interval)
                 if Task.isCancelled { return canceled() }
@@ -89,6 +94,7 @@ final class GitHubAuth {
                 if Task.isCancelled { return canceled() }
                 if let token = p.access_token {
                     _ = keychain.save(key: Self.tokenKey, value: token)
+                    if let refresh = p.refresh_token { _ = keychain.save(key: Self.refreshKey, value: refresh) } else { keychain.delete(key: Self.refreshKey) }
                     cachedToken = .some(token)
                     await loadUser()
                     return
@@ -130,8 +136,15 @@ final class GitHubAuth {
         var request = URLRequest(url: URL(string: "https://api.github.com/user")!)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        if let (data, response) = try? await session.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200,
-           let user = try? JSONDecoder().decode(User.self, from: data) {
+        let reply = try? await session.data(for: request)
+        let status = (reply?.1 as? HTTPURLResponse)?.statusCode
+        if status == 401 {
+            // GitHub no longer takes this token: renew it once, else you're
+            // signed out and told so.
+            guard await refresh() != nil else { return }
+            return await loadUser()
+        }
+        if let (data, _) = reply, status == 200, let user = try? JSONDecoder().decode(User.self, from: data) {
             UserDefaults.standard.set(user.login, forKey: Self.loginKey)
             state = .signedIn(login: user.login)
         } else {
@@ -139,10 +152,52 @@ final class GitHubAuth {
         }
     }
 
+    /// A new token for one GitHub stopped taking (a 401), from the refresh
+    /// token: kept and returned. When it can't be renewed you're signed out
+    /// and the state says so plainly; a request that just didn't reach
+    /// GitHub leaves you signed in. Several callers share one renewal.
+    func refresh() async -> String? {
+        if let refreshing { return await refreshing.value }
+        let task = Task { await renew() }
+        refreshing = task
+        let token = await task.value
+        refreshing = nil
+        return token
+    }
+    @ObservationIgnored private var refreshing: Task<String?, Never>?
+
+    private func renew() async -> String? {
+        guard isConfigured, let clientID, let refreshToken = keychain.get(key: Self.refreshKey) else { expire(); return nil }
+        struct Reply: Decodable { var access_token: String?; var refresh_token: String?; var error: String? }
+        do {
+            let reply: Reply = try await post("https://github.com/login/oauth/access_token", [
+                "client_id": clientID, "grant_type": "refresh_token", "refresh_token": refreshToken,
+            ])
+            guard let token = reply.access_token else { expire(); return nil }
+            _ = keychain.save(key: Self.tokenKey, value: token)
+            if let next = reply.refresh_token { _ = keychain.save(key: Self.refreshKey, value: next) }
+            cachedToken = .some(token)
+            return token
+        } catch is URLError {
+            return nil
+        } catch {
+            expire()
+            return nil
+        }
+    }
+
+    /// Signed out because GitHub stopped taking the sign-in.
+    private func expire() {
+        signOut()
+        failureDetails = nil
+        state = .failed(Self.expiredMessage)
+    }
+
     /// To stop a sign-in that's waiting, cancel the task running `signIn`
     /// (the waiting screen's Cancel does, then signs out).
     func signOut() {
         keychain.delete(key: Self.tokenKey)
+        keychain.delete(key: Self.refreshKey)
         cachedToken = .some(nil)
         UserDefaults.standard.removeObject(forKey: Self.loginKey)
         state = .signedOut
@@ -264,5 +319,29 @@ final class GitHubAuth {
             return URLComponents(string: url).map { $0.scheme == "https" && $0.host == "api.github.com" } == true ? url : nil
         }
         return nil
+    }
+}
+
+/// How GitHub writes renew an expired sign-in: on a 401 they ask for a new
+/// token once (the app points this at `GitHubAuth.refresh`) and retry with
+/// it; with none, they stop with `GitHubAuth.expiredMessage`.
+enum GitHubSession {
+    @MainActor static var refresh: (@Sendable () async -> String?)?
+
+    static func renewed() async -> String? {
+        guard let refresh = await MainActor.run(body: { GitHubSession.refresh }) else { return nil }
+        return await refresh()
+    }
+}
+
+/// The token a GitHub writer sends, replaced when a 401 renews it, so the
+/// rest of its requests use the new one.
+final class GitHubToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: String
+    init(_ token: String) { current = token }
+    var value: String {
+        get { lock.withLock { current } }
+        set { lock.withLock { current = newValue } }
     }
 }

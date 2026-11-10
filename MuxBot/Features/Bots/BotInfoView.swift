@@ -14,7 +14,7 @@ struct BotInfoView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(GitHubAuth.self) private var github
     @State private var putPublic = false
-    @State private var putting = false
+    private var putting: Bool { brain.runs.puttingOnGitHub.contains(bot.id) }
     @State private var putProblem: String?
     @State private var newValue = ""
     @State private var newKind = ResourceKind.repo
@@ -55,7 +55,7 @@ struct BotInfoView: View {
                 BotLookPicker(look: Binding(get: { bot.look }, set: { bot.look = $0; try? context.save() }), mood: $previewMood)
             }
             workCopySection
-            if PutOnGitHub.canPut(bot) { putOnGitHubSection }
+            if PutOnGitHub.canPut(bot) || PutOnGitHub.canResume(bot) { putOnGitHubSection }
             Section {
                 Picker("For this bot", selection: modelModeBinding) {
                     Text("Same as Settings").tag(String?.none)
@@ -193,10 +193,16 @@ struct BotInfoView: View {
                 Text("This project is only on this Mac. Sign in with GitHub (Settings › GitHub) to put it there.")
                     .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             } else {
-                Toggle("Public", isOn: $putPublic)
-                Text(putPublic ? "Anyone can see a public repo." : "Private: only you can see it.")
-                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-                Button(putting ? "Putting it on GitHub…" : "Put it on GitHub", systemImage: "arrow.up.circle") {
+                if PutOnGitHub.canResume(bot) {
+                    Text("The repo is made; this project's work isn't in it yet.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                } else {
+                    Toggle("Public", isOn: $putPublic)
+                    Text(putPublic ? "Anyone can see a public repo." : "Private: only you can see it.")
+                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                }
+                Button(putting ? "Putting it on GitHub…" : PutOnGitHub.canResume(bot) ? "Finish putting it on GitHub" : "Put it on GitHub",
+                       systemImage: "arrow.up.circle") {
                     Task { await putOnGitHub() }
                 }
                 .disabled(putting)
@@ -211,9 +217,7 @@ struct BotInfoView: View {
 
     private func putOnGitHub() async {
         guard let token = github.token else { return }
-        putting = true
         putProblem = nil
-        defer { putting = false }
         do {
             _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), pr: GitHubPR(token: token),
                                           store: BotStore(context: context), runs: brain.runs)

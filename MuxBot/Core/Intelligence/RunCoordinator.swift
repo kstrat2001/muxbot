@@ -305,17 +305,76 @@ final class RunCoordinator {
     /// Pushes a GitHub-started project's committed work to its `mux/<bot>`
     /// branch on your repo, through the same path as Open PR. Says so only
     /// when it fails.
+    /// Pushes waiting behind this bot's GitHub push, which runs one at a
+    /// time so a backup and an Open PR never race for the same branch.
+    @ObservationIgnored private var pushTails: [UUID: Task<Void, Never>] = [:]
+    /// Bots being put on GitHub (`PutOnGitHub`): kept here, not in the view,
+    /// so closing bot info never lets a second Put start.
+    var puttingOnGitHub: Set<UUID> = []
+    /// Names tried after a branch someone else pushed to.
+    static let branchTries = 5
+
+    /// Runs `work` after every earlier GitHub push for `bot` has finished.
+    func oneAtATime(_ bot: UUID, _ work: @escaping @MainActor () async -> Void) async {
+        let before = pushTails[bot]
+        let mine = Task { @MainActor in
+            await before?.value
+            await work()
+        }
+        pushTails[bot] = mine
+        await mine.value
+        if pushTails[bot] == mine { pushTails[bot] = nil }
+    }
+
+    /// Where this Mac pushes the bot's work on GitHub: its GitHub start, or
+    /// the branch it moved to after someone else pushed to darkmux's.
+    func pushStart(_ bot: Bot, changes: DarkmuxClient.Changes) -> GitHubPR.Start? {
+        if let start = bot.githubStart { return start }
+        return LocalBotState.shared[bot.id]?.pushHead.map { GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: $0) }
+    }
+
+    /// Pushes through `push`. When someone else pushed to the bot's branch,
+    /// it's never overwritten: the work goes to the next free name
+    /// (`mux/<bot>-2`) from then on, and the thread says so.
+    func pushMovingOn<T>(_ bot: Bot, changes: DarkmuxClient.Changes, store: BotStore,
+                         _ push: (GitHubPR.Start?) async throws -> T) async throws -> T {
+        var start = pushStart(bot, changes: changes)
+        for _ in 0..<Self.branchTries {
+            do {
+                return try await push(start)
+            } catch GitHubPR.Failure.branchMoved(let moved) {
+                let next = GitHubPR.nextBranch(moved)
+                if var kept = bot.githubStart {
+                    kept.head = next
+                    bot.githubStart = kept
+                    start = kept
+                } else {
+                    LocalBotState.shared.update(bot.id) { $0.pushHead = next }
+                    start = GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: next)
+                }
+                store.append(.system, String(localized: "Someone else pushed to \(moved) on GitHub, so I left it as it is. This bot's work goes to \(next) from now on."),
+                             to: store.conversation(for: .bot(bot.id)))
+            }
+        }
+        throw GitHubPR.Failure.branchMoved(start?.head ?? changes.branch)
+    }
+
     func backUp(_ bot: Bot, store: BotStore) async {
-        guard let start = bot.githubStart, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
+        guard bot.githubStart != nil, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
+              LocalBotState.shared[bot.id]?.putPending != true,
               let token = githubToken?(), changesFetcher != nil || connection?.token != nil else { return }
-        do {
-            let changes = try await changes(for: workspace)
-            guard !changes.files.isEmpty else { return }
-            _ = try await (prPusher ?? { try await GitHubPR(token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) })(
-                changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, start)
-        } catch {
-            store.append(.system, String(localized: "Couldn't back up this work to \(start.head) on GitHub: \(error.localizedDescription)"),
-                         to: store.conversation(for: .bot(bot.id)))
+        await oneAtATime(bot.id) { [self] in
+            do {
+                let changes = try await changes(for: workspace)
+                guard !changes.files.isEmpty else { return }
+                let pusher = prPusher ?? { try await GitHubPR(token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) }
+                _ = try await pushMovingOn(bot, changes: changes, store: store) {
+                    try await pusher(changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, $0)
+                }
+            } catch {
+                store.append(.system, String(localized: "Couldn't back up this work to \(bot.githubStart?.head ?? "its branch") on GitHub: \(error.localizedDescription)"),
+                             to: store.conversation(for: .bot(bot.id)))
+            }
         }
     }
 
@@ -1296,11 +1355,25 @@ final class RunCoordinator {
     /// Bots with a PR being opened (their button waits).
     var openingPR: Set<UUID> = []
 
+    /// Why GitHub refused a write, from whether the App is installed there:
+    /// the install link only when it isn't.
+    nonisolated static func cantWriteText(_ repo: String, _ install: GitHubAuth.InstallState) -> String {
+        switch install {
+        case let .notInstalled(url):
+            String(localized: "Install Mux Bot on \(repo) to open pull requests: \(url.absoluteString)")
+        case .installed:
+            String(localized: "Mux Bot's GitHub App is installed on \(repo), but GitHub still refused to let it write there. Check that the App has read and write access to the repo's contents and pull requests, then try again.")
+        case .unknown:
+            String(localized: "GitHub refused to let Mux Bot write to \(repo), and I couldn't check whether its GitHub App is installed there. Try again in a moment.")
+        }
+    }
+
     /// The bot's committed runs not yet in a PR from this thread.
     func unshippedRuns(_ bot: Bot, store: BotStore) -> [BotRun] {
         // Read on every redraw of the thread's toolbar: never makes a thread.
-        let lastPR = (store.existingConversation(for: .bot(bot.id))?.messages ?? [])
-            .filter { $0.kind == .prCard }.map(\.timestamp).max() ?? .distantPast
+        let lastPR = max((store.existingConversation(for: .bot(bot.id))?.messages ?? [])
+            .filter { $0.kind == .prCard }.map(\.timestamp).max() ?? .distantPast,
+                         LocalBotState.shared[bot.id]?.shippedThrough ?? .distantPast)
         return (bot.runs ?? []).filter { $0.keptCommit != nil && $0.phase == .result && ($0.finishedAt ?? $0.createdAt) > lastPR }
             .sorted { $0.createdAt < $1.createdAt }
     }
@@ -1324,6 +1397,14 @@ final class RunCoordinator {
         }
         openingPR.insert(bot.id)
         defer { openingPR.remove(bot.id) }
+        await oneAtATime(bot.id) { [self] in
+            await openPR(bot, workspace: workspace, repo: repo, token: token, darkmux: darkmux, connection: connection,
+                         store: store, github: github, thread: thread)
+        }
+    }
+
+    private func openPR(_ bot: Bot, workspace: String, repo: String, token: String, darkmux: String, connection: FleetConnection,
+                        store: BotStore, github: GitHubAuth, thread: ChatConversation) async {
         do {
             let changes = try await connection.client.changes(token: darkmux, workspace: workspace)
             guard !changes.files.isEmpty else {
@@ -1332,8 +1413,10 @@ final class RunCoordinator {
             let runs = unshippedRuns(bot, store: store)
             let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
             let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
-            let pr = try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
-                                                           extraFiles: approved, start: bot.githubStart)
+            let pr = try await pushMovingOn(bot, changes: changes, store: store) {
+                try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
+                                                      extraFiles: approved, start: $0)
+            }
             store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
             for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
             for (path, why) in pr.skipped.sorted(by: { $0.key < $1.key }) {
@@ -1347,11 +1430,7 @@ final class RunCoordinator {
             }
         } catch GitHubPR.Failure.cantWrite(let repo) {
             let install = await github.installState(for: repo)
-            if case let .notInstalled(url) = install {
-                store.append(.system, "Install Mux Bot on \(repo) to open pull requests: \(url.absoluteString)", to: thread)
-            } else {
-                store.append(.system, GitHubPR.Failure.cantWrite(repo).localizedDescription, to: thread)
-            }
+            store.append(.system, Self.cantWriteText(repo, install), to: thread)
         } catch {
             store.append(.system, "Couldn't open the PR: \(error.localizedDescription)", to: thread)
         }
