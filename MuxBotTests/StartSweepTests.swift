@@ -50,19 +50,79 @@ struct StartSweepTests {
         GitHubStub.reset()
         GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
         GitHubStub.on("GET /repos/kain/tides/commits", 200,
-                      #"[{"sha":"w2","commit":{"message":"Back up Tides's work"}},{"sha":"start1","commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"init0","commit":{"message":"Initial commit"}}]"#)
+                      #"[{"sha":"w2","parents":[{"sha":"start1"}],"commit":{"message":"Back up Tides's work"}},{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
         let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
         #expect(found?.start == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"))
         #expect(found?.ref == Self.template.ref, "the pinned commit the repo started from")
     }
 
+    private static let olderPinStart = #"[{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@aaaaaaa"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#
+
     @Test func aRepoFromAnOlderPinStartsFromThatPin() async throws {
         GitHubStub.reset()
         GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200, #"[{"sha":"start1","commit":{"message":"Start from kstrat2001/muxbot-template-book@aaaaaaa"}}]"#)
+        GitHubStub.on("GET /repos/kain/tides/commits", 200, Self.olderPinStart)
         GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/commits/aaaaaaa", 200, #"{"sha":"aaaaaaa1111111111111111111111111111111111"}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book", 200, #"{"default_branch":"main"}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/compare/aaaaaaa1111111111111111111111111111111111...main", 200, #"{"status":"ahead"}"#)
         let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
         #expect(found?.ref == "aaaaaaa1111111111111111111111111111111111")
+    }
+
+    @Test func aCommitTheTemplateNeverHadIsNoStart() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
+        GitHubStub.on("GET /repos/kain/tides/commits", 200, Self.olderPinStart)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/commits/aaaaaaa", 200, #"{"sha":"aaaaaaa1111111111111111111111111111111111"}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book", 200, #"{"default_branch":"main"}"#)
+        // On a branch of the template that its default branch doesn't have.
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/compare/aaaaaaa1111111111111111111111111111111111...main", 200, #"{"status":"diverged"}"#)
+        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
+        #expect(found == nil, "never a ref the registry or the template's history doesn't vouch for")
+    }
+
+    @Test func aLaterStartFromCommitIsIgnored() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
+        GitHubStub.on("GET /repos/kain/tides/commits", 200,
+                      #"[{"sha":"fake9","parents":[{"sha":"start1"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@bbbbbbb"}},{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
+        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
+        #expect(found?.start.commit == "start1", "the repo's second commit, never a later one that says the same")
+        #expect(found?.ref == Self.template.ref)
+        #expect(!GitHubStub.seen.contains { $0.path.contains("bbbbbbb") }, "the later commit's ref is never looked up")
+    }
+
+    @Test func aSecondCommitThatIsntAStartIsNoStart() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
+        GitHubStub.on("GET /repos/kain/tides/commits", 200,
+                      #"[{"sha":"fake9","parents":[{"sha":"c1"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"c1","parents":[{"sha":"init0"}],"commit":{"message":"Add a README"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
+        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
+        #expect(found == nil)
+    }
+
+    @Test func aLongHistoryStillFindsTheStart() async throws {
+        GitHubStub.reset()
+        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
+        // 201 commits: the newest 100, then (the list's last page) the first one alone.
+        let work = (0..<100).map { #"{"sha":"w\#($0)","parents":[{"sha":"p\#($0)"}],"commit":{"message":"Back up Tides's work"}}"# }.joined(separator: ",")
+        let api = "https://api.github.com/repos/kain/tides/commits?sha=main&per_page=100"
+        GitHubStub.on("GET /repos/kain/tides/commits", 200, "[\(work)]",
+                      headers: ["Link": "<\(api)&page=2>; rel=\"next\", <\(api)&page=3>; rel=\"last\""])
+        GitHubStub.on("GET /repos/kain/tides/commits", 200, #"[{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#,
+                      headers: ["Link": "<\(api)&page=2>; rel=\"prev\", <\(api)&page=1>; rel=\"first\""])
+        let older = (0..<99).map { #"{"sha":"o\#($0)","parents":[{"sha":"q\#($0)"}],"commit":{"message":"Back up Tides's work"}}"# }.joined(separator: ",")
+        GitHubStub.on("GET /repos/kain/tides/commits", 200,
+                      "[\(older)," + #"{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}}]"#)
+        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
+        #expect(found?.start.commit == "start1")
+        let pages = GitHubStub.seen.filter { $0.path == "/repos/kain/tides/commits" }.compactMap(\.query)
+        #expect(pages.count == 3 && pages[1].contains("page=3") && pages[2].contains("page=2"), "\(pages)")
+    }
+
+    @Test func aPageLinkToAnotherHostIsNeverFollowed() {
+        #expect(GitHubAuth.linkedPage(#"<https://evil.example/x?page=9>; rel="last""#, rel: "last") == nil)
+        #expect(GitHubAuth.linkedPage(#"<https://api.github.com/x?page=9>; rel="last""#, rel: "last") == "https://api.github.com/x?page=9")
     }
 
     // 10: an invalid PLAYBOOK.md says why.

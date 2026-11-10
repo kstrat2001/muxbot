@@ -338,8 +338,12 @@ final class GitHubAuth {
 
     /// `<https://…&page=2>; rel="next", <…>; rel="last"` → the next URL.
     /// Only back to api.github.com, since the request carries your token.
-    nonisolated static func nextPage(_ link: String?) -> String? {
-        for part in (link ?? "").split(separator: ",") where part.contains(#"rel="next""#) {
+    nonisolated static func nextPage(_ link: String?) -> String? { linkedPage(link, rel: "next") }
+
+    /// The Link header's URL for `rel` ("next", "prev", "last"), under the
+    /// same rule.
+    nonisolated static func linkedPage(_ link: String?, rel: String) -> String? {
+        for part in (link ?? "").split(separator: ",") where part.contains("rel=\"\(rel)\"") {
             guard let open = part.firstIndex(of: "<"), let close = part.firstIndex(of: ">"), open < close else { continue }
             let url = String(part[part.index(after: open)..<close])
             return URLComponents(string: url).map { $0.scheme == "https" && $0.host == "api.github.com" } == true ? url : nil
