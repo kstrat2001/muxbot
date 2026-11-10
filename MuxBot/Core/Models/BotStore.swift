@@ -266,8 +266,8 @@ struct BotStore {
         return created
     }
 
-    /// Every thread with more than one copy, merged (at launch and when
-    /// another device's data arrives).
+    /// Every thread with more than one copy, merged. Runs at launch; a copy
+    /// that syncs in later is merged by `conversation(for:)` when used.
     func mergeDuplicateThreads() {
         let all = (try? context.fetch(FetchDescriptor<ChatConversation>(sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.id)]))) ?? []
         for (_, copies) in Dictionary(grouping: all, by: \.roleId) where copies.count > 1 {

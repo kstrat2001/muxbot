@@ -33,6 +33,9 @@
         }
       }
     },
+    "%@ has a run going on another Mac. Delete it from the Mac it runs on, or stop the run there first." : {
+
+    },
     "%@ has no %@" : {
       "localizations" : {
         "en" : {
@@ -1390,6 +1393,9 @@
     "Replaced by the next run" : {
 
     },
+    "Reply on the Mac it ran on." : {
+
+    },
     "Reply to answer." : {
 
     },
@@ -1820,6 +1826,9 @@
 
     },
     "This Mux Bot build isn't set up to sign in with GitHub." : {
+
+    },
+    "This app isn't paired with darkmux now, so it can't stop this run. Stop it on the Mac with darkmux." : {
 
     },
     "This one is changed in darkmux on your Mac; here's its value." : {

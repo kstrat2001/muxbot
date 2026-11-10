@@ -53,6 +53,8 @@ struct AutoCommitFlowTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.runs.deviceRuns = true
+        // This Mac's run (sweep 2: another Mac's is refused a Tweak).
+        brain.runs.markStartedHere(run)
         await brain.send("make the gutter a bit wider", in: .bot(bot.id), store: store)
         let thread = store.conversation(for: .bot(bot.id)).messages ?? []
         #expect(thread.contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." }, "sent as a Tweak of \(run.task)")

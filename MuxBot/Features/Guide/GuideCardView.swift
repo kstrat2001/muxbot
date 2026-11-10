@@ -243,8 +243,11 @@ struct SettingCardView: View {
                 darkmuxValue = String(localized: "Pair Mux Bot to see this")
                 return
             }
-            guard let who = try? await connection.client.whoami(token: token) else {
-                darkmuxValue = String(localized: "Can't reach darkmux")
+            let who: DarkmuxClient.Whoami
+            do {
+                who = try await connection.client.whoami(token: token)
+            } catch {
+                darkmuxValue = Self.whoamiFailure(error)
                 return
             }
             darkmuxValue = who.profiles.map { $0.joined(separator: ", ") } ?? String(localized: "Any model that runs on this Mac")
@@ -341,5 +344,13 @@ struct PageFitsCardView: View {
             Button("Reload the preview", systemImage: "arrow.clockwise") { preview.reload() }
                 .buttonStyle(.bordered)
         }
+    }
+}
+
+extension SettingCardView {
+    /// A revoked pairing (401) says to pair again, never "can't reach".
+    static func whoamiFailure(_ error: any Error) -> String {
+        if let client = error as? DarkmuxClient.ClientError, client.status == 401 { return FleetConnection.revokedMessage }
+        return String(localized: "Can't reach darkmux")
     }
 }
