@@ -62,8 +62,8 @@ struct PickedElement: Sendable, Equatable, Codable {
 /// panel's web page in the app; a mock in tests.
 @MainActor
 protocol PageInspecting: AnyObject {
-    func facts(for terms: [String]) async -> PageFacts?
-    func snapshotPNG() async -> Data?
+    func facts(for terms: [String], bot: UUID?) async -> PageFacts?
+    func snapshotPNG(bot: UUID?) async -> Data?
 }
 
 /// A bug report drafted from what the user described, plus page facts.

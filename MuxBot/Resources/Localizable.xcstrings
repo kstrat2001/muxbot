@@ -1309,6 +1309,9 @@
     "Sends it to the bot now" : {
 
     },
+    "Sent to Coder" : {
+
+    },
     "Set to %@ on %@." : {
       "localizations" : {
         "en" : {
