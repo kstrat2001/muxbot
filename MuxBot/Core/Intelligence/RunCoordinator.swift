@@ -495,8 +495,26 @@ final class RunCoordinator {
         // Opening it again calls off a stop waiting out its grace period.
         returnToPreview(for: bot)
         if let status = livePreviews[bot.id]?.status, !status.canRetry {
-            Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
-            return
+            // A cached "ready" may be stale (idle-stopped, darkmux restarted):
+            // ask darkmux before trusting it, and start it again if it's gone.
+            guard status == .ready, !clean else {
+                Self.previewLog.debug("preview \(name, privacy: .public): already \(String(describing: status), privacy: .public)")
+                return
+            }
+            do {
+                let now: LivePreview
+                if let previewFetcher { now = try await previewFetcher(false) } else { now = try await connection.client.previewStatus(token: token, workspace: name).live }
+                if now.status == .ready {
+                    livePreviews[bot.id] = now
+                    runPendingChecks(for: bot)
+                    return
+                }
+            } catch let error as URLError where Self.isNotAnswering(error) {
+                livePreviews[bot.id] = LivePreview(status: .unavailable(.notAnswering))
+                return
+            } catch {
+                // 404 (darkmux no longer has it) or anything else: start it again.
+            }
         }
         Self.previewLog.info("preview \(name, privacy: .public): asking darkmux to start it")
         livePreviews[bot.id] = LivePreview(status: .starting)
@@ -514,9 +532,21 @@ final class RunCoordinator {
             var p = try await fetch(true)
             livePreviews[bot.id] = p
             let deadline = Date().addingTimeInterval(previewDeadline)
+            var misses = 0
             while [.starting, .installing].contains(p.status), Date() < deadline {
                 try await Task.sleep(for: .seconds(min(1, previewDeadline / 4)))
-                p = try await fetch(false)
+                do {
+                    p = try await fetch(false)
+                    misses = 0
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // One failed status call isn't a failed preview: back off
+                    // and ask again; only three in a row count.
+                    misses += 1
+                    if misses >= 3 { throw error }
+                    continue
+                }
                 livePreviews[bot.id] = p
             }
             if [.starting, .installing].contains(p.status) {
@@ -524,15 +554,19 @@ final class RunCoordinator {
                 livePreviews[bot.id] = LivePreview(status: .failed(String(localized: "it didn't start within \(Int(previewDeadline / 60)) minutes")))
             }
             Self.previewLog.info("preview \(name, privacy: .public): \(String(describing: p.status), privacy: .public)")
+            if p.status == .ready { runPendingChecks(for: bot) }
         } catch is CancellationError {
             // Left the thread while it started: not a failure; it starts again next time.
             livePreviews[bot.id] = LivePreview(status: .stopped)
         } catch let error as URLError where error.code == .cancelled {
             livePreviews[bot.id] = LivePreview(status: .stopped)
+        } catch let error as URLError where Self.isNotAnswering(error) {
+            // darkmux's app connection isn't running: say so, with its command.
+            livePreviews[bot.id] = LivePreview(status: .unavailable(.notAnswering))
         } catch let error as DarkmuxClient.ClientError {
             // darkmux won't run it: say why (a preview link you added is
             // still shown). Any other refusal is a failure.
-            if let why = LivePreview.Unavailable.from(status: error.status, message: error.message, template: !bot.useCaseId.isEmpty) {
+            if let why = LivePreview.Unavailable.from(status: error.status, message: error.message, template: !bot.useCaseId.isEmpty, code: error.code) {
                 Self.previewLog.info("preview \(name, privacy: .public): unavailable, \(String(describing: why), privacy: .public)")
                 livePreviews[bot.id] = LivePreview(status: .unavailable(why))
                 // No recipe in your checkout: the thread offers to set one up.
@@ -608,7 +642,9 @@ final class RunCoordinator {
         pendingStops.removeValue(forKey: id)?.cancel()
         // One that was waiting for the connection must not start later, unseen.
         if waitingPreviews.removeValue(forKey: id) != nil { livePreviews[id] = LivePreview(status: .stopped) }
-        guard let status = livePreviews[id]?.status, status != .stopped, !status.isFailed else { return }
+        // Sent whenever this app asked darkmux for the preview, whatever it
+        // shows now: failed, timed out, or "stopped" by a cancelled start.
+        guard previewWorkspaces.removeValue(forKey: id) != nil else { return }
         livePreviews[id] = LivePreview(status: .stopped)
         if let previewStopper { await previewStopper(name); return }
         guard let connection, let token = connection.token else { return }
@@ -619,10 +655,7 @@ final class RunCoordinator {
     /// after `limit` so quitting never hangs; darkmux stops any preview
     /// still running once it has been idle.
     func stopAllPreviews(limit: Duration = .seconds(6)) async {
-        let running = previewWorkspaces.filter { id, _ in
-            guard let status = livePreviews[id]?.status else { return false }
-            return status != .stopped && !status.isFailed
-        }
+        let running = previewWorkspaces
         guard !running.isEmpty else { return }
         // Each stop marks its preview stopped at once, then asks darkmux; the
         // wait below ends when they're all answered or at `limit`, whichever
@@ -643,19 +676,30 @@ final class RunCoordinator {
     /// you're looking at running. Returns when the task is cancelled.
     func keepPreviewAlive(for bot: Bot) async {
         guard let name = bot.workspaceName else { return }
+        var misses = 0
         while !Task.isCancelled {
-            try? await Task.sleep(for: previewHeartbeat)
-            if Task.isCancelled { return }
-            guard livePreviews[bot.id]?.status == .ready else { continue }
-            let p: LivePreview?
-            if let previewFetcher {
-                p = try? await previewFetcher(false)
-            } else if let connection, let token = connection.token {
-                p = try? await connection.client.previewStatus(token: token, workspace: name).live
-            } else {
-                p = nil
+            if livePreviews[bot.id]?.status == .ready {
+                do {
+                    let p: LivePreview
+                    if let previewFetcher {
+                        p = try await previewFetcher(false)
+                    } else if let connection, let token = connection.token {
+                        p = try await connection.client.previewStatus(token: token, workspace: name).live
+                    } else {
+                        p = LivePreview(status: .ready)
+                    }
+                    misses = 0
+                    if !Task.isCancelled, p.status != .ready || p.url != nil { livePreviews[bot.id] = p }
+                } catch let error as DarkmuxClient.ClientError where error.status == 404 {
+                    // darkmux no longer has it (restarted, idle-stopped).
+                    if !Task.isCancelled { livePreviews[bot.id] = LivePreview(status: .stopped) }
+                } catch {
+                    // darkmux went away: after a few misses, say so (Try again).
+                    misses += 1
+                    if misses >= 3, !Task.isCancelled { livePreviews[bot.id] = LivePreview(status: .unavailable(.notAnswering)) }
+                }
             }
-            if let p, !Task.isCancelled { livePreviews[bot.id] = p }
+            try? await Task.sleep(for: previewHeartbeat)
         }
     }
 
@@ -716,6 +760,12 @@ final class RunCoordinator {
             } else {
                 return
             }
+            // Another work copy: the old one's preview stops and is forgotten,
+            // never shown for the new project.
+            if let old = previewWorkspaces[bot.id], old != made.workspace {
+                await stopPreview(bot.id, workspace: old)
+                livePreviews[bot.id] = nil
+            }
             bot.workspaceName = made.workspace
             bot.workspaceMachine = FleetConnection.machineName
             // A template's project is local: its origin is never the bot's repo.
@@ -765,6 +815,33 @@ final class RunCoordinator {
             let ids = (bot.runs ?? []).filter { $0.phase != .running }.map(\.id.uuidString)
             LocalBotState.shared.update(bot.id) { $0.localRuns = Array(ids.suffix(500)) }
         }
+    }
+
+    /// A Tweak's change with the element you picked for it (a pick sent
+    /// while tweaking is never dropped).
+    static func tweakChange(_ text: String, element: PickedElement?) -> String {
+        guard let element else { return text }
+        let quoted = element.selectedText.flatMap { $0.isEmpty ? nil : ", the text “\($0)”" } ?? ""
+        let about = "(`\(element.selector)` on \(element.url)\(quoted))"
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "About \(about)" : "\(text) \(about)"
+    }
+
+    /// Why a done-when check couldn't run, by run (the card offers Check again).
+    var checkProblems: [UUID: String] = [:]
+    static let checkNotRunning = String(localized: "Couldn't check: the preview wasn't running.")
+    /// Checks waiting for their bot's preview to be ready.
+    private var pendingChecks: Set<UUID> = []
+
+    private func runPendingChecks(for bot: Bot) {
+        for run in bot.runs ?? [] where pendingChecks.contains(run.id) {
+            pendingChecks.remove(run.id)
+            Task { await self.check(run) }
+        }
+    }
+
+    /// darkmux's app connection isn't answering on this Mac.
+    nonisolated static func isNotAnswering(_ error: URLError) -> Bool {
+        [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut].contains(error.code)
     }
 
     static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
@@ -853,6 +930,9 @@ final class RunCoordinator {
         #endif
         bot.folderBookmark = bookmark ?? Data()
         bot.folderName = url.lastPathComponent
+        // A new work copy: the old one's preview stops and is forgotten.
+        if let old = previewWorkspaces[bot.id] { await stopPreview(bot.id, workspace: old) }
+        livePreviews[bot.id] = nil
         bot.workspaceName = nil
         if let slug = GitRemote.originSlug(of: url), !bot.repoSlugs.contains(slug) {
             store.addResource(.repo, "https://github.com/\(slug)", to: bot)
@@ -860,6 +940,8 @@ final class RunCoordinator {
         store.save()
         guard bookmark != nil else { return "I couldn't keep access to \(url.lastPathComponent). Pick it again." }
         if connection?.isPaired == true { await setUpWorkCopy(for: bot, store: store) }
+        // Said on the card that asked (not only in the bot's info).
+        if case let .failed(why)? = workCopySetup[bot.id] { return String(localized: "darkmux couldn't set up a work copy: \(why)") }
         return nil
     }
 
@@ -1003,11 +1085,27 @@ final class RunCoordinator {
     /// After a run that changed files: measure the preview again at the
     /// widths its brief named, and say whether the done-when holds.
     func check(_ run: BotRun) async {
-        guard !run.changedFiles.isEmpty, let spec = checkSpecs[run.id], let probe = layoutProbe else { return }
+        guard !run.changedFiles.isEmpty, let spec = checkSpecs[run.id], let probe = layoutProbe, let bot = run.bot else { return }
         checking.insert(run.id)
         defer { checking.remove(run.id) }
-        let after = await probe.measure(url: spec.page, widths: spec.widths)
-        guard !after.isEmpty else { return }
+        checkProblems[run.id] = nil
+        // The page on the bot's preview as it is now (it may have restarted
+        // on another port since the brief); none running: wait for it.
+        guard livePreviews[bot.id]?.status == .ready, let root = previewURL(for: bot) else {
+            pendingChecks.insert(run.id)
+            checkProblems[run.id] = Self.checkNotRunning
+            return
+        }
+        var parts = URLComponents(url: root, resolvingAgainstBaseURL: false)
+        parts?.path = spec.page.path.isEmpty ? "/" : spec.page.path
+        parts?.query = spec.page.query
+        let page = parts?.url ?? root
+        let after = await probe.measure(url: page, widths: spec.widths)
+        guard !after.isEmpty else {
+            pendingChecks.insert(run.id)
+            checkProblems[run.id] = Self.checkNotRunning
+            return
+        }
         let result = LayoutCheck.evaluate(spec, after: after)
         runChecks[run.id] = result
         // A default model doesn't switch by itself: offer the next one.

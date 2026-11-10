@@ -81,7 +81,8 @@ enum ChatShortcuts {
             router.showPreview = true
         case .pick:
             router.showPreview = true
-            if let preview, !preview.isPicking { preview.togglePicking() }
+            // Picking starts once that bot's page has loaded.
+            if let preview, !preview.isPicking { preview.startPicking(for: chat.botId) }
         }
     }
 }
