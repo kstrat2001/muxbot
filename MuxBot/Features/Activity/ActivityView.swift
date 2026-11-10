@@ -198,6 +198,8 @@ extension ActivityRow {
     /// The Mac the run is on: the bot's work copy's for one started here,
     /// else another Mac (its own runs aren't followed from here).
     @MainActor static func machine(for run: BotRun) -> String {
+        // Never started (waiting, canceled before Approve): no machine yet.
+        guard run.startedAt != nil || run.darkmuxWorkId != nil else { return "" }
         guard run.startedHere else { return String(localized: "Another Mac") }
         return run.bot?.workspaceMachine ?? thisMac
     }

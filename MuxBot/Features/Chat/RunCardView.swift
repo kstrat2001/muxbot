@@ -333,7 +333,7 @@ struct RunCardView: View {
         } else if let check = brain.runs.runChecks[run.id] {
             if check.met {
                 Label("Done when: met (measured in the preview)", systemImage: "checkmark.seal.fill")
-                    .font(AppFont.footnote(.semibold)).foregroundStyle(.green)
+                    .font(AppFont.footnote(.semibold)).labelStyle(.tintedIcon(Color.brandGreen))
             } else {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Label("Done when: not met", systemImage: "xmark.seal.fill")

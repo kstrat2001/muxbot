@@ -4,16 +4,25 @@ import SwiftData
 /// Menu commands and shortcuts (macOS menu bar; iPad hardware keyboard).
 struct MuxBotCommands: Commands {
     let router: AppRouter
+    @Environment(\.openWindow) private var openWindow
+
+    /// The main window, brought forward (and reopened if you closed it), so
+    /// a command's sheet or thread shows now, not when it next opens.
+    private func showMain() {
+        #if os(macOS)
+        openWindow(id: "main")
+        #endif
+    }
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Project…") { router.showStartProject = true }
+            Button("New Project…") { router.showStartProject = true; showMain() }
                 .keyboardShortcut("n")
-            Button("New Bot…") { router.showNewBot = true }
+            Button("New Bot…") { router.showNewBot = true; showMain() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         CommandGroup(after: .textEditing) {
-            Button("Search Bots and Messages…") { router.showSearch = true }
+            Button("Search Bots and Messages…") { router.showSearch = true; showMain() }
                 .keyboardShortcut("f")
         }
         CommandMenu("Bot") {
@@ -27,12 +36,12 @@ struct MuxBotCommands: Commands {
                 .disabled(!router.canShowInfo)
             #endif
             Divider()
-            Button("Pair with darkmux…") { router.showPairing = true }
+            Button("Pair with darkmux…") { router.showPairing = true; showMain() }
         }
         CommandMenu("Go") {
-            Button(LeadBot.name) { router.tab = .bots; router.navigate(to: .lead) }
+            Button(LeadBot.name) { router.tab = .bots; router.navigate(to: .lead); showMain() }
                 .keyboardShortcut("1")
-            Button("Activity") { router.tab = .activity; router.sidebar = .activity }
+            Button("Activity") { router.tab = .activity; router.sidebar = .activity; showMain() }
                 .keyboardShortcut("2")
         }
     }
