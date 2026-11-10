@@ -374,6 +374,9 @@ final class BotBrain {
     let guide = LeadGuide()
     /// Opens the Start chooser, or a template's form (set by the app).
     var openStart: ((String?) -> Void)?
+    // Red-first stubs.
+    var openBot: ((UUID) -> Void)?
+    var creatingBot: Task<Void, Never>?
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection? {

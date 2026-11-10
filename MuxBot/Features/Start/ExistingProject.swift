@@ -29,7 +29,11 @@ enum ExistingProject {
     }
 
     /// Where the bot's skills came from.
-    enum SkillsSource: Equatable { case projectPlaybook, general }
+    enum SkillsSource: Equatable { case projectPlaybook, general, invalid(String) }
+    // Red-first stub.
+    static func canStart(name: String, purpose: String, starting: Bool, readingPlaybook: Bool) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !starting
+    }
 
     /// "kstrat2001/darkly-energized" → "Darkly Energized".
     nonisolated static func suggestedName(repo: String) -> String {
@@ -97,7 +101,7 @@ enum ExistingProject {
         return (bot, problem)
     }
 
-    static func greeting(name: String, source: Source, skills: SkillsSource) -> String {
+    static func greeting(name: String, source: Source, skills: SkillsSource, madeHere: Bool = true) -> String {
         var parts = [String(localized: "Hi, I'm \(name). Tell me what to change, or point at something in the preview.")]
         if case .github(_, nil) = source {
             parts.append(String(localized: "darkmux cloned this repo, and a clone gets no preview: darkmux runs a preview only from your own checkout. Add your checkout with Add folder in my info to see one."))

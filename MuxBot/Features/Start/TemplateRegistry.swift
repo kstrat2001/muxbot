@@ -22,6 +22,8 @@ struct TemplateEntry: Codable, Equatable, Identifiable, Sendable {
 /// bots' models.
 final class TemplateRegistry: Sendable {
     typealias Fetch = @Sendable (URL) async throws -> Data
+    // Red-first stub.
+    enum FetchError: Error { case notFound }
 
     static let listURL = URL(string: "https://raw.githubusercontent.com/kstrat2001/muxbot-templates/main/templates.json")!
 
@@ -170,3 +172,6 @@ enum TemplateDetails: Equatable, Sendable {
 
     var playbook: Playbook? { if case let .ready(p) = self { p } else { nil } }
 }
+
+// Red-first stub.
+extension TemplateDetails { var retriesOnAppear: Bool { false } }

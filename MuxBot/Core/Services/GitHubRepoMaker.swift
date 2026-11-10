@@ -60,6 +60,9 @@ struct GitHubRepoMaker: Sendable {
         return ascii.isEmpty ? "project" : String(ascii.prefix(90))
     }
 
+    // Red-first stub.
+    func findStart(repo: String, template: TemplateEntry, botName: String) async throws -> (start: GitHubPR.Start, ref: String)? { nil }
+
     /// Your login.
     func login() async throws -> String {
         struct User: Decodable { var login: String }

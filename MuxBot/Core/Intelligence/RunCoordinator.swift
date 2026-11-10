@@ -763,6 +763,8 @@ final class RunCoordinator {
     enum WorkCopySetup: Equatable { case settingUp, failed(String) }
     /// Work copies being set up (or that failed), by bot.
     var workCopySetup: [UUID: WorkCopySetup] = [:]
+    // Red-first stub.
+    var startFinder: ((String, TemplateEntry) async -> (GitHubPR.Start, String)?)?
 
     /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
     /// folder you picked (on its own branch, from the fetched default
