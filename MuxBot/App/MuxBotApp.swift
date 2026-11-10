@@ -71,6 +71,7 @@ struct MuxBotApp: App {
                 .modelContainer(container)
                 .task {
                     brain.pageInspector = preview
+                    brain.runs.onPreviewStopped = { [preview] in preview.forget($0) }
                     if brain.layoutProbe == nil { brain.layoutProbe = WebLayoutProbe() }
                     brain.connection = connection
                     brain.notifier = notifications

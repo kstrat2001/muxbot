@@ -50,6 +50,9 @@ struct PreviewStopGraceTests {
         runs.previewStopper = { stops.add($0) }
         let clock = ManualSleeper()
         runs.previewGraceSleep = { await clock.sleep($0) }
+        // The bot's thread is on screen, as when you open its preview (a
+        // start from off screen stops after the grace too, sweep 2 #3).
+        runs.enterThread(bot)
         return (bot, runs, clock, starts, stops)
     }
 
@@ -86,6 +89,8 @@ struct PreviewStopGraceTests {
         await runs.ensurePreview(for: bot)
         runs.leavePreview(for: bot)
         await clock.settle()
+        // Back in the thread, the preview opened again.
+        runs.enterThread(bot)
         await runs.ensurePreview(for: bot)
         clock.fire()
         await clock.settle()

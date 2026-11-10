@@ -213,7 +213,11 @@ struct ExistingProjectView: View {
                                                          store: BotStore(context: context), runs: brain.runs)
         starting = false
         // A folder that can't be used: the bot is made; its thread says why.
-        if let problem { BotStore(context: context).append(.system, problem, to: BotStore(context: context).conversation(for: .bot(bot.id))) }
+        // A folder that isn't a checkout is said here; a work copy failure is
+        // already in the thread (addFolder).
+        if let problem, !problem.hasPrefix(String(localized: "darkmux couldn't set up a work copy")) {
+            BotStore(context: context).append(.system, problem, to: BotStore(context: context).conversation(for: .bot(bot.id)))
+        }
         if !inline { dismiss() }
         router.navigate(to: .bot(bot.id))
         if bot.workspaceName != nil, bot.folderBookmark != nil {

@@ -47,6 +47,8 @@ final class PreviewController: PageInspecting {
             botId = bot
             isPicking = false
             picked = nil
+            pickedBot = nil
+            loadedGeneration = nil
             pickedCrop = nil
             loadedURL = nil
             page = Self.makePage(relay: relay, home: home)
@@ -126,6 +128,7 @@ final class PreviewController: PageInspecting {
     private func received(_ element: PickedElement) {
         isPicking = false
         picked = element
+        pickedBot = botId
         #if DEBUG
         if UserDefaults.standard.bool(forKey: "checkPagePick") {
             try? element.selector.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("muxbot-pick.txt"), atomically: true, encoding: .utf8)
@@ -138,9 +141,53 @@ final class PreviewController: PageInspecting {
     }
 
 
+    /// iPhone and iPad's full-screen preview: the bot's page, recorded as
+    /// its, so bugs measure it and Point at something starts there.
+    func showFullScreen(_ url: URL, for bot: UUID?) { show(url, for: bot) }
+
+    /// The bot whose page the pick was made on: the chip shows, and goes
+    /// with a message, only in that bot's thread.
+    var pickedBot: UUID?
+
+    /// The pick for the thread on screen, if it was made on that bot's page.
+    func pick(for context: ChatContext) -> PickedElement? {
+        guard let bot = context.botId, bot == pickedBot else { return nil }
+        return picked
+    }
+
+    /// The bot's preview stopped: its page is let go, so nothing (a bug,
+    /// a screenshot) reads a stopped preview's page.
+    func forget(_ bot: UUID) {
+        guard botId == bot else { return }
+        botId = nil
+        isPicking = false
+        picked = nil
+        pickedBot = nil
+        pickedCrop = nil
+        loadedURL = nil
+        loadedGeneration = nil
+        page = Self.makePage(relay: relay, home: home)
+        watchForMarks()
+    }
+
+    /// Page loads and reloads, counted (tests).
+    private(set) var loads = 0
+    /// The bot's `previewReloads` count its page was loaded at.
+    private var loadedGeneration: Int?
+
+    /// Shows the bot's page as of reload `generation` (`previewReloads`):
+    /// one that moved on while the panel was closed is reloaded on reopen.
+    func show(_ url: URL, for bot: UUID?, generation: Int) {
+        let fresh = bot != botId || loadedURL != url
+        show(url, for: bot)
+        if !fresh, let loaded = loadedGeneration, generation > loaded { reload() }
+        loadedGeneration = generation
+    }
+
     func clearPick() {
         if picked != nil { Task { _ = try? await page.callJavaScript("if (window.__muxUnmark) window.__muxUnmark(); return true;") } }
         picked = nil
+        pickedBot = nil
         pickedCrop = nil
     }
 
@@ -148,6 +195,7 @@ final class PreviewController: PageInspecting {
         guard loadedURL != url else { return }
         loadedURL = url
         home.url = url
+        loads += 1
         _ = page.load(URLRequest(url: url))
         #if DEBUG
         // `-checkPagePick YES`: once loaded, pick the first heading from inside
@@ -167,6 +215,7 @@ final class PreviewController: PageInspecting {
     /// hot reload reached the page.
     func reload() {
         guard loadedURL != nil else { return }
+        loads += 1
         _ = page.reload()
     }
 

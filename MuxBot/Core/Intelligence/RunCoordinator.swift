@@ -581,12 +581,19 @@ final class RunCoordinator {
         guard let name = bot.workspaceName, previewWorkspaces[bot.id] != nil,
               let status = livePreviews[bot.id]?.status, status == .ready else { return }
         let now: LivePreview?
-        if let previewFetcher {
-            now = try? await previewFetcher(false)
-        } else if let connection, let token = connection.token {
-            now = try? await connection.client.previewStatus(token: token, workspace: name).live
-        } else {
-            now = nil
+        do {
+            if let previewFetcher {
+                now = try await previewFetcher(false)
+            } else if let connection, let token = connection.token {
+                now = try await connection.client.previewStatus(token: token, workspace: name).live
+            } else {
+                now = nil
+            }
+        } catch {
+            // darkmux didn't answer this once: reload the page, never restart
+            // a preview that may well be running.
+            previewReloads[bot.id, default: 0] += 1
+            return
         }
         // Left the thread meanwhile: nothing to show.
         guard livePreviews[bot.id]?.status == .ready else { return }
@@ -615,6 +622,12 @@ final class RunCoordinator {
     /// fails. Does nothing without a work copy or pairing (a preview link
     /// is shown as is).
     func ensurePreview(for bot: Bot, clean: Bool = false) async {
+        await startPreview(for: bot, clean: clean)
+        // Started with its thread off screen: it stops after the grace too.
+        if !onScreen.contains(bot.id), previewWorkspaces[bot.id] != nil, pendingStops[bot.id] == nil { leavePreview(for: bot) }
+    }
+
+    private func startPreview(for bot: Bot, clean: Bool) async {
         guard let name = bot.workspaceName else {
             Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
             return
@@ -636,8 +649,10 @@ final class RunCoordinator {
         }
         waitingPreviews[bot.id] = nil
         previewWorkspaces[bot.id] = name
-        // Opening it again calls off a stop waiting out its grace period.
-        returnToPreview(for: bot)
+        // Opening it again calls off a stop waiting out its grace period,
+        // only when its thread is on screen: a start from off screen (a
+        // refresh after a run, the connection arriving) never keeps it.
+        if onScreen.contains(bot.id) { returnToPreview(for: bot) }
         if let status = livePreviews[bot.id]?.status, !status.canRetry {
             // A cached "ready" may be stale (idle-stopped, darkmux restarted):
             // ask darkmux before trusting it, and start it again if it's gone.
@@ -759,7 +774,10 @@ final class RunCoordinator {
     /// You left the bot's thread: its preview stops after
     /// `previewStopGrace`, unless you come back first.
     func leavePreview(for bot: Bot) {
-        guard bot.workspaceName != nil else { return }
+        onScreen.remove(bot.id)
+        // A preview this app asked for (Add folder may have no work copy name
+        // yet) stops too.
+        guard bot.workspaceName != nil || previewWorkspaces[bot.id] != nil else { return }
         pendingStops[bot.id]?.cancel()
         pendingStops[bot.id] = Task { [weak self] in
             guard let self else { return }
@@ -770,6 +788,20 @@ final class RunCoordinator {
         }
     }
 
+    /// Bots whose thread is on screen now.
+    private var onScreen: Set<UUID> = []
+
+    /// You opened the bot's thread: its preview may run, and a stop waiting
+    /// out its grace is called off.
+    func enterThread(_ bot: Bot) {
+        onScreen.insert(bot.id)
+        returnToPreview(for: bot)
+    }
+
+    /// Tells the preview a bot's preview stopped (the app's controller lets
+    /// its page go).
+    var onPreviewStopped: ((UUID) -> Void)?
+
     /// You're back in the bot's thread: a stop still waiting is called off.
     func returnToPreview(for bot: Bot) {
         pendingStops.removeValue(forKey: bot.id)?.cancel()
@@ -778,7 +810,7 @@ final class RunCoordinator {
     /// Stops the bot's preview now (the Stop button, a grace period that
     /// ran out).
     func stopPreview(for bot: Bot) async {
-        guard let name = bot.workspaceName else { return }
+        guard let name = previewWorkspaces[bot.id] ?? bot.workspaceName else { return }
         await stopPreview(bot.id, workspace: name)
     }
 
@@ -790,6 +822,7 @@ final class RunCoordinator {
         // shows now: failed, timed out, or "stopped" by a cancelled start.
         guard previewWorkspaces.removeValue(forKey: id) != nil else { return }
         livePreviews[id] = LivePreview(status: .stopped)
+        onPreviewStopped?(id)
         if let previewStopper { await previewStopper(name); return }
         guard let connection, let token = connection.token else { return }
         try? await connection.client.stopPreview(token: token, workspace: name)
@@ -1015,7 +1048,7 @@ final class RunCoordinator {
     var checkProblems: [UUID: String] = [:]
     static let checkNotRunning = String(localized: "Couldn't check: the preview wasn't running.")
     /// Checks waiting for their bot's preview to be ready.
-    private var pendingChecks: Set<UUID> = []
+    private(set) var pendingChecks: Set<UUID> = []
 
     private func runPendingChecks(for bot: Bot) {
         for run in bot.runs ?? [] where pendingChecks.contains(run.id) {
@@ -1212,18 +1245,27 @@ final class RunCoordinator {
         #endif
         bot.folderBookmark = bookmark ?? Data()
         bot.folderName = url.lastPathComponent
-        // A new work copy: the old one's preview stops and is forgotten.
+        // A new work copy: the old one's preview stops; the panel says it's
+        // setting up, and the old work copy stays until the new one is made.
         if let old = previewWorkspaces[bot.id] { await stopPreview(bot.id, workspace: old) }
-        livePreviews[bot.id] = nil
-        bot.workspaceName = nil
+        livePreviews[bot.id] = LivePreview(status: .settingUpWorkCopy)
         if let slug = GitRemote.originSlug(of: url), !bot.repoSlugs.contains(slug) {
             store.addResource(.repo, "https://github.com/\(slug)", to: bot)
         }
         store.save()
         guard bookmark != nil else { return "I couldn't keep access to \(url.lastPathComponent). Pick it again." }
-        if connection?.isPaired == true { await setUpWorkCopy(for: bot, store: store) }
-        // Said on the card that asked (not only in the bot's info).
-        if case let .failed(why)? = workCopySetup[bot.id] { return String(localized: "darkmux couldn't set up a work copy: \(why)") }
+        if connection?.isPaired == true {
+            await setUpWorkCopy(for: bot, store: store)
+        }
+        // Said in the thread and on the card that asked.
+        if case let .failed(why)? = workCopySetup[bot.id] {
+            livePreviews[bot.id] = LivePreview(status: .stopped)
+            let problem = String(localized: "darkmux couldn't set up a work copy: \(why)")
+            store.append(.system, problem, to: store.conversation(for: .bot(bot.id)))
+            return problem
+        }
+        livePreviews[bot.id] = nil
+        if onScreen.contains(bot.id) { await ensurePreview(for: bot) }
         return nil
     }
 
@@ -1430,7 +1472,12 @@ final class RunCoordinator {
         checkProblems[run.id] = nil
         // The page on the bot's preview as it is now (it may have restarted
         // on another port since the brief); none running: wait for it.
-        guard let root = previewURL(for: bot) else {
+        // A work copy's change is measured on darkmux's preview of it, never
+        // on a preview link of your own.
+        let root = bot.workspaceName != nil
+            ? livePreviews[bot.id].flatMap { $0.status == .ready ? $0.url : nil }
+            : previewURL(for: bot)
+        guard let root else {
             pendingChecks.insert(run.id)
             checkProblems[run.id] = Self.checkNotRunning
             return

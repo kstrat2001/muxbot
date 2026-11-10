@@ -5,6 +5,8 @@ import Foundation
 struct LivePreview: Equatable, Sendable {
     enum Status: Equatable, Sendable {
         case waiting, starting, installing, ready, stopped
+        /// darkmux is making the bot's work copy (Add folder): the panel stays.
+        case settingUpWorkCopy
         case failed(String)
         /// darkmux won't run one for this bot, and why (not a failure: the
         /// panel shows the reason and its fix).
@@ -16,13 +18,14 @@ struct LivePreview: Equatable, Sendable {
         var canRetry: Bool {
             switch self {
             case .failed, .unavailable, .stopped, .waiting: true
-            case .starting, .installing, .ready: false
+            case .starting, .installing, .ready, .settingUpWorkCopy: false
             }
         }
 
         var text: String {
             switch self {
             case .waiting: "Waiting for darkmux…"
+            case .settingUpWorkCopy: String(localized: "Setting up a work copy on this Mac…")
             case .starting: "Starting the preview…"
             case .installing: "Installing the project's dependencies (first time only)…"
             case .ready: "Preview ready."
@@ -44,7 +47,7 @@ struct LivePreview: Equatable, Sendable {
     static func url(darkmux: LivePreview?, resource: URL?) -> URL? {
         switch darkmux?.status {
         case .ready?: darkmux?.url
-        case .waiting?, .starting?, .installing?, .failed?: nil
+        case .waiting?, .starting?, .installing?, .failed?, .settingUpWorkCopy?: nil
         case .stopped?, .unavailable?, nil: resource
         }
     }
