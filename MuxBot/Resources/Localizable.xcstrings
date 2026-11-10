@@ -857,6 +857,12 @@
     "Installing the project's packages didn't work. Try again; if it keeps happening, ask the bot to fix it." : {
 
     },
+    "It had already changed %@ when it stopped; that's saved as a checkpoint on top of the result. Undo puts it all back." : {
+
+    },
+    "It had already changed %@ when it stopped; that's saved as its own checkpoint. Undo puts it back." : {
+
+    },
     "It had already finished." : {
 
     },
@@ -1068,6 +1074,12 @@
     "New bot…" : {
 
     },
+    "New work copy" : {
+
+    },
+    "New work copy on its own branch. The earlier commits stay on the old branch in darkmux." : {
+
+    },
     "Next" : {
 
     },
@@ -1249,6 +1261,9 @@
 
     },
     "Paired with darkmux on this Mac" : {
+
+    },
+    "Pairing didn't work: darkmux has too many pairing requests waiting. Try again in a moment." : {
 
     },
     "Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time." : {
@@ -1684,6 +1699,9 @@
     "The bot's skills come from this project's PLAYBOOK.md." : {
 
     },
+    "The change didn't finish: %@" : {
+
+    },
     "The change didn't finish: %@ The result before it is unchanged." : {
 
     },
@@ -1780,6 +1798,9 @@
     "The template's preview settings aren't in a form darkmux can use, so this project's preview can't start until the template is fixed." : {
 
     },
+    "The work copy isn't on a branch, so darkmux can't hand over its changes." : {
+
+    },
     "There's already a .darkmux/preview.json there; I never overwrite it." : {
 
     },
@@ -1872,6 +1893,12 @@
     "This project's template has no preview" : {
 
     },
+    "This run is from an earlier pairing with darkmux, so it can't be undone from here." : {
+
+    },
+    "This run is from an earlier pairing with darkmux, so this app can't follow it anymore. If it's still going, stop it on the Mac with darkmux." : {
+
+    },
     "This template isn't on GitHub at the commit it's pinned to, so it can't be used." : {
 
     },
@@ -1954,6 +1981,12 @@
 
     },
     "This work builds on a commit GitHub doesn't have (%@), so I couldn't put it there. Push that commit to GitHub, then try again." : {
+
+    },
+    "This work copy belongs to an earlier pairing with darkmux. Claim it for this app with darkmux's claim command, or set up a new work copy (a new branch; the earlier commits stay on the old one)." : {
+
+    },
+    "This work copy is from an earlier pairing" : {
 
     },
     "To do" : {
@@ -2138,6 +2171,9 @@
     "darkmux clones %@. A clone gets no preview: darkmux runs a preview only from your own checkout. You can add yours later with Add folder." : {
 
     },
+    "darkmux couldn't find the repo's default branch on GitHub. Check the checkout's remote, then try again." : {
+
+    },
     "darkmux couldn't free the model for this run." : {
 
     },
@@ -2187,6 +2223,9 @@
     "darkmux has models ready." : {
 
     },
+    "darkmux has no free work copy name left for this project. Remove an old work copy of it in darkmux, then try again." : {
+
+    },
     "darkmux installed" : {
 
     },
@@ -2209,6 +2248,9 @@
 
     },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
+
+    },
+    "darkmux made it for this app before you paired again, so it won't let this pairing use it. Claim it with this command in Terminal, or set up a new work copy (a new branch; the earlier commits stay on the old one):" : {
 
     },
     "darkmux makes its own copy on a new branch, so your files aren't touched. A preview runs only from your own checkout, so a folder on this Mac gets one; a repo darkmux clones doesn't." : {
@@ -2336,6 +2378,9 @@
 
     },
     "package.json, no lockfile" : {
+
+    },
+    "some files" : {
 
     },
     "this Mac" : {

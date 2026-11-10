@@ -108,8 +108,9 @@ struct PairingErrorTests {
         #expect(!text.contains("`"))
     }
 
-    @Test func otherErrorsKeepTheirReasonWithoutMarkup() {
+    /// Sweep 2 seam #8: plain words, darkmux's own behind Show details.
+    @Test func otherErrorsAreSaidPlainly() {
         let text = FleetConnection.plainError(DarkmuxClient.ClientError(message: "pending requests are capped", status: 429))
-        #expect(text == "Pairing didn't work: pending requests are capped")
+        #expect(text == "Pairing didn't work: darkmux has too many pairing requests waiting. Try again in a moment.")
     }
 }
