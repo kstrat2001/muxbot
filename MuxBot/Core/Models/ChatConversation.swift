@@ -28,3 +28,13 @@ final class ChatConversation {
         self.roleId = roleId
     }
 }
+
+extension ChatConversation {
+    /// The lead bot's thread id: the same on every device.
+    static let leadThreadId = UUID(uuidString: "6D75782D-626F-742D-6C65-6164000000A1")!
+
+    /// A thread's id from its bot (the bot's own id), or the lead bot's
+    /// fixed one: two devices that each make a bot's thread make the same
+    /// thread, and merging (`BotStore.conversation(for:)`) keeps one.
+    static func threadId(for chat: ChatContext) -> UUID { chat.botId ?? leadThreadId }
+}

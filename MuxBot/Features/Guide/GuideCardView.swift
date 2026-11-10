@@ -196,12 +196,17 @@ struct SettingCardView: View {
     @ViewBuilder private var control: some View {
         switch id {
         case .modelMode:
-            Picker("On \(brain.runs.machine?.name ?? String(localized: "this Mac"))", selection: Binding(get: { mode }, set: { set($0) })) {
+            if brain.runs.knownMachine == nil {
+                Text("I can show this once darkmux on your Mac has answered, so the setting goes to the right machine.")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+            }
+            Picker("On \(brain.runs.machinePhrase)", selection: Binding(get: { mode }, set: { set($0) })) {
                 Text("Auto").tag(ModelMode.auto)
                 Text("Always ask").tag(ModelMode.ask)
                 ForEach(listed.map(\.name), id: \.self) { name in Text("Always \(name)").tag(ModelMode.model(name)) }
                 if case let .model(name) = mode, !listed.contains(where: { $0.name == name }) { Text("Always \(name)").tag(mode) }
             }
+            .disabled(brain.runs.knownMachine == nil)
         case .notifications:
             Toggle("Tell me when a run has a result or didn't finish", isOn: Binding(get: { notify }, set: {
                 notify = $0
@@ -218,9 +223,9 @@ struct SettingCardView: View {
 
     private func set(_ new: ModelMode) {
         guard new != mode else { return }
+        guard GuideSettings.setModelMode(new, runs: brain.runs) else { return }
         mode = new
-        GuideSettings.setModelMode(new, runs: brain.runs)
-        changed = String(localized: "Set to \(GuideSettings.describe(new)) on \(brain.runs.machine?.name ?? String(localized: "this Mac")).")
+        changed = String(localized: "Set to \(GuideSettings.describe(new)) on \(brain.runs.machinePhrase).")
     }
 
     private func load() async {

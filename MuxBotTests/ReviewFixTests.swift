@@ -81,8 +81,10 @@ struct RunFlowReviewTests {
         brain.runs.workSubmitter = { _, _, _, _, _ in submitted.add(); return ("w-1", nil) }
         let run = store.proposeRun(task: "Fix it", crew: .coder, on: bot)
         brain.runs.decide(.approve, on: run, store: store)
-        #expect(run.phase == .running)
-        await brain.runs.stop(run, store: store)
+        // Approve before the model is chosen waits on the card for the
+        // choice (sweep 7 #3), so Cancel there is the stop.
+        #expect(run.phase == .proposed)
+        brain.runs.decide(.cancel, on: run, store: store)
         #expect(run.phase == .canceled)
         await gate.open()
         await until(1) { submitted.count > 0 }

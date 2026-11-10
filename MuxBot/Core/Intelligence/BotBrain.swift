@@ -516,6 +516,8 @@ final class BotBrain {
     /// `forced` is an intent you chose (a prefix like "bug:" does the same).
     func send(_ request: String, in context: ChatContext, store: BotStore,
               element: PickedElement? = nil, forced: Intent? = nil, crop: Data? = nil) async {
+        // A bot deleted (maybe on another device) gets no new thread.
+        if let id = context.botId, store.bot(id: id) == nil { return }
         // "no, it's a question": re-read the previous message instead.
         if let corrected = Intent.correction(in: request),
            let previous = (store.conversation(for: context).messages ?? [])

@@ -8,7 +8,7 @@ struct BotSidebar: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Bot.createdAt) private var bots: [Bot]
-    @Query private var threads: [ChatConversation]
+    @Query(sort: \ChatConversation.createdAt) private var threads: [ChatConversation]
 
     var body: some View {
         @Bindable var router = router

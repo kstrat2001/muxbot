@@ -406,6 +406,9 @@
     "Choosing the model" : {
 
     },
+    "Choosing the model…" : {
+
+    },
     "Clear %@'s conversation?" : {
 
     },
@@ -742,6 +745,9 @@
 
     },
     "I can make %@ for that. Approve to add it." : {
+
+    },
+    "I can show this once darkmux on your Mac has answered, so the setting goes to the right machine." : {
 
     },
     "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
@@ -1685,6 +1691,9 @@
     "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info." : {
 
     },
+    "These are saved for darkmux's machine, so they wait until darkmux on your Mac has answered once." : {
+
+    },
     "Thinking" : {
 
     },
@@ -2204,10 +2213,19 @@
     "this Mac" : {
 
     },
+    "this bot" : {
+
+    },
     "this repo" : {
 
     },
     "yes" : {
+
+    },
+    "your Mac" : {
+
+    },
+    "your Mac (%@)" : {
 
     },
     "your checkout" : {

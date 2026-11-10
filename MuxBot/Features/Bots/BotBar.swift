@@ -22,7 +22,8 @@ struct BotBar: View {
     }
 
     private var listenerName: String {
-        router.context.botId.flatMap { id in bots.first { $0.id == id }?.name } ?? LeadBot.name
+        guard let id = router.context.botId else { return LeadBot.name }
+        return bots.first { $0.id == id }?.name ?? String(localized: "this bot")
     }
 
     var body: some View {

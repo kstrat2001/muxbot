@@ -206,6 +206,8 @@ final class MemoryBacking: KeyValueBacking, @unchecked Sendable {
 struct MachineKeyTests {
     @Test func theMachineIdComesFromDarkmux() async {
         let brain = BotBrain()
+        // Its own store: the machine is remembered with the settings (sweep 7 #2).
+        brain.runs.settingsStore = ModelSettingsStore(backing: MemoryBacking())
         brain.runs.profileSource = { [] }
         brain.runs.machine = DarkmuxClient.Machine(id: "m-0123456789abcdef", name: "studio")
         #expect(brain.runs.machineKey == "m-0123456789abcdef")
@@ -213,6 +215,7 @@ struct MachineKeyTests {
 
     @Test func beforeDarkmuxSaysItsTheEndpoint() {
         let brain = BotBrain()
+        brain.runs.settingsStore = ModelSettingsStore(backing: MemoryBacking())
         #expect(brain.runs.machineKey == "endpoint:127.0.0.1:8767")
     }
 }

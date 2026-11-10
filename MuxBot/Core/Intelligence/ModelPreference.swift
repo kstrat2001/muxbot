@@ -96,6 +96,26 @@ final class ModelSettingsStore: @unchecked Sendable {
     }()
 
     private static let orderKey = "models.order"
+    private static let machineIdKey = "models.machine.id"
+    private static let machineNameKey = "models.machine.name"
+
+    /// The darkmux machine last heard from, shared with your other devices.
+    var lastMachine: DarkmuxClient.Machine? {
+        get {
+            guard let id = backing.string(forKey: Self.machineIdKey), !id.isEmpty else { return nil }
+            return DarkmuxClient.Machine(id: id, name: backing.string(forKey: Self.machineNameKey) ?? id)
+        }
+        set {
+            if let newValue {
+                backing.set(newValue.id, forKey: Self.machineIdKey)
+                backing.set(newValue.name, forKey: Self.machineNameKey)
+            } else {
+                backing.removeObject(forKey: Self.machineIdKey)
+                backing.removeObject(forKey: Self.machineNameKey)
+            }
+            flush()
+        }
+    }
     private func modeKey(_ machine: String) -> String { "models.mode.\(machine)" }
     private func botKey(_ bot: UUID, _ machine: String) -> String { "models.bot.\(bot.uuidString).\(machine)" }
 

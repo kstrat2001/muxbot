@@ -109,8 +109,27 @@ final class AppRouter {
         if usesSidebar { path = []; sidebar = .bot(bot.id) } else { path = [.bot(bot.id)] }
     }
 
+    /// A message to scroll to (and briefly outline) in its thread: a
+    /// Search result.
+    var focusMessageId: UUID?
+
+    func open(message: UUID, in route: Route) {
+        focusMessageId = message
+        navigate(to: route)
+    }
+
+    /// Bots changed (one deleted, maybe on another device): a thread of a
+    /// bot that's gone is left for Mux Bot's, never kept on screen.
+    func botsChanged(existing: Set<UUID>) {
+        if case let .bot(id)? = sidebar, !existing.contains(id) { sidebar = .lead }
+        let kept = path.filter { if case let .bot(id) = $0 { existing.contains(id) } else { true } }
+        if kept != path { path = kept }
+        if let info = infoBotId, !existing.contains(info) { infoBotId = nil }
+    }
+
     func navigate(to route: Route) {
-        guard usesSidebar else { path.append(route); return }
+        // Tab layout: the thread on top, never a second copy of it under it.
+        guard usesSidebar else { path = [route]; return }
         path = []
         switch route {
         case .lead: sidebar = .lead
