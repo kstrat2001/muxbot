@@ -294,7 +294,7 @@ struct ReviewFindingsClientTests {
     @Test func randomHexFallsBackWhenTheSecureSourceFails() {
         let hex = FleetConnection.randomHex(32, secure: { _ in false })
         #expect(hex.count == 64)
-        #expect(hex.allSatisfy(\.isHexDigit))
+        #expect(hex.allSatisfy { $0.isHexDigit })
         #expect(hex != String(repeating: "0", count: 64))
         #expect(FleetConnection.randomHex(32).count == 64)
     }
