@@ -97,6 +97,8 @@ struct FollowUpRoutingTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.runs.deviceRuns = true
+        // This Mac's run (sweep 2: another Mac's is refused a Tweak).
+        brain.runs.markStartedHere(run)
         await brain.send("i'm not seeing it fixed in the live viewer", in: .bot(bot.id), store: store)
         // Your reply continues the run (a Tweak); unpaired here, so it says why it can't send yet.
         #expect((thread.messages ?? []).contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." })

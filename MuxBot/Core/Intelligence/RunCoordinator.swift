@@ -193,16 +193,19 @@ final class RunCoordinator {
     /// Runs whose darkmux can't be reached right now (the card says so).
     var unreachableRuns: Set<UUID> = []
 
-    private func follow(_ run: BotRun, workId: String, store: BotStore) async {
+    func follow(_ run: BotRun, workId: String, store: BotStore) async {
         var backoff = PollBackoff()
         // One follower per run, however often following resumes.
         guard following.insert(run.id).inserted else { return }
+        if let bot = run.bot { followed[run.id] = (bot.id, workId) }
         defer {
             unreachableRuns.remove(run.id)
             following.remove(run.id)
+            followed[run.id] = nil
             slotFreed(store: store)
         }
-        while run.phase == .running, run.darkmuxWorkId == workId {
+        // A run (or bot) deleted meanwhile is never read again.
+        while run.modelContext != nil, run.bot != nil, run.phase == .running, run.darkmuxWorkId == workId {
             try? await Task.sleep(for: .seconds(pollInterval ?? backoff.delay))
             let status: DarkmuxClient.WorkStatus
             do {
@@ -216,6 +219,15 @@ final class RunCoordinator {
                 }
                 backoff.succeeded()
                 unreachableRuns.remove(run.id)
+                unverifiedAdoptions.remove(run.id)
+            } catch let error as DarkmuxClient.ClientError where error.status == 404 && unverifiedAdoptions.contains(run.id) {
+                // An old run adopted at upgrade that this Mac's darkmux never
+                // had: another Mac's. Left alone, never failed.
+                unverifiedAdoptions.remove(run.id)
+                if let bot = run.bot {
+                    LocalBotState.shared.update(bot.id) { $0.localRuns?.removeAll { $0 == run.id.uuidString } }
+                }
+                return
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
                 // darkmux no longer knows this run (restarted, or it ended long
                 // ago). Nobody stopped it: say what happened.
@@ -451,6 +463,10 @@ final class RunCoordinator {
     /// After a relaunch, pick up runs that were still going on darkmux.
     func resumeFollowing(store: BotStore) {
         guard workStatusFetcher != nil || connection?.token != nil else { return }
+        // Once per launch (reopening the window mustn't fail a run waiting
+        // for a slot, or follow a Tweak's earlier turn again).
+        guard !resumedThisLaunch else { return }
+        resumedThisLaunch = true
         let runs = (try? store.context.fetch(FetchDescriptor<BotRun>())) ?? []
         // Earlier builds stored a raw darkmux error as the result; show those as
         // a plain outcome now.
@@ -468,7 +484,7 @@ final class RunCoordinator {
         // and this Mac's darkmux never had them.
         for run in runs where run.phase == .running && run.startedHere {
             guard let workId = run.darkmuxWorkId else {
-                guard !starting.contains(run.id) else { continue }
+                guard !starting.contains(run.id), !queued.contains(where: { $0.run.id == run.id }) else { continue }
                 // A Tweak darkmux never had: back to the result it continued.
                 if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: Self.tweakQuitBeforeStart)
@@ -1040,10 +1056,40 @@ final class RunCoordinator {
     /// with a work copy on this Mac adopts its finished runs (so Undo works
     /// on them here), once. Running ones are left alone: whose darkmux has
     /// them can't be told.
+    private var resumedThisLaunch = false
+
+    /// Where "old runs adopted" is remembered (once per install).
+    var adoptionDefaults: UserDefaults = TestIsolation.defaults
+    static let adoptedKey = "muxbot.adoptedLegacyRuns"
+    /// Running runs adopted from before: the first poll says whether they're
+    /// this Mac's (a 404 means not).
+    private var unverifiedAdoptions: Set<UUID> = []
+    /// The runs being followed, with their bot and work id (a bot deleted on
+    /// another device still has its runs stopped here).
+    private var followed: [UUID: (bot: UUID, workId: String)] = [:]
+
+    /// A bot was deleted (here or on another device): its runs on this
+    /// Mac's darkmux are cancelled and its preview stopped.
+    func botDisappeared(_ id: UUID) async {
+        for (_, entry) in followed where entry.bot == id {
+            if let workCanceller { try? await workCanceller(entry.workId) }
+            else if let connection, let token = connection.token { try? await connection.client.cancelWork(token: token, workId: entry.workId) }
+        }
+        followed = followed.filter { $0.value.bot != id }
+        if let workspace = previewWorkspaces[id] { await stopPreview(id, workspace: workspace) }
+    }
+
     func adoptLegacyRuns(store: BotStore) {
+        // Once per install: a bot that just never ran here later is never
+        // adopted (another Mac's runs would become "this Mac").
+        guard !adoptionDefaults.bool(forKey: Self.adoptedKey) else { return }
+        adoptionDefaults.set(true, forKey: Self.adoptedKey)
         for bot in store.allBots() where bot.workspaceName != nil && LocalBotState.shared[bot.id]?.localRuns == nil {
-            let ids = (bot.runs ?? []).filter { $0.phase != .running }.map(\.id.uuidString)
-            LocalBotState.shared.update(bot.id) { $0.localRuns = Array(ids.suffix(500)) }
+            // Finished runs, and running ones with a work id: the first poll
+            // decides those (a 404: not this Mac's, left alone).
+            let runs = (bot.runs ?? []).filter { $0.phase != .running || $0.darkmuxWorkId != nil }
+            for run in runs where run.phase == .running { unverifiedAdoptions.insert(run.id) }
+            LocalBotState.shared.update(bot.id) { $0.localRuns = Array(runs.map(\.id.uuidString).suffix(500)) }
         }
     }
 
@@ -1171,13 +1217,19 @@ final class RunCoordinator {
     }
 
     static let tweakQuitBeforeStart = String(localized: "The change didn't start before Mux Bot quit. The result before it is unchanged; reply to try again.")
-    static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
+    /// A new pairing is a new darkmux client, which can't reach the old run.
+    static let stopUnpaired = String(localized: "This app isn't paired with darkmux now, so it can't stop this run. Stop it on the Mac with darkmux.")
+    static let tweakElsewhere = String(localized: "Reply on the Mac it ran on.")
     static let stopElsewhere = String(localized: "Stop it from the Mac it runs on.")
 
     /// Before a bot is deleted: its runs on this Mac are cancelled on
     /// darkmux and its preview stopped. A problem (darkmux wouldn't cancel a
     /// run) is returned, and the bot must not be deleted.
     func prepareToDelete(_ bot: Bot, store: BotStore) async -> String? {
+        // Another Mac's run can only be stopped there.
+        if (bot.runs ?? []).contains(where: { $0.phase == .running && !$0.startedHere }) {
+            return String(localized: "\(bot.name) has a run going on another Mac. Delete it from the Mac it runs on, or stop the run there first.")
+        }
         for run in bot.runs ?? [] where run.phase == .running && run.startedHere {
             if let workId = run.darkmuxWorkId {
                 do {
@@ -1531,6 +1583,13 @@ final class RunCoordinator {
         let composed = message ?? Self.tweakMessage(for: run, change: text)
         lastTweakMessage = composed
         if echo { store.append(.user, text, to: store.conversation(for: .bot(bot.id))) }
+        // Another Mac's run: its darkmux and work copy are there, never a
+        // fresh run in this Mac's copy.
+        guard run.startedHere else {
+            tweakRunId = nil
+            store.append(.system, Self.tweakElsewhere, to: store.conversation(for: .bot(bot.id)))
+            return
+        }
         tweakRunId = nil
         if let reason = whyRunCannotStart(run) {
             store.append(.system, "Can't run this yet: \(reason).", to: store.conversation(for: .bot(bot.id)))

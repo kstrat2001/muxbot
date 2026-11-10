@@ -201,6 +201,8 @@ struct RunFlowReviewTests {
         run.changedFiles = ["a.css +1 −1"]
         run.keptCommit = "abc1234"
         brain.runs.runChecks[run.id] = LayoutCheck.Result(met: false, failures: ["still a row"])
+        // This Mac's run (sweep 2: another Mac's is refused a Tweak).
+        brain.runs.markStartedHere(run)
         brain.runs.workSubmitter = { _, _, _, _, _ in ("w-2", nil) }
         brain.runs.tweak("again", run: run, store: store)
         #expect(brain.runs.runChecks[run.id] == nil)
@@ -231,6 +233,8 @@ struct RunFlowReviewTests {
         run.phase = .result
         NeedsYou.dismiss([run])
         #expect(NeedsYou.isDismissed(run))
+        // This Mac's run (sweep 2: another Mac's is refused a Tweak).
+        brain.runs.markStartedHere(run)
         brain.runs.workSubmitter = { _, _, _, _, _ in ("w-3", nil) }
         brain.runs.tweak("try again", run: run, store: store)
         #expect(!NeedsYou.isDismissed(run))
@@ -286,6 +290,8 @@ struct FollowUpIntentTests {
         run.keptCommit = "abc1234"
         run.startedAt = Date().addingTimeInterval(-60)
         run.finishedAt = Date()
+        // This Mac's run (sweep 2: another Mac's is refused a Tweak).
+        brain.runs.markStartedHere(run)
         return (store, bot, brain, run)
     }
 

@@ -49,7 +49,11 @@ struct ContentView: View {
             BotStore(context: context).mergeDuplicateThreads()
         }
         // A bot deleted (here or on another device): its thread is left.
-        .onChange(of: bots.map(\.id)) { router.botsChanged(existing: Set(bots.map(\.id))) }
+        .onChange(of: bots.map(\.id)) { old, new in
+            router.botsChanged(existing: Set(new))
+            // Deleted (maybe on another device): its runs and preview here stop.
+            for gone in Set(old).subtracting(new) { Task { await brain.runs.botDisappeared(gone) } }
+        }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif

@@ -105,6 +105,8 @@ struct RunsSayWhatHappenedTests {
 
     @Test func runsFromBeforeThisBuildAreAdoptedOnceIfFinished() {
         let (store, bot, runs) = setUp()
+        // Adoption happens once per install (sweep 2 #7): this test's own.
+        runs.adoptionDefaults = UserDefaults(suiteName: "muxbot-tests-adopt-\(UUID().uuidString)")!
         let done = store.proposeRun(task: "old result", crew: .coder, on: bot)
         done.phase = .result
         let inFlight = store.proposeRun(task: "old running", crew: .coder, on: bot)
