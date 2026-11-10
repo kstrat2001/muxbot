@@ -176,6 +176,9 @@
     "A folder on this Mac" : {
 
     },
+    "A later run changed the same files. Undo the later run first." : {
+
+    },
     "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
 
     },
@@ -535,6 +538,12 @@
         }
       }
     },
+    "Couldn't stop it: %@" : {
+
+    },
+    "Couldn't undo it: %@" : {
+
+    },
     "Couldn't write it: %@" : {
 
     },
@@ -675,6 +684,18 @@
     "GitHub URL or link (optional)" : {
 
     },
+    "GitHub can't find that repo. If it's private, sign in with GitHub (Settings › GitHub) and install Mux Bot on it." : {
+
+    },
+    "GitHub didn't accept that. Try again in a moment." : {
+
+    },
+    "GitHub didn't allow that: Mux Bot may not have access to this repo." : {
+
+    },
+    "GitHub is busy. Try again in a moment." : {
+
+    },
     "GitHub refused the request. Try again in a moment." : {
 
     },
@@ -688,6 +709,9 @@
 
     },
     "GitHub sign-in didn't work. Try again in a moment." : {
+
+    },
+    "GitHub's rate limit for requests without sign-in is used up (60 an hour). Sign in with GitHub (Settings › GitHub) for more." : {
 
     },
     "Go" : {
@@ -809,6 +833,9 @@
 
     },
     "Installing the project's packages didn't work. Try again; if it keeps happening, ask the bot to fix it." : {
+
+    },
+    "It had already finished." : {
 
     },
     "It needs a persona and at least one skill." : {
@@ -941,6 +968,9 @@
     "Move up" : {
 
     },
+    "Mux Bot can't reach GitHub right now." : {
+
+    },
     "Mux Bot can't reach GitHub to read this template." : {
 
     },
@@ -951,6 +981,9 @@
 
     },
     "Mux Bot couldn't open its data" : {
+
+    },
+    "Mux Bot couldn't reach darkmux." : {
 
     },
     "Mux Bot is paired with darkmux on this Mac." : {
@@ -1347,6 +1380,19 @@
     "Running" : {
 
     },
+    "Running on darkmux: %@, on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Running on darkmux: %1$@, on %2$@."
+          }
+        }
+      }
+    },
+    "Running on darkmux: %@." : {
+
+    },
     "Running on this Mac." : {
 
     },
@@ -1605,6 +1651,9 @@
 
     },
     "The change didn't finish: %@ The result before it is unchanged." : {
+
+    },
+    "The change didn't start on darkmux (%@) The result before it is unchanged; reply to try again." : {
 
     },
     "The change didn't start on darkmux (%@). The result before it is unchanged; reply to try again." : {
@@ -2064,6 +2113,12 @@
     "darkmux couldn't set up a work copy: %@" : {
 
     },
+    "darkmux couldn't undo it. Show details has what it reported." : {
+
+    },
+    "darkmux didn't accept that. Show details has why." : {
+
+    },
     "darkmux didn't list its models: %@" : {
 
     },
@@ -2086,10 +2141,16 @@
         }
       }
     },
+    "darkmux doesn't have that anymore." : {
+
+    },
     "darkmux has models ready." : {
 
     },
     "darkmux installed" : {
+
+    },
+    "darkmux is already running two of this app's runs. This one waits for a free slot." : {
 
     },
     "darkmux is answering on this Mac." : {
@@ -2098,7 +2159,13 @@
     "darkmux is built for Apple silicon Macs; this Mac has an Intel chip, which darkmux hasn't been tested on." : {
 
     },
+    "darkmux is busy with that right now. Try again in a moment." : {
+
+    },
     "darkmux isn't answering on this Mac" : {
+
+    },
+    "darkmux isn't answering on this Mac." : {
 
     },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
@@ -2123,6 +2190,12 @@
 
     },
     "darkmux on this Mac decides which models apps may use." : {
+
+    },
+    "darkmux ran into a problem running it. Show details has what it reported." : {
+
+    },
+    "darkmux ran into a problem. Try again in a moment." : {
 
     },
     "darkmux reads “%@”." : {
@@ -2244,6 +2317,9 @@
 
     },
     "·" : {
+
+    },
+    "“%@” changed the same files later. Undo that run first." : {
 
     },
     "• %@" : {

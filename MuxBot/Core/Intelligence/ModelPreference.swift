@@ -162,11 +162,12 @@ struct ModelChoice: Equatable, Sendable {
     /// `offerNext` instead of switching).
     var stays = false
 
+    /// `crew` names whose default darkmux falls back to (Coder, Reviewer…).
     static func resolve(mode: ModelMode, order: [String], listed: [DarkmuxClient.ProfileInfo],
-                        previous: String?, rerunAfterNotMet: Bool) -> ModelChoice {
+                        previous: String?, rerunAfterNotMet: Bool, crew: String = CrewRole.coder.name) -> ModelChoice {
         switch mode {
         case .auto, .ask:
-            var c = rerunAfterNotMet ? auto(next: previous, order: order, listed: listed) : auto(order: order, listed: listed)
+            var c = rerunAfterNotMet ? auto(next: previous, order: order, listed: listed, crew: crew) : auto(order: order, listed: listed, crew: crew)
             c.ask = mode == .ask
             return c
         case let .model(name):
@@ -177,28 +178,28 @@ struct ModelChoice: Equatable, Sendable {
             } else if entry?.reachable == false {
                 c.unavailable = "\(name) isn't running on this Mac."
             }
-            if c.unavailable != nil { c.suggestion = auto(order: order, listed: listed).profile.flatMap { $0 == name ? nil : $0 } }
+            if c.unavailable != nil { c.suggestion = auto(order: order, listed: listed, crew: crew).profile.flatMap { $0 == name ? nil : $0 } }
             if rerunAfterNotMet {
                 let next = ModelPreference.next(after: name, in: listed, order: order)
-                let fallback = auto(order: order, listed: listed).profile
+                let fallback = auto(order: order, listed: listed, crew: crew).profile
                 c.offerNext = [next, fallback].compactMap { $0 }.first { $0 != name }
             }
             return c
         }
     }
 
-    private static func auto(order: [String], listed: [DarkmuxClient.ProfileInfo]) -> ModelChoice {
+    private static func auto(order: [String], listed: [DarkmuxClient.ProfileInfo], crew: String) -> ModelChoice {
         guard !listed.isEmpty else { return ModelChoice(profile: nil, reason: "darkmux picks (it didn't list models)") }
         let up = listed.filter(\.reachable).map(\.name)
         if let name = order.first(where: up.contains) {
             return ModelChoice(profile: name, reason: "first in your Auto order that's running")
         }
-        return ModelChoice(profile: ModelPreference.first(in: listed, order: order), reason: "darkmux's default for Coder")
+        return ModelChoice(profile: ModelPreference.first(in: listed, order: order), reason: "darkmux's default for \(crew)")
     }
 
-    private static func auto(next previous: String?, order: [String], listed: [DarkmuxClient.ProfileInfo]) -> ModelChoice {
-        guard let previous, order.contains(previous) else { return auto(order: order, listed: listed) }
-        guard let next = ModelPreference.next(after: previous, in: listed, order: order) else { return auto(order: order, listed: listed) }
+    private static func auto(next previous: String?, order: [String], listed: [DarkmuxClient.ProfileInfo], crew: String) -> ModelChoice {
+        guard let previous, order.contains(previous) else { return auto(order: order, listed: listed, crew: crew) }
+        guard let next = ModelPreference.next(after: previous, in: listed, order: order) else { return auto(order: order, listed: listed, crew: crew) }
         guard next != previous else { return ModelChoice(profile: next, reason: "last in your Auto order") }
         return ModelChoice(profile: next, reason: "next in your Auto order, after a done-when that wasn't met")
     }

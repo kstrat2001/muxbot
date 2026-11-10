@@ -38,7 +38,7 @@ enum StartProject {
         guard answers.backUpToGitHub else {
             return await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
         }
-        guard let github else { throw GitHubRepoMaker.Failure.github(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
+        guard let github else { throw GitHubRepoMaker.Failure.plain(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = try await github.login()
         let wanted = GitHubRepoMaker.slug(answers.repoName.isEmpty ? name : answers.repoName)

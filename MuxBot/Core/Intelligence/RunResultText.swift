@@ -19,14 +19,27 @@ enum RunResultText {
 
     /// darkmux refusing an Undo, in plain words: a later run that changed
     /// the same files is named by its task.
+    /// A later run (named by darkmux's work id or its commit) that changed
+    /// the same files is named by its task; anything else is one plain
+    /// sentence (darkmux's words go behind Show details).
     @MainActor
     static func undoRefusal(_ error: String, runs: [BotRun]) -> String {
+        var later: BotRun?
+        var named = false
         if let range = error.range(of: #"run (w-[0-9A-Za-z]+) changed the same files later"#, options: .regularExpression) {
-            let id = error[range].split(separator: " ")[1]
-            let task = runs.first { $0.darkmuxWorkId == String(id) }?.task ?? "A later run"
-            return "“\(task)” changed the same files later. Undo that first."
+            named = true
+            let id = String(error[range].split(separator: " ")[1])
+            later = runs.first { $0.darkmuxWorkId == id }
+        } else if let range = error.range(of: #"commit ([0-9a-f]{7,40}) changed the same files later"#, options: .regularExpression) {
+            named = true
+            let sha = String(error[range].split(separator: " ")[1])
+            later = runs.first { ($0.keptCommit ?? "").hasPrefix(sha) || sha.hasPrefix($0.keptCommit ?? "-") }
         }
-        return "Couldn't undo it: \(error)\(error.hasSuffix(".") ? "" : ".")"
+        if named {
+            guard let later else { return String(localized: "A later run changed the same files. Undo the later run first.") }
+            return String(localized: "“\(later.task)” changed the same files later. Undo that run first.")
+        }
+        return String(localized: "darkmux couldn't undo it. Show details has what it reported.")
     }
 
     /// What Keep did: "Committed pricing.tsx to mux/x (abc1234)."
@@ -82,8 +95,10 @@ enum RunResultText {
         case "engine_unavailable": String(localized: "The model's server isn't running.")
         case "engine_in_use": String(localized: "The model's server is busy with something else.")
         default:
+            // darkmux's own lines are in the run's details (Show details),
+            // never the headline.
             switch classify(error: error, reason: reason) {
-            case let .failed(why): why
+            case .failed: String(localized: "darkmux ran into a problem running it. Show details has what it reported.")
             case .stopped: String(localized: "darkmux stopped it.")
             }
         }
@@ -132,5 +147,35 @@ enum RunResultText {
         var line = (names.isEmpty ? "Changed nothing." : "Done.") + (cleaned.isEmpty ? "" : " " + String(cleaned.prefix(200)) + ".")
         if !names.isEmpty { line += " Changed \(names.joined(separator: ", "))." }
         return line
+    }
+}
+
+/// darkmux's errors in one plain sentence each, by status (and `code`);
+/// its own words are the details, behind Show details.
+enum DarkmuxPlain {
+    static func sentence(_ error: any Error) -> String {
+        if let url = error as? URLError {
+            return [.cannotConnectToHost, .networkConnectionLost, .timedOut, .cannotFindHost, .notConnectedToInternet].contains(url.code)
+                ? String(localized: "darkmux isn't answering on this Mac.")
+                : String(localized: "Mux Bot couldn't reach darkmux.")
+        }
+        // Not darkmux's answer (the app's own error): its own words.
+        guard let client = error as? DarkmuxClient.ClientError else { return error.localizedDescription }
+        switch client.status {
+        case 401: return String(localized: "darkmux no longer knows this app. Pair again.")
+        case 404: return String(localized: "darkmux doesn't have that anymore.")
+        case 409: return String(localized: "darkmux is busy with that right now. Try again in a moment.")
+        case 429: return String(localized: "darkmux is already running two of this app's runs. This one waits for a free slot.")
+        case 400..<500: return String(localized: "darkmux didn't accept that. Show details has why.")
+        default: return String(localized: "darkmux ran into a problem. Try again in a moment.")
+        }
+    }
+
+    /// The raw text for Show details.
+    static func details(_ error: any Error) -> String? {
+        if let client = error as? DarkmuxClient.ClientError {
+            return [client.status > 0 ? "darkmux answered \(client.status)" : nil, client.code, client.message].compactMap { $0 }.joined(separator: ": ")
+        }
+        return error.localizedDescription
     }
 }

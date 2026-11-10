@@ -142,8 +142,10 @@ final class RunCoordinator {
             decisionErrors[run.id] = Self.partly(restored) + "darkmux no longer tracks this run, so it can't undo it from here.\(commit)"
         } catch let error as DarkmuxClient.ClientError {
             decisionErrors[run.id] = Self.partly(restored) + RunResultText.undoRefusal(error.message, runs: bot.runs ?? [])
+            decisionDetails[run.id] = DarkmuxPlain.details(error)
         } catch {
-            decisionErrors[run.id] = Self.partly(restored) + "Couldn't undo it: \(error.localizedDescription)"
+            decisionErrors[run.id] = Self.partly(restored) + String(localized: "Couldn't undo it: \(DarkmuxPlain.sentence(error))")
+            decisionDetails[run.id] = DarkmuxPlain.details(error)
         }
     }
 
@@ -172,7 +174,7 @@ final class RunCoordinator {
     /// darkmux refusing or not answering a submit fails the run; it is never
     /// a result to Keep.
     nonisolated static func startFailure(_ error: any Error) -> RunEvent {
-        .fail(reason: "Couldn't start on darkmux", details: error.localizedDescription)
+        .fail(reason: "Couldn't start on darkmux", details: DarkmuxPlain.details(error))
     }
 
     /// A Tweak re-sends the original brief, what the run changed, and the
@@ -490,7 +492,7 @@ final class RunCoordinator {
                     return
                 }
             } catch {
-                say("Couldn't stop it on darkmux: \(FleetConnection.plainError(error))")
+                say(Self.stopFailure(error))
                 return
             }
         }
@@ -847,6 +849,27 @@ final class RunCoordinator {
     // MARK: Work copies
 
     enum WorkCopySetup: Equatable { case settingUp, failed(String) }
+    /// What darkmux said when a work copy failed, behind Show details.
+    var workCopyDetails: [UUID: String] = [:]
+    /// What darkmux said when Undo was refused, behind Show details.
+    var decisionDetails: [UUID: String] = [:]
+
+    /// A Stop darkmux refused: one that raced the run's end had nothing left
+    /// to stop.
+    static func stopFailure(_ error: any Error) -> String {
+        if let client = error as? DarkmuxClient.ClientError,
+           client.status == 409 || client.message.localizedCaseInsensitiveContains("not running") {
+            return String(localized: "It had already finished.")
+        }
+        return String(localized: "Couldn't stop it: \(DarkmuxPlain.sentence(error))")
+    }
+
+    /// The thread's line when a run starts, with the crew's name (never
+    /// darkmux's role, "analyst" or "code-reviewer").
+    nonisolated static func runningLine(crew: CrewRole, profile: String?) -> String {
+        if let profile { return String(localized: "Running on darkmux: \(crew.name), on \(profile).") }
+        return String(localized: "Running on darkmux: \(crew.name).")
+    }
     /// Work copies being set up (or that failed), by bot.
     var workCopySetup: [UUID: WorkCopySetup] = [:]
     /// Finds a backed-up template bot's start on GitHub (tests); else
@@ -923,7 +946,8 @@ final class RunCoordinator {
             let key = RecipeStore.key(for: bot)
             if let key { recipes.recipes[key] = nil; await recipes.load(for: key, workspace: made.workspace, connection: connection, github: github, useCaseId: bot.useCaseId) }
         } catch {
-            workCopySetup[bot.id] = .failed(error.localizedDescription)
+            workCopySetup[bot.id] = .failed(DarkmuxPlain.sentence(error))
+            workCopyDetails[bot.id] = DarkmuxPlain.details(error)
         }
     }
 
@@ -1089,7 +1113,7 @@ final class RunCoordinator {
                         return String(localized: "\(bot.name) still has a run on darkmux, and this app isn't paired to stop it. Pair again, then delete it.")
                     }
                 } catch {
-                    return String(localized: "darkmux didn't stop “\(run.task)”, so \(bot.name) wasn't deleted: \(FleetConnection.plainError(error))")
+                    return String(localized: "darkmux didn't stop “\(run.task)”, so \(bot.name) wasn't deleted: \(DarkmuxPlain.sentence(error))")
                 }
             }
             store.apply(.stop, to: run)
@@ -1215,7 +1239,7 @@ final class RunCoordinator {
                 run.darkmuxWorkId = workId
                 recordWork(workId, for: run)
                 starting.remove(run.id)
-                store.append(.system, "Running on darkmux: \(role)\(profile.map { " on \($0)" } ?? "").", to: thread)
+                store.append(.system, Self.runningLine(crew: run.crew, profile: profile), to: thread)
                 await follow(run, workId: workId, store: store)
             } catch let error as DarkmuxClient.ClientError where error.status == 429 {
                 // darkmux is running two of this app's runs: wait for a slot.
@@ -1224,7 +1248,7 @@ final class RunCoordinator {
             } catch {
                 starting.remove(run.id)
                 if tweakBases[run.id] != nil {
-                    restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(FleetConnection.plainError(error))). The result before it is unchanged; reply to try again."))
+                    restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(DarkmuxPlain.sentence(error))) The result before it is unchanged; reply to try again."))
                 } else {
                     store.apply(Self.startFailure(error), to: run)
                 }
@@ -1264,7 +1288,7 @@ final class RunCoordinator {
             return profiles
         } catch {
             Self.modelsLog.error("GET /client/profiles failed: \(error.localizedDescription, privacy: .public)")
-            listing = .failed(error.localizedDescription)
+            listing = .failed(DarkmuxPlain.sentence(error))
             return []
         }
     }
@@ -1342,7 +1366,7 @@ final class RunCoordinator {
         let settings = currentModelSettings()
         let mode = settings.mode(forBot: run.bot.flatMap { settingsStore.botMode(bot: $0.id, machine: machineKey) })
         let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
-                                         previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next)
+                                         previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next, crew: run.crew.name)
         runChoices[run.id] = choice
         runProfiles[run.id] = choice.profile
     }
