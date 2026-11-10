@@ -15,14 +15,18 @@ final class FleetConnection {
     private(set) var state: State = .unpaired
     var client = DarkmuxClient()
     private let keychain: any KeychainProviding
+    /// Where the paired name lives: the app's, or the one a test passed
+    /// (pairing and unpairing use it too, never the app's by accident).
+    @ObservationIgnored private let defaults: UserDefaults
     private static let tokenKey = "darkmux.client.token"
     private static let nameKey = "darkmux.client.name"
     private var pairing: Task<Void, Never>?
 
     /// `defaults` holds the paired name (tests pass their own, never the
     /// app's).
-    init(keychain: any KeychainProviding = KeychainHelper(), defaults: UserDefaults = .standard) {
+    init(keychain: any KeychainProviding = KeychainHelper(), defaults: UserDefaults = TestIsolation.defaults) {
         self.keychain = keychain
+        self.defaults = defaults
         let stored = keychain.get(key: Self.tokenKey)
         cachedToken = .some(stored)
         if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
@@ -70,7 +74,7 @@ final class FleetConnection {
                     switch status.status {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
-                        UserDefaults.standard.set(name, forKey: Self.nameKey)
+                        defaults.set(name, forKey: Self.nameKey)
                         completePairing(token: token, name: name)
                         return
                     case "denied": state = .failed("The request was denied."); return
@@ -118,7 +122,7 @@ final class FleetConnection {
     func unpair() {
         keychain.delete(key: Self.tokenKey)
         cachedToken = .some(nil)
-        UserDefaults.standard.removeObject(forKey: Self.nameKey)
+        defaults.removeObject(forKey: Self.nameKey)
         state = .unpaired
     }
 

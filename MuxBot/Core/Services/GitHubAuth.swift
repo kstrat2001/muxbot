@@ -38,20 +38,24 @@ final class GitHubAuth {
     let clientID: String?
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private let keychain: any KeychainProviding
+    /// Where your login is kept: the app's, or the one a test passed.
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let sleep: @Sendable (Double) async throws -> Void
 
     init(clientID: String? = Bundle.main.object(forInfoDictionaryKey: "MuxBotGitHubClientID") as? String,
          session: URLSession = .shared,
          keychain: any KeychainProviding = KeychainHelper(),
+         defaults: UserDefaults = TestIsolation.defaults,
          sleep: @escaping @Sendable (Double) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.clientID = clientID
         self.session = session
         self.keychain = keychain
+        self.defaults = defaults
         self.sleep = sleep
         let stored = keychain.get(key: Self.tokenKey)
         cachedToken = .some(stored)
         if stored != nil {
-            state = .signedIn(login: UserDefaults.standard.string(forKey: Self.loginKey) ?? "GitHub")
+            state = .signedIn(login: defaults.string(forKey: Self.loginKey) ?? "GitHub")
         }
     }
 
@@ -145,10 +149,10 @@ final class GitHubAuth {
             return await loadUser()
         }
         if let (data, _) = reply, status == 200, let user = try? JSONDecoder().decode(User.self, from: data) {
-            UserDefaults.standard.set(user.login, forKey: Self.loginKey)
+            defaults.set(user.login, forKey: Self.loginKey)
             state = .signedIn(login: user.login)
         } else {
-            state = .signedIn(login: UserDefaults.standard.string(forKey: Self.loginKey) ?? "GitHub")
+            state = .signedIn(login: defaults.string(forKey: Self.loginKey) ?? "GitHub")
         }
     }
 
@@ -199,7 +203,7 @@ final class GitHubAuth {
         keychain.delete(key: Self.tokenKey)
         keychain.delete(key: Self.refreshKey)
         cachedToken = .some(nil)
-        UserDefaults.standard.removeObject(forKey: Self.loginKey)
+        defaults.removeObject(forKey: Self.loginKey)
         state = .signedOut
     }
 
