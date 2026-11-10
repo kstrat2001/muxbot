@@ -16,7 +16,7 @@ Choose Unpair this app in Mux Bot's darkmux settings, or revoke it in Terminal w
 
 ## iPhone and iPad
 
-Runs start from the Mac app for now. Pair Mux Bot on the Mac where darkmux runs; pairing your phone over your own network comes later.
+On iPhone and iPad this sheet is called Your Mac and GitHub. Runs start from the Mac app for now, so pair Mux Bot on the Mac where darkmux runs; pairing your phone over your own network comes later. GitHub sign-in is there too. Until Mux Bot on your Mac has answered once, the model settings stay off: open Mux Bot on your Mac once to see its models.
 
 ## When darkmux can't be reached
 

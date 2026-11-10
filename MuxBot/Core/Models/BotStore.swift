@@ -12,7 +12,7 @@ struct BotStore {
     /// on request only, never seeded, so a second device syncing the same
     /// iCloud data never makes a duplicate.
     nonisolated static let example = (name: "My website", systemImage: "globe",
-                                      instructions: "Your website: changes, fixes and reviews. Add its project folder or GitHub repo in this bot's info.")
+                                      instructions: "Your website: changes, fixes and reviews. Add a repo, folder or preview link below.")
 
     private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "store")
 

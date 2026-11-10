@@ -81,6 +81,8 @@ struct BotInfoView: View {
                 .disabled(brain.runs.knownMachine == nil)
             } header: {
                 Text("Model on \(brain.runs.machinePhrase)")
+            } footer: {
+                if brain.runs.knownMachine == nil { Text(brain.runs.modelsWaitingLine) }
             }
             if !bot.skills.isEmpty {
                 Section {
@@ -221,7 +223,7 @@ struct BotInfoView: View {
                     Text("The repo is made; this project's work isn't in it yet.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 } else {
-                    Toggle("Public", isOn: $putPublic)
+                    Toggle("Public", isOn: $putPublic).tint(Color.brandGreen)
                     Text(putPublic ? "Anyone can see a public repo." : "Private: only you can see it.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }

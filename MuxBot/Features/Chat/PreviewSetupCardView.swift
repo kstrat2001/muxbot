@@ -60,7 +60,7 @@ struct PreviewSetupCardView: View {
                     Spacer()
                     #if os(macOS)
                     Button("Approve") { approve() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                         .disabled(setup.recipeData == nil)
                     #else
                     Text("Approve it in Mux Bot on your Mac.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)

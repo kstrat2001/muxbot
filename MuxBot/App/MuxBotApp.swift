@@ -171,7 +171,7 @@ struct StoreRecoveryView: View {
             HStack {
                 Button("Try again", systemImage: "arrow.clockwise") { loader.load() }
                 Button("Start fresh", systemImage: "sparkles") { loader.startFresh() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
             Text("Start fresh keeps your old data: the files are renamed, not deleted, next to the new store.")
                 .font(AppFont.caption()).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)

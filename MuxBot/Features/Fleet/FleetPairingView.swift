@@ -20,13 +20,14 @@ struct FleetPairingView: View {
             switch connection.state {
             case .unpaired, .failed:
                 #if os(iOS)
-                Section {
-                    NavigationLink { GitHubSignInView() } label: { Label("GitHub sign-in", systemImage: "person.badge.key") }
-                }
+                // Where runs start comes first, then GitHub sign-in.
                 Section {
                     Label("On iPhone and iPad, runs start from the Mac app for now.", systemImage: "laptopcomputer")
                     Text("Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later.")
                         .foregroundStyle(Color.secondaryText)
+                }
+                Section {
+                    NavigationLink { GitHubSignInView() } label: { Label("GitHub sign-in", systemImage: "person.badge.key") }
                 }
                 #else
                 Section {
@@ -107,7 +108,11 @@ struct FleetPairingView: View {
                 .tint(Color.accentText)
                 .padding(.bottom, Spacing.md)
         }
-        .navigationTitle("Pair with darkmux")
+        #if os(iOS)
+        .navigationTitle(Self.title(onPhone: true))
+        #else
+        .navigationTitle(Self.title(onPhone: false))
+        #endif
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 if case .waiting = connection.state {
@@ -175,5 +180,13 @@ struct CommandBox: View {
         }
         .padding(Spacing.sm)
         .background(RoundedRectangle(cornerRadius: CornerRadius.sm).fill(Color.elevatedBackground))
+    }
+}
+
+extension FleetPairingView {
+    /// A phone doesn't pair (runs start on the Mac): its sheet is about
+    /// your Mac and GitHub.
+    static func title(onPhone: Bool) -> String {
+        onPhone ? String(localized: "Your Mac and GitHub") : String(localized: "Pair with darkmux")
     }
 }

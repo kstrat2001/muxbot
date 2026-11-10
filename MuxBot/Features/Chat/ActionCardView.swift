@@ -42,7 +42,7 @@ struct ActionCardView: View {
                     HStack {
                         Button("Cancel", role: .cancel) { decide(false) }.buttonStyle(.bordered)
                         Spacer()
-                        Button("Approve") { decide(true) }.buttonStyle(.borderedProminent)
+                        Button("Approve") { decide(true) }.buttonStyle(.borderedProminent).tint(Color.brandGreen)
                     }
                 case .approved:
                     Label("Approved", systemImage: "checkmark.circle").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)

@@ -94,7 +94,7 @@ struct SetupChecklistView: View {
     @ViewBuilder private func button(_ action: SetupStep.Action) -> some View {
         switch action {
         case .pair:
-            Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }.buttonStyle(.borderedProminent).controlSize(.small)
+            Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }.buttonStyle(.borderedProminent).tint(Color.brandGreen).controlSize(.small)
         case .gitHubSignIn:
             #if os(macOS)
             Button("Sign in with GitHub", systemImage: "person.badge.key") { SettingsTab.select(.github); openSettings() }.buttonStyle(.bordered).controlSize(.small)
@@ -163,7 +163,7 @@ struct FirstBotCardView: View {
             Text("Start something new from a template, paste a GitHub link in the bar below, or make one for code you have.")
                 .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             HStack {
-                Button("Start a project…", systemImage: "sparkles") { router.showStartProject = true }.buttonStyle(.borderedProminent)
+                Button("Start a project…", systemImage: "sparkles") { router.showStartProject = true }.buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("New bot…", systemImage: "plus") { router.showNewBot = true }.buttonStyle(.bordered)
             }
         }
@@ -201,7 +201,7 @@ struct SettingCardView: View {
         switch id {
         case .modelMode:
             if brain.runs.knownMachine == nil {
-                Text("I can show this once darkmux on your Mac has answered, so the setting goes to the right machine.")
+                Text(brain.runs.modelsWaitingLine)
                     .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
             Picker("On \(brain.runs.machinePhrase)", selection: Binding(get: { mode }, set: { set($0) })) {
@@ -216,6 +216,7 @@ struct SettingCardView: View {
                 notify = $0
                 changed = NotificationService.cardText(enabled: $0, denied: notifications.isDenied)
             }))
+            .tint(Color.brandGreen)
             if notify && notifications.isDenied {
                 Label(NotificationService.cardText(enabled: true, denied: true), systemImage: "bell.slash").font(AppFont.footnote())
                 Button("Open System Settings") { notifications.openSystemSettings() }.buttonStyle(.bordered).controlSize(.small)

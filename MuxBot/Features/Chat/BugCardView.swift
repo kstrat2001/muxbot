@@ -38,7 +38,7 @@ struct BugCardView: View {
                                 .buttonStyle(.bordered)
                         } else {
                             Button("Fix it now", systemImage: "hammer") { fix(draft) }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                         }
                     }
                     Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Pair with darkmux to run fixes.")
