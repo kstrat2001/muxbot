@@ -571,7 +571,10 @@ final class RunCoordinator {
         }
         // Not on darkmux yet (waiting for a slot, or being handed over):
         // nothing to cancel there, and it never starts later.
-        if run.darkmuxWorkId == nil { queued.removeAll { $0.run.id == run.id } }
+        if run.darkmuxWorkId == nil {
+            queued.removeAll { $0.run.id == run.id }
+            saidWaiting.remove(run.id)
+        }
         // A Tweak stops back to the result it continued.
         if tweakBase(run) != nil {
             restoreTweak(run, store: store, saying: String(localized: "Stopped the change. The result before it is unchanged."))
@@ -1210,12 +1213,15 @@ final class RunCoordinator {
 
     /// Runs darkmux had no room for, oldest first, with what to send.
     private var queued: [(run: BotRun, message: String, continues: String?)] = []
+    /// Runs whose thread already says they're waiting for a slot (until
+    /// they start, fail or are stopped).
+    private var saidWaiting: Set<UUID> = []
 
     /// One of this app's runs ended: start the next one waiting for a slot.
     func slotFreed(store: BotStore) {
         while let next = queued.first {
             queued.removeFirst()
-            guard next.run.phase == .running else { continue }
+            guard next.run.phase == .running else { saidWaiting.remove(next.run.id); continue }
             _ = startRealRun(next.run, message: next.message, store: store, continues: next.continues)
             return
         }
@@ -1525,6 +1531,7 @@ final class RunCoordinator {
                     return
                 }
                 run.darkmuxWorkId = workId
+                saidWaiting.remove(run.id)
                 recordWork(workId, for: run)
                 if let pairing = connection.pairingId { recordPairing(pairing, for: run) }
                 starting.remove(run.id)
@@ -1532,11 +1539,18 @@ final class RunCoordinator {
                 await follow(run, workId: workId, store: store)
             } catch let error as DarkmuxClient.ClientError where error.status == 429 {
                 // darkmux is running two of this app's runs: wait for a slot.
-                queued.append((run, message, continues))
-                store.append(.system, Self.waitingForSlot, to: thread)
+                // Said once per wait: a retry darkmux refuses again is quiet
+                // and keeps its place at the front of the line.
+                if saidWaiting.insert(run.id).inserted {
+                    queued.append((run, message, continues))
+                    store.append(.system, Self.waitingForSlot, to: thread)
+                } else {
+                    queued.insert((run, message, continues), at: 0)
+                }
                 scheduleQueueRetry(store: store)
             } catch {
                 starting.remove(run.id)
+                saidWaiting.remove(run.id)
                 if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(DarkmuxPlain.sentence(error))) The result before it is unchanged; reply to try again."))
                 } else {
