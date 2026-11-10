@@ -93,14 +93,14 @@ enum ChatShortcuts {
     }
 }
 
-/// The chips in one horizontally scrolling line above the chat bar.
+/// The chips above the chat bar, wrapping onto a second line on a narrow
+/// screen (never a sideways scroll that hides one).
 struct ChatShortcutRow: View {
     let chips: [ChatShortcut]
     let run: (ChatShortcut) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Spacing.sm) {
+        WrappingStack(spacing: Spacing.sm) {
                 ForEach(chips) { chip in
                     Button { run(chip) } label: {
                         Label(chip.title, systemImage: chip.systemImage)
@@ -115,9 +115,9 @@ struct ChatShortcutRow: View {
                     .accessibilityLabel(chip.title)
                     .accessibilityHint(hint(chip))
                 }
-            }
         }
-        .scrollClipDisabled()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Shortcuts")
     }
 

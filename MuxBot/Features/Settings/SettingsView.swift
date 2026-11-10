@@ -22,7 +22,7 @@ struct SettingsView: View {
             }
             Tab("Notifications", systemImage: "bell", value: SettingsTab.notifications.rawValue) {
                 Form {
-                    Toggle("Tell me when a run has a result or didn't finish", isOn: $notify)
+                    Toggle("Tell me when a run has a result or didn't finish", isOn: $notify).tint(Color.brandGreen)
                     if notify && notifications.isDenied {
                         Label("Notifications are blocked in System Settings › Notifications.", systemImage: "bell.slash")
                         Button("Open System Settings") { notifications.openSystemSettings() }

@@ -390,6 +390,9 @@
     "Changed in darkmux on your Mac, not here." : {
 
     },
+    "Chat" : {
+
+    },
     "Check again" : {
 
     },
@@ -1195,6 +1198,9 @@
 
     },
     "Open Mux Bot" : {
+
+    },
+    "Open Mux Bot on your Mac once to see its models." : {
 
     },
     "Open PR" : {
@@ -2138,6 +2144,9 @@
 
     },
     "Your GitHub sign-in expired. Sign in again." : {
+
+    },
+    "Your Mac and GitHub" : {
 
     },
     "Your bots" : {

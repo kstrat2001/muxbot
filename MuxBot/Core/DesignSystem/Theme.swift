@@ -13,6 +13,9 @@ extension Color {
     /// Secondary text: the system's secondary label is about 3.4–4:1 in light
     /// mode, under the 4.5:1 text needs; this is at least 4.5:1 on the
     /// window and card backgrounds in both schemes (ContrastTests).
+    /// The app's accent (`AccentColor`) is this readable green, for text,
+    /// links and tab labels; fills (toggles, filled buttons, icons) use
+    /// `brandGreen`.
     /// Green text on a chip or a light card: the darker green in light mode
     /// (the brand green is about 2:1 there), a touch lighter than the brand
     /// green in dark (at least 4.5:1 on a dark chip).

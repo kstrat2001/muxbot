@@ -11,6 +11,8 @@ enum BotGreeting {
         let next = hasPreview
             ? String(localized: "Tell me what to change, or point at something in the preview.")
             : String(localized: "Tell me what needs doing; nothing runs until you approve it.")
+        // A pointer at the info screen ("…below") isn't said in the thread.
+        let about = about.components(separatedBy: ". ").filter { !$0.lowercased().contains("below") }.joined(separator: ". ")
         guard let line = description(about) else { return "\(hello) \(next)" }
         return "\(hello) \(line) \(next)"
     }

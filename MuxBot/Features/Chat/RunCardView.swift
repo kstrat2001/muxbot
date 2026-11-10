@@ -95,7 +95,7 @@ struct RunCardView: View {
                         #if os(macOS)
                         if connection.isPaired == false {
                             Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                         }
                         #endif
                     }
@@ -439,7 +439,7 @@ struct RunCardView: View {
                     if bot.workspaceName != nil { await brain.runs.ensurePreview(for: bot) }
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.borderedProminent).tint(Color.brandGreen)
         }
     }
 
@@ -448,7 +448,7 @@ struct RunCardView: View {
             Button("Cancel") { brain.runs.decide(.cancel, on: run, store: store) }.buttonStyle(.bordered)
             Spacer()
             Button(retry ? "Try again" : "Approve") { Task { await brain.runs.setUpWorkCopy(for: bot, store: store) } }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
         }
     }
 
@@ -464,7 +464,7 @@ struct RunCardView: View {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 if index == items.count - 1 { Spacer() }
                 if item.2 {
-                    Button(item.0) { brain.runs.decide(item.1, on: run, store: store) }.buttonStyle(.borderedProminent)
+                    Button(item.0) { brain.runs.decide(item.1, on: run, store: store) }.buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 } else {
                     Button(item.0) { brain.runs.decide(item.1, on: run, store: store) }.buttonStyle(.bordered)
                 }

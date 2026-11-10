@@ -165,7 +165,7 @@ struct StartProjectView: View {
                 }
             }
             Section {
-                Toggle("Back up to GitHub", isOn: $answers.backUpToGitHub)
+                Toggle("Back up to GitHub", isOn: $answers.backUpToGitHub).tint(Color.brandGreen)
                 if !answers.backUpToGitHub {
                     Text("Your project stays on this Mac. You can put it on GitHub later from its info.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
@@ -180,7 +180,7 @@ struct StartProjectView: View {
                         Text("Left blank, it's \(GitHubRepoMaker.slug(answers.name)); if you already have one by that name, the next free one.")
                             .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     }
-                    Toggle("Public", isOn: $answers.isPublic)
+                    Toggle("Public", isOn: $answers.isPublic).tint(Color.brandGreen)
                     Text(answers.isPublic
                          ? "Anyone can see a public repo. Mux Bot puts the template's files in it as the first commit."
                          : "Private: only you can see it. Mux Bot puts the template's files in it as the first commit.")

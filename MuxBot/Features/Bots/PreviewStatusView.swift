@@ -72,11 +72,11 @@ struct PreviewStatusView: View {
         HStack {
             if canStartOver, failure.startOverFirst {
                 Button("Start over", systemImage: "arrow.counterclockwise", action: startOver)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             } else {
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 if canStartOver { Button("Start over", systemImage: "arrow.counterclockwise", action: startOver) }
             }
         }
@@ -108,7 +108,7 @@ struct PreviewStatusView: View {
                     Clipboard.copy(LivePreview.Unavailable.enableCommand)
                     copied = true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
         case .notYourCheckout, .checkoutMoved:
@@ -116,7 +116,7 @@ struct PreviewStatusView: View {
                 ProgressView("Setting up a work copy…")
             } else {
                 Button("Add folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
             if let folderProblem { Label(folderProblem, systemImage: "exclamationmark.triangle").labelStyle(.tintedIcon(Color.brandOrange)).multilineTextAlignment(.center) }
         case .noRecipe:
@@ -133,17 +133,17 @@ struct PreviewStatusView: View {
                     Clipboard.copy(connection.serveCommand)
                     copied = true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
         case .templateNoRecipe:
             EmptyView()
         case .remakeProject:
             Button("Start a project…", systemImage: "plus") { router.showStartProject = true }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
         case .notPaired:
             Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
         case .earlierPairing:
             let command = DarkmuxPlain.claimCommand(workspace: bot.workspaceName ?? "", client: connection.pairedName ?? LeadBot.name)
             Text(command)
@@ -155,7 +155,7 @@ struct PreviewStatusView: View {
                     Clipboard.copy(command)
                     copied = true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("New work copy", systemImage: "arrow.triangle.branch") {
                     Task { await brain.runs.newWorkCopy(for: bot, store: BotStore(context: context)) }
                 }

@@ -35,26 +35,40 @@ struct PhonePreviewScreen: View {
                 StatusBadge(kind: NeedsYou.shownState(bot).kind)
             }
             Button("Reload", systemImage: "arrow.clockwise") { preview.goHome() }
-            Button(preview.isPicking ? "Cancel pick" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
+            Button(preview.isPicking ? "Cancel" : "Pick", systemImage: preview.isPicking ? "xmark" : "scope") {
                 preview.togglePicking()
             }
-            Button(copied ? "Copied" : "Copy screenshot", systemImage: copied ? "checkmark" : "camera") {
+            .accessibilityLabel(preview.isPicking ? "Cancel pick" : "Pick")
+            Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "camera") {
                 Task {
                     if let png = await preview.visiblePNG() { copied = Clipboard.copyImage(png) }
                     try? await Task.sleep(for: .seconds(1.5))
                     copied = false
                 }
             }
-            Button("Back to chat", systemImage: "bubble.left.and.bubble.right.fill") {
+            .accessibilityLabel(copied ? "Copied" : "Copy screenshot")
+            Button("Chat", systemImage: "bubble.left.and.bubble.right.fill") {
                 router.showPreview = false
             }
+            .accessibilityLabel("Back to chat")
         }
-        .labelStyle(.iconOnly)
-        .font(.title3)
+        // A short word under each icon, like a tab bar.
+        .labelStyle(IconOverTitleLabelStyle())
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .background(Capsule().fill(.regularMaterial))
         .padding(Spacing.md)
+    }
+}
+
+/// An icon with a short word under it (the full-screen preview's controls).
+struct IconOverTitleLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing: 2) {
+            configuration.icon.font(.title3)
+            configuration.title.font(.caption2)
+        }
+        .frame(minWidth: 44, minHeight: 44)
     }
 }
 #endif

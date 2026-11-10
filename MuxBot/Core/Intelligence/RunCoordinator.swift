@@ -1632,6 +1632,20 @@ final class RunCoordinator {
     /// What darkmux listed last for each role (each crew has its own).
     var listedByRole: [String: [DarkmuxClient.ProfileInfo]] = [:]
 
+    /// Under model settings before darkmux's machine is known.
+    nonisolated static func modelsWaitingLine(onPhone: Bool) -> String {
+        onPhone ? String(localized: "Open Mux Bot on your Mac once to see its models.")
+                : String(localized: "I can show this once darkmux on your Mac has answered, so the setting goes to the right machine.")
+    }
+
+    var modelsWaitingLine: String {
+        #if os(iOS)
+        Self.modelsWaitingLine(onPhone: true)
+        #else
+        Self.modelsWaitingLine(onPhone: false)
+        #endif
+    }
+
     /// The models a run's picker offers: its crew's own.
     func listed(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
         run.crew.darkmuxRole.flatMap { listedByRole[$0] } ?? lastListed
