@@ -19,7 +19,9 @@ enum PutOnGitHub {
     /// Put made the repo but the work isn't in it yet: Put finishes into
     /// that repo, never a second one.
     static func canResume(_ bot: Bot) -> Bool {
-        LocalBotState.shared[bot.id]?.putPending == true && bot.githubStart != nil && bot.workspaceName != nil && !bot.repoSlugs.isEmpty
+        guard bot.workspaceName != nil else { return false }
+        if LocalBotState.shared[bot.id]?.putMadeRepo != nil { return true }
+        return LocalBotState.shared[bot.id]?.putPending == true && bot.githubStart != nil && !bot.repoSlugs.isEmpty
     }
 
     static func run(_ bot: Bot, isPublic: Bool, github: GitHubRepoMaker, pr: GitHubPR,
@@ -32,7 +34,12 @@ enum PutOnGitHub {
             let owner = try await github.login()
             let name = try await github.freeName(wanted, owner: owner)
             return try await github.make(name: name, isPrivate: !isPublic, description: "", from: entry)
-        }, push: { try await pr.push($0, repo: $1, message: $2, bot: $3, start: $4) }, local: pr.local, store: store, runs: runs)
+        }, push: { try await pr.push($0, repo: $1, message: $2, bot: $3, start: $4) }, refill: { repo in
+            guard let entry = await runs.template(for: useCase) else {
+                throw GitHubRepoMaker.Failure.template(String(localized: "its template (\(useCase)) isn't in the template list anymore"))
+            }
+            return try await github.refill(repo: repo, from: entry)
+        }, local: pr.local, store: store, runs: runs)
     }
 
     /// Makes the repo (`make`), records it at once, then pushes the
@@ -43,6 +50,7 @@ enum PutOnGitHub {
     /// `local` is where the push reads the commit this Mac last wrote to
     /// each branch (the push's own).
     static func run(_ bot: Bot, isPublic: Bool, make: @escaping () async throws -> GitHubRepoMaker.Made, push: @escaping Push,
+                    refill: ((String) async throws -> GitHubRepoMaker.Made)? = nil,
                     local: LocalBotState = .shared, store: BotStore, runs: RunCoordinator) async throws -> GitHubRepoMaker.Made {
         let resuming = canResume(bot)
         guard resuming || canPut(bot), let workspace = bot.workspaceName else {
@@ -53,12 +61,27 @@ enum PutOnGitHub {
         }
         runs.puttingOnGitHub.insert(bot.id)
         defer { runs.puttingOnGitHub.remove(bot.id) }
+        // What Put pushes is the work as of now: a run finishing meanwhile
+        // isn't in it, so it's backed up after and still offered for a PR.
+        let readAt = Date()
         let changes = try await runs.changes(for: workspace)
         let made: GitHubRepoMaker.Made
         if resuming, let start = bot.githubStart, let repo = bot.repoSlugs.first {
             made = .init(repo: repo, url: URL(string: "https://github.com/\(repo)")!, defaultBranch: start.branch, startCommit: start.commit)
         } else {
-            made = try await make()
+            if let repo = LocalBotState.shared[bot.id]?.putMadeRepo {
+                // Made before but not filled: fill that one, never a second.
+                guard let refill else { throw GitHubRepoMaker.Failure.notFilledYet(repo: repo, why: String(localized: "it can't be filled from here")) }
+                do { made = try await refill(repo) } catch { throw GitHubRepoMaker.Failure.notFilledYet(repo: repo, why: error.localizedDescription) }
+                LocalBotState.shared.update(bot.id) { $0.putMadeRepo = nil }
+            } else {
+                do {
+                    made = try await make()
+                } catch GitHubRepoMaker.Failure.madeButNotFilled(let repo, let why) {
+                    LocalBotState.shared.update(bot.id) { $0.putMadeRepo = repo }
+                    throw GitHubRepoMaker.Failure.notFilledYet(repo: repo, why: why)
+                }
+            }
             // Recorded as soon as it exists: a failed push next never leaves
             // a repo this app forgot, and trying again makes no second one.
             store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
@@ -77,13 +100,18 @@ enum PutOnGitHub {
                 throw GitHubRepoMaker.Failure.notPushedYet(repo: made.repo, why: error.localizedDescription)
             }
         }
-        // Later work builds on the pushed work, so a PR from mux/<bot> shows
-        // only what's new; the runs already pushed aren't offered again.
-        bot.githubStart?.commit = workCommit
-        LocalBotState.shared.update(bot.id) { $0.putPending = nil; $0.shippedThrough = Date() }
+        // A new mux/<bot> goes on top of the pushed work (so a PR shows only
+        // what's new), while its tree stays based on the template's start,
+        // the one darkmux's changes are against; the runs already pushed
+        // aren't offered again.
+        if workCommit != made.startCommit { bot.githubStart?.parent = workCommit }
+        LocalBotState.shared.update(bot.id) { $0.putPending = nil; $0.shippedThrough = readAt }
         store.save()
         store.append(.system, String(localized: "Put on GitHub: \(made.url.absoluteString). New work is backed up to \(bot.githubStart?.head ?? "its branch") there."),
                      to: store.conversation(for: .bot(bot.id)))
+        if (bot.runs ?? []).contains(where: { $0.keptCommit != nil && ($0.finishedAt ?? .distantPast) > readAt }) {
+            await runs.backUp(bot, store: store)
+        }
         return made
     }
 }

@@ -88,10 +88,11 @@ enum ExistingProject {
     /// Makes the bot from the source and your answers, then has darkmux set
     /// up its work copy: a worktree of your checkout, or a clone of the repo.
     /// Returns the bot and, for a folder that can't be used, why.
-    static func start(_ source: Source, name: String, purpose: String, projectPlaybook: String?, look: BotLook? = nil,
+    static func start(_ source: Source, name: String, purpose: String, projectPlaybook: String?, playbookError: String? = nil, look: BotLook? = nil,
                       store: BotStore, runs: RunCoordinator) async -> (bot: Bot, problem: String?) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let (playbook, skillsSource) = self.playbook(projectText: projectPlaybook)
+        let playbook = self.playbook(projectText: projectPlaybook).0
+        let skillsSource = skills(playbook: projectPlaybook, error: playbookError)
         let bot = store.add(name: name, instructions: StartProject.instructions(playbook, answers: .init(name: name, purpose: purpose), name: name),
                             systemImage: playbook.icon)
         bot.look = look ?? BotLook.fresh(avoiding: store.allBots().filter { $0.id != bot.id }.map(\.look))
@@ -142,5 +143,32 @@ struct GitHubRepoSummary: Decodable, Equatable, Identifiable, Sendable {
         case fullName = "full_name"
         case isPrivate = "private"
         case description
+    }
+}
+
+extension ExistingProject {
+    /// A repo's PLAYBOOK.md: its text, none, or a read that failed (never
+    /// taken as "none", so no PLAYBOOK card is offered over a real one).
+    enum PlaybookFetch: Equatable {
+        case text(String), none, failed(String)
+        var isFailure: Bool { if case .failed = self { true } else { false } }
+        var text: String? { if case let .text(t) = self { t } else { nil } }
+        var problem: String? { if case let .failed(why) = self { why } else { nil } }
+    }
+
+    static func fetchPlaybook(repo: String, github: any GitHubClient) async -> PlaybookFetch {
+        do {
+            guard let data = try await github.file(repo: repo, path: "PLAYBOOK.md") else { return .none }
+            return String(data: data, encoding: .utf8).map { .text($0) } ?? .none
+        } catch {
+            return .failed(String(localized: "I couldn't read this project's PLAYBOOK.md from GitHub: \(error.localizedDescription)"))
+        }
+    }
+
+    /// Where the skills come from, given the PLAYBOOK.md read (or why it
+    /// couldn't be).
+    static func skills(playbook text: String?, error: String?) -> SkillsSource {
+        if let error { return .invalid(error) }
+        return playbook(projectText: text).1
     }
 }

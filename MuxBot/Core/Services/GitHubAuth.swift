@@ -161,32 +161,42 @@ final class GitHubAuth {
     /// and the state says so plainly; a request that just didn't reach
     /// GitHub leaves you signed in. Several callers share one renewal.
     func refresh() async -> String? {
+        if case let .token(token) = await renewal() { return token }
+        return nil
+    }
+
+    /// The renewal itself: a new token; `.expired` (signed out, said
+    /// plainly) only when GitHub refuses the refresh token; `.unreachable`
+    /// (still signed in) for a dropped connection or a GitHub hiccup.
+    func renewal() async -> GitHubRenewal {
         if let refreshing { return await refreshing.value }
         let task = Task { await renew() }
         refreshing = task
-        let token = await task.value
+        let result = await task.value
         refreshing = nil
-        return token
+        return result
     }
-    @ObservationIgnored private var refreshing: Task<String?, Never>?
+    @ObservationIgnored private var refreshing: Task<GitHubRenewal, Never>?
 
-    private func renew() async -> String? {
-        guard isConfigured, let clientID, let refreshToken = keychain.get(key: Self.refreshKey) else { expire(); return nil }
+    private func renew() async -> GitHubRenewal {
+        guard isConfigured, let clientID, let refreshToken = keychain.get(key: Self.refreshKey) else { expire(); return .expired }
         struct Reply: Decodable { var access_token: String?; var refresh_token: String?; var error: String? }
         do {
             let reply: Reply = try await post("https://github.com/login/oauth/access_token", [
                 "client_id": clientID, "grant_type": "refresh_token", "refresh_token": refreshToken,
             ])
-            guard let token = reply.access_token else { expire(); return nil }
+            // A 200 with an error (bad_refresh_token): the sign-in is gone.
+            guard let token = reply.access_token else { expire(); return .expired }
             _ = keychain.save(key: Self.tokenKey, value: token)
             if let next = reply.refresh_token { _ = keychain.save(key: Self.refreshKey, value: next) }
             cachedToken = .some(token)
-            return token
-        } catch is URLError {
-            return nil
-        } catch {
+            return .token(token)
+        } catch let refusal as SignInRefusal where refusal.status == 400 || refusal.status == 401 {
             expire()
-            return nil
+            return .expired
+        } catch {
+            // Offline, or GitHub answered 5xx: try again later, signed in.
+            return .unreachable
         }
     }
 
@@ -305,11 +315,23 @@ final class GitHubAuth {
     /// One page, and the next page's URL from the Link header, if any.
     private func getPage<T: Decodable>(_ url: String, token: String) async throws -> (T, String?) {
         guard let address = URL(string: url) else { throw GitHubError(status: 0) }
-        var request = URLRequest(url: address)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
-        let http = response as? HTTPURLResponse
+        func load(_ token: String) async throws -> (Data, HTTPURLResponse?) {
+            var request = URLRequest(url: address)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await session.data(for: request)
+            return (data, response as? HTTPURLResponse)
+        }
+        // The latest token (an earlier page may have renewed it).
+        var (data, http) = try await load(self.token ?? token)
+        if http?.statusCode == 401 {
+            // An expired sign-in: renewed once and retried; gone, it says so.
+            switch await renewal() {
+            case let .token(fresh): (data, http) = try await load(fresh)
+            case .expired: throw GitHubError(status: 401, signedIn: true)
+            case .unreachable: throw GitHubError(status: 0, signedIn: true)
+            }
+        }
         guard http?.statusCode == 200 else { throw GitHubError(status: http?.statusCode ?? 0, signedIn: true) }
         return (try JSONDecoder().decode(T.self, from: data), Self.nextPage(http?.value(forHTTPHeaderField: "Link")))
     }
@@ -330,10 +352,12 @@ final class GitHubAuth {
 /// token once (the app points this at `GitHubAuth.refresh`) and retry with
 /// it; with none, they stop with `GitHubAuth.expiredMessage`.
 enum GitHubSession {
-    @MainActor static var refresh: (@Sendable () async -> String?)?
+    @MainActor static var refresh: (@Sendable () async -> GitHubRenewal)?
 
-    static func renewed() async -> String? {
-        guard let refresh = await MainActor.run(body: { GitHubSession.refresh }) else { return nil }
+    /// A renewed token, else whether the sign-in is gone or GitHub just
+    /// couldn't be reached. With no hook (tests), the sign-in is gone.
+    static func renewed() async -> GitHubRenewal {
+        guard let refresh = await MainActor.run(body: { GitHubSession.refresh }) else { return .expired }
         return await refresh()
     }
 }
@@ -348,4 +372,13 @@ final class GitHubToken: @unchecked Sendable {
         get { lock.withLock { current } }
         set { lock.withLock { current = newValue } }
     }
+}
+
+/// How renewing a sign-in went.
+enum GitHubRenewal: Equatable, Sendable {
+    case token(String)
+    /// GitHub no longer takes the sign-in: you're signed out.
+    case expired
+    /// GitHub couldn't be reached (or had a hiccup): still signed in.
+    case unreachable
 }

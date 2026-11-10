@@ -1147,10 +1147,9 @@ final class BotBrain {
             let checkout = ExistingProject.knownCheckout(for: slug, among: store.allBots())
             note = String(localized: "Setting up \(draft.name) for \(slug)…")
             creatingBot = Task { [self] in
-                let data = try? await github.file(repo: slug, path: "PLAYBOOK.md")
-                let text = data.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) }
+                let fetched = await ExistingProject.fetchPlaybook(repo: slug, github: github)
                 let (bot, problem) = await ExistingProject.start(.github(repo: slug, checkout: checkout), name: draft.name, purpose: draft.instructions,
-                                                                 projectPlaybook: text, store: store, runs: runs)
+                                                                 projectPlaybook: fetched.text, playbookError: fetched.problem, store: store, runs: runs)
                 if let problem { store.append(.system, problem, to: store.conversation(for: .bot(bot.id))) }
                 openBot?(bot.id)
             }

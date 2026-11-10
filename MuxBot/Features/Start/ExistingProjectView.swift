@@ -31,6 +31,8 @@ struct ExistingProjectView: View {
     /// The repo's PLAYBOOK.md is being read: Start waits for it.
     @State private var readingPlaybook = false
     @State private var playbookFetch: Task<Void, Never>?
+    /// The repo's PLAYBOOK.md couldn't be read (not "there's none").
+    @State private var playbookError: String?
     @State private var pickingFolder = false
     @State private var starting = false
 
@@ -141,7 +143,7 @@ struct ExistingProjectView: View {
                     if readingPlaybook {
                         HStack(spacing: Spacing.xs) { ProgressView().controlSize(.small); Text("Reading PLAYBOOK.md…") }
                     } else {
-                        switch ExistingProject.playbook(projectText: projectPlaybook).1 {
+                        switch ExistingProject.skills(playbook: projectPlaybook, error: playbookError) {
                         case .general: Text("This project has no PLAYBOOK.md, so the bot starts with general skills.")
                         case .projectPlaybook: Text("The bot's skills come from this project's PLAYBOOK.md.")
                         case let .invalid(why): Label("\(why) The bot starts with general skills.", systemImage: "exclamationmark.triangle")
@@ -189,10 +191,12 @@ struct ExistingProjectView: View {
         step = .details
         readingPlaybook = true
         playbookFetch?.cancel()
+        playbookError = nil
         playbookFetch = Task {
-            let data = try? await brain.github.file(repo: repo.fullName, path: "PLAYBOOK.md")
+            let fetched = await ExistingProject.fetchPlaybook(repo: repo.fullName, github: brain.github)
             guard !Task.isCancelled else { return }
-            projectPlaybook = data.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) }
+            projectPlaybook = fetched.text
+            playbookError = fetched.problem
             readingPlaybook = false
         }
     }
@@ -209,7 +213,7 @@ struct ExistingProjectView: View {
     private func start() async {
         guard let source else { return }
         starting = true
-        let (bot, problem) = await ExistingProject.start(source, name: name, purpose: purpose, projectPlaybook: projectPlaybook,
+        let (bot, problem) = await ExistingProject.start(source, name: name, purpose: purpose, projectPlaybook: projectPlaybook, playbookError: playbookError,
                                                          store: BotStore(context: context), runs: brain.runs)
         starting = false
         // A folder that can't be used: the bot is made; its thread says why.
@@ -225,6 +229,6 @@ struct ExistingProjectView: View {
             await brain.runs.ensurePreview(for: bot)
         }
         // No PLAYBOOK.md of its own: offer one for your checkout.
-        if projectPlaybook == nil { await brain.offerPlaybookSetup(for: bot, purpose: purpose, store: BotStore(context: context)) }
+        if projectPlaybook == nil, playbookError == nil { await brain.offerPlaybookSetup(for: bot, purpose: purpose, store: BotStore(context: context)) }
     }
 }
