@@ -4,8 +4,6 @@ schema: 2
 title: Write a book
 icon: book.closed
 pitch: A book manuscript you write with help: see it as printed pages, keep the chapters moving, and export it as an ebook or a Word manuscript.
-animal: owl
-colors: 7a4a2a, ffd27a
 crew: coder
 page_file: manuscript/chapters/{page}.md
 pages: /, /desk, /notes
@@ -27,7 +25,7 @@ It is written for, and should read as, {feel}: put that at the top of notes/styl
 
 ## Conventions
 
-A book manuscript in Markdown. Each piece is a file in manuscript/front/, manuscript/chapters/ or manuscript/back/ with a front matter block (title, status, drafted_by, optional part); book.json holds the title, author, publishing details and the reading order, and the title page, copyright page and contents are built from it. Notes the book needs are in notes/. The reader app is in src/; the book's typography is the variables at the top of src/styles.css.
+A book manuscript in Markdown. Each piece is a file in manuscript/front/, manuscript/chapters/ or manuscript/back/ with a front matter block (title, status, drafted_by, optional part); book.json holds the title, author, publishing details and the reading order, and the title page, copyright page and contents are built from it. Notes the book needs are in notes/. The reader app is in src/; the book's look (fonts, text size, paper, ink and cover colors) is the variables at the top of src/styles.css.
 
 ## Persona
 
@@ -130,9 +128,9 @@ When: someone wants different typography or page layout. "Use a classic serif", 
 What to do: change the typography variables first; touch individual rules only when a variable can't do it.
 
 Files and conventions:
-- Fonts, text size, line spacing, paragraph indent and the scene-break mark are the variables at the top of `src/styles.css`.
+- Fonts, text size (`--text-scale`), line spacing, paragraph indent, the scene-break mark and the colors (paper, ink, accent, cover, and the app around the pages) are the variables at the top of `src/styles.css`. The rules are in `src/styles/`: `book.css` (the text, chapter openers, title page), `pages.css` (the pages, margins, cover and print) and `app.css` (the bar, Desk and Notes).
 - The page size is `trim` in `book.json` (5x8, 5.25x8, 5.5x8.5, 6x9, 7x10 or 8.5x11).
-- A web font comes from Google Fonts with a `<link>` in `index.html`; for print and ebooks it must allow embedding (Google Fonts do).
+- The book's font, EB Garamond, is bundled in `src/fonts/`, so the preview works offline. Another font is a system font named in `--font-body`, or an open-licensed `.woff2` file put in `src/fonts/` with an `@font-face` in `src/styles.css`; for print and ebooks it must allow embedding.
 
 Done when: the Book view shows the new look on every page and text stays easy to read, in the Ebook view too.
 
