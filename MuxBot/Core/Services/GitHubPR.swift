@@ -26,20 +26,38 @@ struct GitHubPR: Sendable {
         case cantWrite(String)
         /// Someone else pushed to the PR branch: never overwritten.
         case branchMoved(String)
+        /// GitHub doesn't have the commit the work builds on (a 404 on it):
+        /// not an install problem.
+        case baseMissing(String)
+        /// GitHub stopped taking the sign-in and it couldn't be renewed.
+        case signInExpired
         case github(String)
         var errorDescription: String? {
             switch self {
-            case let .cantWrite(repo): "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it."
-            case let .branchMoved(branch): "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it. Pull their commits into the bot's branch first."
-            case let .github(why): "GitHub said: \(why)"
+            case let .cantWrite(repo): String(localized: "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it.")
+            case let .branchMoved(branch): String(localized: "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it.")
+            case let .baseMissing(commit): String(localized: "This work builds on a commit GitHub doesn't have (\(String(commit.prefix(7)))), so I couldn't put it there. Push that commit to GitHub, then try again.")
+            case .signInExpired: GitHubAuth.expiredMessage
+            case let .github(why): String(localized: "GitHub said: \(why)")
             }
         }
     }
 
     var session: URLSession = .shared
-    let token: String
+    private let current: GitHubToken
+    var token: String { current.value }
     /// Where this Mac keeps the commit it last wrote to each bot branch.
     var local: LocalBotState = .shared
+
+    init(session: URLSession = .shared, token: String, local: LocalBotState = .shared) {
+        self.session = session
+        current = GitHubToken(token)
+        self.local = local
+    }
+
+    /// The next branch name after one someone else pushed to:
+    /// "mux/site" → "mux/site-2", "mux/site-2" → "mux/site-3".
+    static func nextBranch(_ branch: String) -> String { GitHubRepoMaker.nextName(branch) }
 
     /// Where a project that started on GitHub begins there: darkmux's own
     /// first commit isn't on GitHub, but its files are the same as this
@@ -123,7 +141,7 @@ struct GitHubPR: Sendable {
             entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blob.sha])
             added.append(path)
         }
-        let base: Commit = try await send("GET", "\(api)/git/commits/\(baseCommit)", nil, repo: repo)
+        let base: Commit = try await send("GET", "\(api)/git/commits/\(baseCommit)", nil, repo: repo, missing: .baseMissing(baseCommit))
         let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
         let parent = remote?.object.sha ?? baseCommit
         let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": message, "tree": tree.sha, "parents": [parent]], repo: repo)
@@ -145,18 +163,13 @@ struct GitHubPR: Sendable {
 
     /// A GET whose 404 means "not there yet" (nil), not "can't write".
     private func sendOptional<T: Decodable>(_ method: String, _ url: String, repo: String) async throws -> T? {
-        var request = URLRequest(url: URL(string: url)!)
-        request.httpMethod = method
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, status) = try await load(method, url, nil)
         if status == 404 { return nil }
         guard status == 200 else { throw status == 403 ? Failure.cantWrite(repo) : Failure.github("status \(status)") }
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String) async throws -> T {
+    private func request(_ method: String, _ url: String, _ body: [String: Any]?) throws -> URLRequest {
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -166,9 +179,28 @@ struct GitHubPR: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        let (data, response) = try await session.data(for: request)
+        return request
+    }
+
+    /// One request; a 401 renews the sign-in once and retries with it.
+    private func load(_ method: String, _ url: String, _ body: [String: Any]?) async throws -> (Data, Int) {
+        let (data, response) = try await session.data(for: try request(method, url, body))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 401 else { return (data, status) }
+        guard let fresh = await GitHubSession.renewed() else { throw Failure.signInExpired }
+        current.value = fresh
+        let (again, retried) = try await session.data(for: try request(method, url, body))
+        let second = (retried as? HTTPURLResponse)?.statusCode ?? 0
+        if second == 401 { throw Failure.signInExpired }
+        return (again, second)
+    }
+
+    /// `missing` is what a 404 means here, when it isn't "can't write".
+    private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String,
+                                    missing: Failure? = nil) async throws -> T {
+        let (data, status) = try await load(method, url, body)
         guard (200..<300).contains(status) else {
+            if status == 404, let missing { throw missing }
             if status == 403 || status == 404 { throw Failure.cantWrite(repo) }
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             let detail = ((json?["errors"] as? [[String: Any]])?.first?["message"] as? String) ?? (json?["message"] as? String) ?? "status \(status)"

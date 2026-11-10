@@ -612,6 +612,9 @@
     "File on GitHub" : {
 
     },
+    "Finish putting it on GitHub" : {
+
+    },
     "Fix an issue" : {
 
     },
@@ -658,6 +661,12 @@
 
     },
     "GitHub URL or link (optional)" : {
+
+    },
+    "GitHub refused the request. Try again in a moment." : {
+
+    },
+    "GitHub refused to let Mux Bot write to %@, and I couldn't check whether its GitHub App is installed there. Try again in a moment." : {
 
     },
     "GitHub said: %@" : {
@@ -745,6 +754,16 @@
         }
       }
     },
+    "I made github.com/%@, but couldn't put this project's work in it yet (%@). Choose Finish putting it on GitHub to try again; it goes into the same repo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "I made github.com/%1$@, but couldn't put this project's work in it yet (%2$@). Choose Finish putting it on GitHub to try again; it goes into the same repo."
+          }
+        }
+      }
+    },
     "Idle" : {
 
     },
@@ -761,6 +780,16 @@
         }
       }
     },
+    "Install Mux Bot on %@ to open pull requests: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Install Mux Bot on %1$@ to open pull requests: %2$@"
+          }
+        }
+      }
+    },
     "Install it in Terminal with Homebrew (skip this if you have it). Mux Bot can't tell until darkmux's app connection runs." : {
 
     },
@@ -771,6 +800,9 @@
 
     },
     "It was made by an older darkmux, which didn't keep what a preview needs. Start the project again from its template to get a preview." : {
+
+    },
+    "It's already being put on GitHub." : {
 
     },
     "Its .darkmux folder is a link, so I won't write through it." : {
@@ -897,6 +929,9 @@
     "Mux Bot can't reach GitHub to read this template." : {
 
     },
+    "Mux Bot can't write to %@ yet: install the Mux Bot GitHub App on it." : {
+
+    },
     "Mux Bot couldn't open its data" : {
 
     },
@@ -916,6 +951,9 @@
 
     },
     "Mux Bot quit before darkmux started it." : {
+
+    },
+    "Mux Bot's GitHub App is installed on %@, but GitHub still refused to let it write there. Check that the App has read and write access to the repo's contents and pull requests, then try again." : {
 
     },
     "Mux Bot's GitHub App isn't allowed to create repositories yet. In the App's settings on GitHub, give it the “Repository creation” permission, then approve the update." : {
@@ -1420,6 +1458,19 @@
     "Skills" : {
 
     },
+    "Someone else pushed to %@ on GitHub, so I left it as it is. This bot's work goes to %@ from now on." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Someone else pushed to %1$@ on GitHub, so I left it as it is. This bot's work goes to %2$@ from now on."
+          }
+        }
+      }
+    },
+    "Someone else pushed to %@ on GitHub, so I stopped rather than overwrite it." : {
+
+    },
     "Something went wrong while starting it. Try again." : {
 
     },
@@ -1582,6 +1633,9 @@
     "The project's server started but never answered. Try again, or ask the bot to look at its dev script." : {
 
     },
+    "The repo is made; this project's work isn't in it yet." : {
+
+    },
     "The result before the change is unchanged." : {
 
     },
@@ -1726,6 +1780,9 @@
     "This template's PLAYBOOK.md is too large." : {
 
     },
+    "This work builds on a commit GitHub doesn't have (%@), so I couldn't put it there. Push that commit to GitHub, then try again." : {
+
+    },
     "To do" : {
 
     },
@@ -1863,6 +1920,9 @@
 
     },
     "You said Docker is running." : {
+
+    },
+    "Your GitHub sign-in expired. Sign in again." : {
 
     },
     "Your bots" : {

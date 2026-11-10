@@ -36,11 +36,21 @@ final class LocalBotState: @unchecked Sendable {
         /// Each run's darkmux work ids, oldest first (the run, then each
         /// Tweak): Undo reverts them all, newest first.
         var runWorkIds: [String: [String]]?
+        /// The GitHub branch this Mac pushes the bot's work to when it isn't
+        /// darkmux's branch name: someone else pushed to that one, so the
+        /// work moved to the next free name (`RunCoordinator.pushMovingOn`).
+        var pushHead: String?
+        /// Put it on GitHub made the repo but hasn't pushed the project's
+        /// work into it yet: Put resumes into that repo, and backups wait.
+        var putPending: Bool?
+        /// Runs finished before this are already on GitHub (Put it on GitHub
+        /// pushed them to the default branch): Open PR doesn't offer them.
+        var shippedThrough: Date?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && shippedThrough == nil
         }
     }
 
