@@ -332,6 +332,9 @@ struct BotStore {
 extension BotStore {
     /// Fix it now: one Coder dispatch card per bug, remembered on the bug's
     /// message (`runId`), so a second press finds it instead of another card.
+    // Red-first stub.
+    func sentRun(for message: ChatMessage) -> BotRun? { message.runId.flatMap { run(id: $0) } }
+
     func fixBug(_ message: ChatMessage, draft: BugDraft, bot: Bot) -> (run: BotRun, isNew: Bool) {
         if let id = message.runId, let existing = run(id: id) { return (existing, false) }
         let run = proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot, brief: "Fix this bug:\n\n" + draft.body)

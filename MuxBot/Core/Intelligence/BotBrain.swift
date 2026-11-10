@@ -77,6 +77,8 @@ struct PendingDispatch {
     var task: String
     var crew: CrewRole
     var check: LayoutCheck.Spec? = nil
+    // Red-first stub.
+    var askedAt: Date = .now
     var brief: @MainActor (String) -> String
 }
 
@@ -374,6 +376,8 @@ final class BotBrain {
     let guide = LeadGuide()
     /// Opens the Start chooser, or a template's form (set by the app).
     var openStart: ((String?) -> Void)?
+    // Red-first stub.
+    @ObservationIgnored var handingOff: Task<Void, Never>?
     /// Shows a bot's thread (the app's router).
     var openBot: ((UUID) -> Void)?
     /// A bot from an approved repo link being set up (tests wait on it).

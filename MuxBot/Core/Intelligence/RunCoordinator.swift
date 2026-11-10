@@ -1463,6 +1463,8 @@ final class RunCoordinator {
 
     // MARK: Pull requests
 
+    // Red-first stub.
+    var githubSession: URLSession?
     /// Bots with a PR being opened (their button waits).
     var openingPR: Set<UUID> = []
 
