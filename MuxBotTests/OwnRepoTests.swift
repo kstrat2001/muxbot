@@ -71,6 +71,8 @@ struct OwnRepoTests {
 
     @Test func withoutTheRepositoryCreationPermissionItSaysSo() async {
         GitHubStub.reset()
+        // The template is read first (sweep 6a #1), then the repo is asked for.
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4", 200, #"{"tree":[],"truncated":false}"#)
         GitHubStub.on("POST /user/repos", 403, #"{"message":"Resource not accessible by integration"}"#)
         await #expect(throws: GitHubRepoMaker.Failure.cantCreate) {
             _ = try await maker().make(name: "tides", isPrivate: true, description: "", from: Self.template)
@@ -81,7 +83,11 @@ struct OwnRepoTests {
     @Test func aRepoMadeButNotFilledIsReportedByName() async {
         GitHubStub.reset()
         GitHubStub.on("POST /user/repos", 201, #"{"full_name":"kain/tides","html_url":"https://github.com/kain/tides","default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4", 500, #"{"message":"boom"}"#)
+        // The template reads fine (it's checked before the repo is made, sweep
+        // 6a #1); copying its file into the new repo fails.
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4", 200,
+                      #"{"tree":[{"path":"book.json","mode":"100644","type":"blob","sha":"aaa"}],"truncated":false}"#)
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/blobs/aaa", 500, #"{"message":"boom"}"#)
         do {
             _ = try await maker().make(name: "tides", isPrivate: true, description: "", from: Self.template)
             Issue.record("should fail")
@@ -94,6 +100,7 @@ struct OwnRepoTests {
 
     @Test func whenGitHubFailsNothingIsMadeHere() async throws {
         GitHubStub.reset()
+        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4", 200, #"{"tree":[],"truncated":false}"#)
         GitHubStub.on("GET /user", 200, #"{"login":"kain"}"#)
         GitHubStub.on("POST /user/repos", 403, #"{"message":"Resource not accessible by integration"}"#)
         let store = TestStore.fresh()
@@ -278,6 +285,8 @@ struct PutOnGitHubTests {
         let moves = GitHubStub.seen.filter { $0.method == "PATCH" }.compactMap { $0.body?["sha"] as? String }
         #expect(moves == ["start1", "work1"], "main ends at the project's latest work")
         #expect(bot.repoSlugs == ["kain/tides"])
-        #expect(bot.githubStart == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"), "later backups go to mux/tides")
+        // Later backups go to mux/tides, built on the pushed work (sweep 6a
+        // #6: this used to be the template's commit, start1).
+        #expect(bot.githubStart == GitHubPR.Start(commit: "work1", branch: "main", head: "mux/tides"), "later backups go to mux/tides")
     }
 }
