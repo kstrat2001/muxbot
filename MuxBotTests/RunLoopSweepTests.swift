@@ -342,9 +342,10 @@ struct RunLoopSweepTests {
         let submitted = Recorder()
         brain.runs.workSubmitter = { _, _, _, _, _ in submitted.add("x"); return ("w-2", nil) }
         brain.runs.workStatusFetcher = { [self] _ in status(#"{"status":"running"}"#) }
-        async let first: Void = brain.rerun(run, change: "again", store: store, nextModel: true)
-        async let second: Void = brain.rerun(run, change: "again", store: store, nextModel: true)
-        _ = await (first, second)
+        // Two taps before the first one's await returns.
+        let first = Task { await brain.rerun(run, change: "again", store: store, nextModel: true) }
+        let second = Task { await brain.rerun(run, change: "again", store: store, nextModel: true) }
+        _ = await (first.value, second.value)
         await until { !submitted.values.isEmpty }
         try? await Task.sleep(for: .milliseconds(100))
         #expect(submitted.values.count == 1)
