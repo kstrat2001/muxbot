@@ -4,7 +4,7 @@ A bot with a website can show it beside the chat. darkmux runs the site from its
 
 ## Turning it on
 
-The repo needs a preview recipe, .darkmux/preview.json, that says how to start it. Without one, you can add a preview link in the bot's info.
+darkmux needs a preview recipe that says how the project starts. When there isn't one, choose Set up preview: Mux Bot works it out from the project's files on a card for you to check and approve. Without one, you can add a preview link in the bot's info.
 
 ## Pointing at things
 

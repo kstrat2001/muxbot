@@ -104,7 +104,8 @@ struct TweakMessageTests {
 struct PairingErrorTests {
     @Test func anEndpointThatIsntRunningIsSaidPlainly() {
         let text = FleetConnection.plainError(URLError(.cannotConnectToHost))
-        #expect(text == "darkmux isn't answering on this Mac. Start it in Terminal with the command below, then try again.")
+        // No command to run (Kain's rule): darkmux's guide says how.
+        #expect(text == "darkmux isn't running on this Mac. darkmux's guide shows how to start it; then try again.")
         #expect(!text.contains("`"))
     }
 

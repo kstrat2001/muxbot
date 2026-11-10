@@ -15,7 +15,6 @@ struct PreviewStatusView: View {
     @State private var pickingFolder = false
     @State private var folderProblem: String?
     @State private var addingFolder = false
-    @State private var copied = false
 
     var body: some View {
         VStack(spacing: Spacing.md) {
@@ -99,17 +98,10 @@ struct PreviewStatusView: View {
             .frame(maxWidth: 440)
         switch why {
         case .previewsOff:
-            Text(LivePreview.Unavailable.enableCommand)
-                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                .padding(Spacing.sm)
-                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
             HStack {
-                Button(copied ? "Copied" : "Copy command", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    Clipboard.copy(LivePreview.Unavailable.enableCommand)
-                    copied = true
-                }
-                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+                guideLink
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
         case .notYourCheckout, .checkoutMoved:
             if addingFolder {
@@ -120,21 +112,18 @@ struct PreviewStatusView: View {
             }
             if let folderProblem { Label(folderProblem, systemImage: "exclamationmark.triangle").labelStyle(.tintedIcon(Color.brandOrange)).multilineTextAlignment(.center) }
         case .noRecipe:
-            Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            HStack {
+                Button("Set up preview", systemImage: "play.rectangle") { brain.offerPreviewSetup(for: bot, store: BotStore(context: context)) }
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            }
         case .newProject:
             EmptyView()
         case .notAnswering:
-            Text(connection.serveCommand)
-                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                .padding(Spacing.sm)
-                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
             HStack {
-                Button(copied ? "Copied" : "Copy command", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    Clipboard.copy(connection.serveCommand)
-                    copied = true
-                }
-                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+                guideLink
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
         case .templateNoRecipe:
             EmptyView()
@@ -145,23 +134,19 @@ struct PreviewStatusView: View {
             Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
         case .earlierPairing:
-            let command = DarkmuxPlain.claimCommand(workspace: bot.workspaceName ?? "", client: connection.pairedName ?? LeadBot.name)
-            Text(command)
-                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                .padding(Spacing.sm)
-                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
             HStack {
-                Button(copied ? "Copied" : "Copy command", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    Clipboard.copy(command)
-                    copied = true
-                }
-                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("New work copy", systemImage: "arrow.triangle.branch") {
                     Task { await brain.runs.newWorkCopy(for: bot, store: BotStore(context: context)) }
                 }
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
         }
+    }
+
+    /// What darkmux needs on this Mac, from its own guide (never a command).
+    private var guideLink: some View {
+        Link(destination: DarkmuxLinks.guide) { Label("darkmux guide", systemImage: "safari") }
     }
 }
 

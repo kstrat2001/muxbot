@@ -174,7 +174,7 @@ enum DarkmuxPlain {
         switch client.status {
         case 401: return String(localized: "darkmux no longer knows this app. Pair again.")
         case 403 where isEarlierPairing(client):
-            return String(localized: "This work copy belongs to an earlier pairing with darkmux. Claim it for this app with darkmux's claim command, or set up a new work copy (a new branch; the earlier commits stay on the old one).")
+            return String(localized: "This work copy belongs to an earlier pairing with darkmux. Set up a new work copy with New work copy (a new branch; the earlier commits stay on the old one).")
         case 404: return String(localized: "darkmux doesn't have that anymore.")
         case 409 where client.message.localizedCaseInsensitiveContains("no free workspace name"):
             return String(localized: "darkmux has no free work copy name left for this project. Remove an old work copy of it in darkmux, then try again.")
@@ -199,11 +199,6 @@ enum DarkmuxPlain {
     static func isEarlierPairing(_ error: any Error) -> Bool {
         guard let client = error as? DarkmuxClient.ClientError else { return false }
         return client.status == 403 && client.message.localizedCaseInsensitiveContains("not made for this app")
-    }
-
-    /// Hands an earlier pairing's work copy to this one (run on the Mac).
-    static func claimCommand(workspace: String, client: String) -> String {
-        "darkmux client claim \(workspace) \"\(client)\""
     }
 
     /// The raw text for Show details.

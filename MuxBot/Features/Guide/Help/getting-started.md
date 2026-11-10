@@ -5,14 +5,14 @@ Mux Bot sends coding work to AI models running on your own Mac, through darkmux.
 ## What you need
 
 - A Mac with Apple silicon. Runs happen on the Mac; the iPhone and iPad apps show your bots and threads, and start runs from the Mac app for now.
-- darkmux, the free command-line tool that runs local models and the work.
+- darkmux, the free tool that runs local models and the work.
 - LM Studio with at least one model downloaded.
 - Docker Desktop, which darkmux uses to run each piece of work in a container.
 - Mux Bot paired with darkmux on that Mac.
 
 ## Check your setup
 
-Ask Mux Bot "check my setup". It shows a checklist that ticks itself off as each part starts working. At the top is one block to paste into Terminal that installs everything still missing (it needs Homebrew), with a rough time and download estimate; each step also has its own command.
+Ask Mux Bot "check my setup". It shows a checklist that ticks itself off as each part starts working. Each step has a button or a link: Open Docker or Open LM Studio when they're installed but closed, their official download pages when they're missing, and darkmux's guide for darkmux itself. Nothing asks you to type a command.
 
 ## Your first project
 

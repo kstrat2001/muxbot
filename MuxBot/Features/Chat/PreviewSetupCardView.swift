@@ -15,11 +15,13 @@ struct PreviewSetupCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(BotBrain.self) private var brain
     @State private var problem: String?
+    @State private var showDetails = false
     /// The pending write of your edits into the card (debounced).
     @State private var keeping: Task<Void, Never>?
 
     var body: some View {
         content
+            .onAppear { if setup.command.value.isEmpty { showDetails = true } }
             // Edits are written back into the card, so leaving the thread
             // never loses them.
             .onChange(of: setup) { keep() }
@@ -40,10 +42,19 @@ struct PreviewSetupCardView: View {
             Label(setup.framework.map { "Set up the preview (\($0))" } ?? "Set up the preview", systemImage: "play.rectangle")
                 .font(AppFont.headline())
             if message.actionState == .waiting {
-                field("Command", text: $setup.command.value, source: setup.command.source)
-                field("Install", text: $setup.install.value, source: setup.install.source)
-                field("Environment", text: $setup.env.value, source: setup.env.source)
-                field("Ready when this page answers", text: $setup.ready.value, source: setup.ready.source)
+                Text(PreviewSetup.howItRuns(command: setup.command.value, install: setup.install.value))
+                    .font(AppFont.footnote()).fixedSize(horizontal: false, vertical: true)
+                // What darkmux runs, behind Show details: open when something
+                // wasn't found and needs filling in.
+                DisclosureGroup("Show details", isExpanded: $showDetails) {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        field("Command", text: $setup.command.value, source: setup.command.source)
+                        field("Install", text: $setup.install.value, source: setup.install.source)
+                        field("Environment", text: $setup.env.value, source: setup.env.source)
+                        field("Ready when this page answers", text: $setup.ready.value, source: setup.ready.source)
+                    }
+                }
+                .font(AppFont.footnote())
                 if !setup.hotReload.value.isEmpty {
                     LabeledContent("Hot reload", value: setup.hotReload.value).font(AppFont.footnote())
                     if let source = setup.hotReload.source { note(source) }

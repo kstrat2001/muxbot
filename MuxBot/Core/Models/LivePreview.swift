@@ -78,9 +78,6 @@ struct LivePreview: Equatable, Sendable {
         /// The work copy was made for this app's earlier pairing.
         case earlierPairing
 
-        /// The command that turns previews on (run by you: the app can't).
-        static let enableCommand = "darkmux config set clients.preview.enabled true"
-
         var title: String {
             switch self {
             case .previewsOff: String(localized: "Previews are off on this Mac")
@@ -101,7 +98,7 @@ struct LivePreview: Equatable, Sendable {
             let repo = repo ?? String(localized: "this repo")
             switch self {
             case .previewsOff:
-                return String(localized: "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:")
+                return String(localized: "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on in darkmux on this Mac; darkmux's guide shows how. Then try again.")
             case .notYourCheckout:
                 return String(localized: "darkmux cloned \(repo), and it runs a preview only from your own checkout, never from a copy a bot writes to. Add your checkout of \(repo) and the preview starts from it.")
             case .newProject:
@@ -109,7 +106,7 @@ struct LivePreview: Equatable, Sendable {
             case .notPaired:
                 return String(localized: "Pair Mux Bot with darkmux on this Mac to see the preview.")
             case .notAnswering:
-                return String(localized: "darkmux's app connection isn't running. Start it in Terminal, then try again:")
+                return String(localized: "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; then try again.")
             case .templateNoRecipe:
                 return String(localized: "The template this project was made from has no preview settings, so darkmux can't run a preview for it.")
             case .remakeProject:
@@ -117,10 +114,10 @@ struct LivePreview: Equatable, Sendable {
             case .checkoutMoved:
                 return String(localized: "darkmux's copy of \(repo) is no longer linked to your checkout (it moved, or was deleted). Add your checkout again.")
             case .earlierPairing:
-                return String(localized: "darkmux made it for this app before you paired again, so it won't let this pairing use it. Claim it with this command in Terminal, or set up a new work copy (a new branch; the earlier commits stay on the old one):")
+                return String(localized: "darkmux made it for this app before you paired again, so it won't let this pairing use it. Set up a new work copy for it (a new branch; the earlier commits stay on the old one).")
             case .noRecipe:
                 let folder = folder ?? String(localized: "your checkout")
-                return String(localized: "darkmux starts a preview from .darkmux/preview.json in \(folder), and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again.")
+                return String(localized: "darkmux needs to know how \(folder) starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it.")
             }
         }
 

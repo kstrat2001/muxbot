@@ -106,9 +106,9 @@ struct SetupCheckTests {
         let steps = SetupCheck.steps(fresh)
         #expect(steps.state(.mac) == .done)
         #expect(steps.state(.darkmux) == .unknown, "can't tell installed from not serving")
-        #expect(steps[.darkmux]?.command == "brew tap kstrat2001/tap\nbrew install darkmux\ndarkmux init\ndarkmux doctor")
+        #expect(steps[.darkmux]?.link == DarkmuxLinks.install, "darkmux's guide, never a command")
         #expect(steps.state(.endpoint) == .todo)
-        #expect(steps[.endpoint]?.detail.contains("isn't in a darkmux release yet") == true)
+        #expect(steps[.endpoint]?.link == DarkmuxLinks.guide)
         #expect(steps.state(.pair) == .later, "pairing waits for the app connection")
         #expect(steps.state(.models) == .later)
         #expect(steps.state(.docker) == .manual)
@@ -257,7 +257,8 @@ struct LeadGuideFlowTests {
         guard case let .answer(text, articles, onDevice)? = lastGuideCard(store) else { Issue.record("no answer card"); return }
         #expect(articles.first == "pairing")
         #expect(!onDevice, "no model here: the article itself")
-        #expect(text.contains("darkmux client serve"))
+        #expect(text.contains("Pair with darkmux"))
+        #expect(NoCommands.says(text) == nil, "no command to run in help")
     }
 
     @Test func aQuestionItDoesntCoverIsADontKnow() async throws {

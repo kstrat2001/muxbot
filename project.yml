@@ -53,7 +53,6 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
-        MuxBotDarkmuxCLI: $(MUXBOT_DARKMUX_CLI)
         # iCloud sync of bots, runs and threads: on only in builds that set
         # MUXBOT_CLOUD_SYNC = YES and the iCloud entitlements (Config/*.xcconfig).
         MuxBotCloudSync: $(MUXBOT_CLOUD_SYNC)

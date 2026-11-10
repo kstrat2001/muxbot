@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import AppKit
+#endif
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -19,6 +22,8 @@ enum SetupProbe {
         f.endpointUp = await endpoint
         f.lmStudio = await lmStudio
         f.paired = connection?.isPaired ?? false
+        f.docker = appPresence(bundleID: SetupCheck.dockerBundleID)
+        f.lmStudioApp = appPresence(bundleID: SetupCheck.lmStudioBundleID)
         if f.paired, f.endpointUp == true {
             let listed = await runs.listedProfiles()
             f.listing = runs.listing
@@ -41,6 +46,20 @@ enum SetupProbe {
             try? await Task.sleep(for: every)
         } while !Task.isCancelled
     }
+
+    #if os(macOS)
+    /// Installed (LaunchServices knows it) and open, for an app by bundle id.
+    /// Both work in the sandbox; neither runs anything.
+    static func appPresence(bundleID: String) -> SetupFacts.AppPresence {
+        SetupCheck.presence(installed: NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil,
+                            running: NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID })
+    }
+
+    static func openApp(bundleID: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+    #endif
 
     static var memoryGB: Int { Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded()) }
 

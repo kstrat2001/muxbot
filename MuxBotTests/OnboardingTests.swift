@@ -252,36 +252,6 @@ struct StartFirstTests {
     }
 }
 
-/// One copyable block for the installs Terminal can do, with a time and
-/// download estimate; it goes once they're done.
-struct SetupBlockTests {
-    private func facts(up: Bool = false, lm: SetupFacts.LMStudio = .notAnswering) -> SetupFacts {
-        SetupFacts(platform: .mac, appleSilicon: true, memoryGB: 128, endpointUp: up, lmStudio: lm)
-    }
-
-    @Test func aFreshMacGetsOneBlock() throws {
-        let block = try #require(SetupCheck.setupBlock(SetupCheck.steps(facts())))
-        #expect(block.command.contains("brew install --cask docker-desktop lm-studio"))
-        #expect(block.command.contains("brew install darkmux"))
-        #expect(block.command.contains("darkmux doctor"))
-        #expect(block.estimate.contains("minutes"))
-        #expect(block.estimate.contains("GB"))
-    }
-
-    @Test func whatsDoneIsLeftOut() throws {
-        let block = try #require(SetupCheck.setupBlock(SetupCheck.steps(facts(up: true, lm: .models(3)))))
-        #expect(!block.command.contains("lm-studio"))
-        #expect(!block.command.contains("brew install darkmux"))
-        #expect(block.command.contains("docker-desktop"), "Docker isn't confirmed yet")
-    }
-
-    @Test func allDoneMeansNoBlock() {
-        var f = facts(up: true, lm: .models(3))
-        f.dockerConfirmed = true
-        #expect(SetupCheck.setupBlock(SetupCheck.steps(f)) == nil)
-    }
-
-    @Test func aPhoneGetsNoBlock() {
-        #expect(SetupCheck.setupBlock(SetupCheck.steps(SetupFacts(platform: .phone, appleSilicon: false, memoryGB: 8))) == nil)
-    }
-}
+// The Terminal install block is gone (Kain's rule: no commands in the app);
+// each step has its own button or official page (NoCommandsTests,
+// SetupDetectionTests).

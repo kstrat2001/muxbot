@@ -139,3 +139,23 @@ struct PreviewSetup: Codable, Equatable, Sendable {
         return (text, names)
     }
 }
+
+extension PreviewSetup {
+    private static let managers: Set<String> = ["npm", "pnpm", "yarn", "bun"]
+
+    /// How the preview runs, in words: the commands darkmux runs stay behind
+    /// Show details on the card.
+    static func howItRuns(command: String, install: String) -> String {
+        let words = command.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return String(localized: "How it starts isn't known yet: fill it in under Show details.") }
+        let script: String? = {
+            guard let tool = words.first, managers.contains(tool), words.count >= 2 else { return nil }
+            return words[1] == "run" ? (words.count >= 3 ? words[2] : nil) : words[1]
+        }()
+        let starts = script.map { String(localized: "Starts with its \($0) script") } ?? String(localized: "Starts with its own command")
+        guard let manager = install.split(whereSeparator: \.isWhitespace).first.map(String.init), managers.contains(manager) else {
+            return starts + "."
+        }
+        return starts + String(localized: "; installs with \(manager).")
+    }
+}
