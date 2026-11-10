@@ -1363,6 +1363,9 @@
     "Reinstalls the project's packages, then starts the preview again. Your files aren't touched." : {
 
     },
+    "Reload" : {
+
+    },
     "Reload the preview" : {
 
     },
@@ -1508,6 +1511,9 @@
           }
         }
       }
+    },
+    "Setting up a work copy on this Mac…" : {
+
     },
     "Setting up a work copy…" : {
 
@@ -2139,6 +2145,9 @@
 
     },
     "darkmux couldn't read what changed" : {
+
+    },
+    "darkmux couldn't set up a work copy" : {
 
     },
     "darkmux couldn't set up a work copy: %@" : {
