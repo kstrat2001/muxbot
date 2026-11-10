@@ -299,9 +299,12 @@ struct BotInfoView: View {
                     Text("\(repo) has no \(PreviewManifest.path)").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 Spacer()
-                Button("Draft one") {}
-                    .disabled(true)
-                    .help("Coming soon: a bot drafts the recipe for you to approve.")
+                Button("Draft one") {
+                    dismiss()
+                    router.navigate(to: .bot(bot.id))
+                    brain.offerPreviewSetup(for: bot, store: BotStore(context: context))
+                }
+                .help("The bot drafts a preview recipe in its thread for you to check and approve.")
             }
         case .failed(let message)?:
             Label("Couldn't check \(repo): \(message)", systemImage: "exclamationmark.triangle")

@@ -29,8 +29,9 @@ enum RunBlocker: Equatable, Sendable {
 
     @MainActor
     static func check(paired: Bool, crew: CrewRole, bot: Bot, deviceRuns: Bool = deviceRuns, excluding run: UUID? = nil) -> RunBlocker? {
-        let templateOnly = !bot.useCaseId.isEmpty && bot.workspaceName == nil
-            && bot.folderBookmark == nil && bot.repoSlugs.isEmpty
+        // A template bot with no project here, backed up to GitHub or not:
+        // it's made from its template, never cloned from its own repo.
+        let templateOnly = !bot.useCaseId.isEmpty && bot.workspaceName == nil && bot.folderBookmark == nil
         guard deviceRuns else { return templateOnly ? .projectNotMade(bot.name, here: false) : .notOnThisDevice }
         guard paired else { return .unpaired }
         if templateOnly { return .projectNotMade(bot.name, here: true) }

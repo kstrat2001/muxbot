@@ -224,7 +224,10 @@ struct LeadGuideFlowTests {
         #expect(draft.name == "hcr")
         #expect(draft.resource == "https://github.com/kstrat2001/hcr")
         #expect(store.allBots().isEmpty, "nothing until Approve")
+        brain.github = MockGitHub()
         brain.resolve(card, approve: true, store: store)
+        // Set up like Work on a project I already have (sweep 6b #18).
+        await brain.creatingBot?.value
         let bot = try #require(store.allBots().first)
         #expect(bot.name == "hcr")
         #expect(bot.repoSlugs == ["kstrat2001/hcr"])

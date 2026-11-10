@@ -23,7 +23,8 @@ struct ExistingProjectTests {
     @Test @MainActor func noPlaybookOrABrokenOneGivesTheGeneralSkills() {
         for text in [nil, "not a playbook", "schema: 2\ntitle: x\nicon: y\npitch: z\n"] as [String?] {
             let (playbook, source) = ExistingProject.playbook(projectText: text)
-            #expect(source == .general)
+            // A broken one says why (sweep 6b #10); none is just general.
+            if text == nil { #expect(source == .general) } else if case .invalid = source {} else { Issue.record("\(source)") }
             #expect(playbook.skills.map(\.name).contains("Fix a bug"))
             #expect(playbook.persona.contains("{name}"))
         }

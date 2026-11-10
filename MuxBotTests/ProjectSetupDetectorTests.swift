@@ -52,7 +52,8 @@ struct ProjectSetupDetectorTests {
         #expect(d.port == nil, "never invented")
         #expect(d.hotReload == nil)
         #expect(d.ready == nil)
-        #expect(d.install == nil, "no lockfile, no install")
+        // No lockfile: npm's install, sourced, never blank (sweep 6b #15).
+        #expect(d.install == .init(value: "npm install --no-audit --no-fund", source: "package.json, no lockfile"))
     }
 
     @Test func noPackageJSONOrNoDevScriptFindsNothing() {

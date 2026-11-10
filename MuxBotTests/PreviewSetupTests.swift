@@ -48,7 +48,8 @@ struct PreviewSetupFileTests {
         let setup = PreviewSetup(ProjectSetupDetector.detect(packageJSON: #"{"scripts":{"dev":"node my-server.mjs"}}"#, files: []), folderName: "x")
         #expect(setup.env == .init(value: "", source: nil))
         #expect(setup.ready == .init(value: "", source: nil))
-        #expect(setup.install == .init(value: "", source: nil))
+        // Install comes from package.json with no lockfile (sweep 6b #15).
+        #expect(setup.install == .init(value: "npm install --no-audit --no-fund", source: "package.json, no lockfile"))
     }
 
     @Test func itsWrittenIntoTheCheckoutAndNeverOverwritten() throws {

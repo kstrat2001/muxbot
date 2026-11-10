@@ -14,6 +14,12 @@
         }
       }
     },
+    "%@ So I start with general skills." : {
+
+    },
+    "%@ The bot starts with general skills." : {
+
+    },
     "%@ changed nothing and has a question" : {
 
     },
@@ -929,6 +935,9 @@
     "Mux Bot can't reach GitHub to read this template." : {
 
     },
+    "Mux Bot can't reach GitHub to read this template. It tries again when you come back here." : {
+
+    },
     "Mux Bot can't write to %@ yet: install the Mux Bot GitHub App on it." : {
 
     },
@@ -1017,6 +1026,9 @@
 
     },
     "Not available: %@." : {
+
+    },
+    "Not backed up: sign in with GitHub (Settings › GitHub) to back up to %@." : {
 
     },
     "Not found in the project's files." : {
@@ -1263,6 +1275,9 @@
     "Ran on %@" : {
 
     },
+    "Reading PLAYBOOK.md…" : {
+
+    },
     "Reading your repos…" : {
 
     },
@@ -1387,6 +1402,16 @@
     },
     "Setting it up…" : {
 
+    },
+    "Setting up %@ for %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Setting up %1$@ for %2$@…"
+          }
+        }
+      }
     },
     "Setting up %@ on %@…" : {
       "localizations" : {
@@ -1555,6 +1580,9 @@
     "The Dock icon shows how many runs are waiting on you." : {
 
     },
+    "The bot drafts a preview recipe in its thread for you to check and approve." : {
+
+    },
     "The bot's skills come from this project's PLAYBOOK.md." : {
 
     },
@@ -1699,7 +1727,45 @@
     "This project needs a newer version of Node than the preview has. darkmux needs an update for it." : {
 
     },
+    "This project's PLAYBOOK.md doesn't say which schema it follows." : {
+
+    },
+    "This project's PLAYBOOK.md has an unknown key “%@” (did you mean “%@”?)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This project's PLAYBOOK.md has an unknown key “%1$@” (did you mean “%2$@”?)."
+          }
+        }
+      }
+    },
+    "This project's PLAYBOOK.md has schema “%@”, which isn't a schema number." : {
+
+    },
+    "This project's PLAYBOOK.md is missing its “%@” section." : {
+
+    },
+    "This project's PLAYBOOK.md is missing “%@”." : {
+
+    },
+    "This project's PLAYBOOK.md is too large." : {
+
+    },
+    "This project's PLAYBOOK.md needs a newer Mux Bot (it's schema %lld; this Mux Bot reads schema %lld)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This project's PLAYBOOK.md needs a newer Mux Bot (it's schema %1$lld; this Mux Bot reads schema %2$lld)."
+          }
+        }
+      }
+    },
     "This project's template has no preview" : {
+
+    },
+    "This template isn't on GitHub at the commit it's pinned to, so it can't be used." : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -2023,6 +2089,9 @@
     "darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub." : {
 
     },
+    "darkmux makes the project on your Mac, from the template, when you open this bot in Mux Bot there. You can make the bot now." : {
+
+    },
     "darkmux makes the project on your Mac, so pair Mux Bot with darkmux first. You can still make the bot now." : {
 
     },
@@ -2051,6 +2120,9 @@
 
     },
     "darkmux says there's nothing to approve?" : {
+
+    },
+    "darkmux sets up my work copy once Mux Bot is paired with it on your Mac." : {
 
     },
     "darkmux starts a preview from .darkmux/preview.json in %@, and there isn't one. Add it there (darkmux never reads the copy a bot writes to), then try again." : {
@@ -2124,6 +2196,9 @@
 
     },
     "no" : {
+
+    },
+    "package.json, no lockfile" : {
 
     },
     "this Mac" : {

@@ -245,3 +245,26 @@ struct BotSkill: Codable, Equatable, Sendable {
         return hits.compactMap { hit in skills.first { $0.name == hit.section } }
     }
 }
+
+extension Playbook.ParseError {
+    /// The same, about a project's own PLAYBOOK.md (Work on a project I
+    /// already have), not a template's.
+    var projectMessage: String {
+        switch self {
+        case .newerSchema(let n):
+            String(localized: "This project's PLAYBOOK.md needs a newer Mux Bot (it's schema \(n); this Mux Bot reads schema \(TemplateSchema.supported)).")
+        case .missing("schema"):
+            String(localized: "This project's PLAYBOOK.md doesn't say which schema it follows.")
+        case .notASchema(let v):
+            String(localized: "This project's PLAYBOOK.md has schema “\(v)”, which isn't a schema number.")
+        case .missing(let key):
+            String(localized: "This project's PLAYBOOK.md is missing “\(key)”.")
+        case .unknownKey(let key, let closest):
+            String(localized: "This project's PLAYBOOK.md has an unknown key “\(key)” (did you mean “\(closest)”?).")
+        case .missingSection(let section):
+            String(localized: "This project's PLAYBOOK.md is missing its “\(section)” section.")
+        case .tooLarge:
+            String(localized: "This project's PLAYBOOK.md is too large.")
+        }
+    }
+}

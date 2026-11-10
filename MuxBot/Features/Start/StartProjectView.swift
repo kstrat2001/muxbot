@@ -79,7 +79,7 @@ struct StartProjectView: View {
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: Spacing.md)], spacing: Spacing.md) {
                     ForEach(entries) { entry in
-                        Button { picked = entry } label: { tile(entry) }
+                        Button { pick(entry) } label: { tile(entry) }
                             .buttonStyle(.plain)
                             .disabled(playbooks[entry.id] == nil)
                     }
@@ -157,7 +157,11 @@ struct StartProjectView: View {
                 if connection.isPaired {
                     Text("darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub.")
                 } else {
+                    #if os(iOS)
+                    Text("darkmux makes the project on your Mac, from the template, when you open this bot in Mux Bot there. You can make the bot now.")
+                    #else
                     Text("darkmux makes the project on your Mac, so pair Mux Bot with darkmux first. You can still make the bot now.")
+                    #endif
                 }
             }
             Section {
@@ -207,10 +211,12 @@ struct StartProjectView: View {
         entries = await registry.templates()
         // Opened for a named template ("write a book"): its form.
         if let id = router.startTemplateId {
-            picked = entries.first { $0.id == id }
+            pick(entries.first { $0.id == id })
             router.startTemplateId = nil
         }
-        for entry in entries where details[entry.id] == nil {
+        // A template that couldn't be read is tried again each time you
+        // come back here.
+        for entry in entries where details[entry.id]?.retriesOnAppear ?? true {
             details[entry.id] = await registry.template(for: entry)
         }
         #if DEBUG
@@ -220,6 +226,13 @@ struct StartProjectView: View {
             answers.name = UserDefaults.standard.string(forKey: "startName") ?? ""
         }
         #endif
+    }
+
+    /// A template's form starts empty: never the previous project's answers.
+    private func pick(_ entry: TemplateEntry?) {
+        picked = entry
+        answers = StartProject.Answers(name: "")
+        problem = nil
     }
 
     private func start(_ entry: TemplateEntry, _ playbook: Playbook) async {
@@ -238,6 +251,7 @@ struct StartProjectView: View {
             return
         }
         starting = false
+        answers = StartProject.Answers(name: "")
         if inline { picked = nil } else { dismiss() }
         router.navigate(to: .bot(bot.id))
         if bot.workspaceName != nil {

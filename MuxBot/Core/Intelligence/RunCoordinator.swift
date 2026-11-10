@@ -311,6 +311,8 @@ final class RunCoordinator {
     /// Bots being put on GitHub (`PutOnGitHub`): kept here, not in the view,
     /// so closing bot info never lets a second Put start.
     var puttingOnGitHub: Set<UUID> = []
+    /// Bots told their work isn't backed up because you're signed out.
+    private var saidNotBackedUp: Set<UUID> = []
     /// Names tried after a branch someone else pushed to.
     static let branchTries = 5
 
@@ -362,7 +364,17 @@ final class RunCoordinator {
     func backUp(_ bot: Bot, store: BotStore) async {
         guard bot.githubStart != nil, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
               LocalBotState.shared[bot.id]?.putPending != true,
-              let token = githubToken?(), changesFetcher != nil || connection?.token != nil else { return }
+              changesFetcher != nil || connection?.token != nil else { return }
+        guard let token = githubToken?() else {
+            // Said once per bot, until a backup goes through again.
+            if !saidNotBackedUp.contains(bot.id), let head = bot.githubStart?.head {
+                saidNotBackedUp.insert(bot.id)
+                store.append(.system, String(localized: "Not backed up: sign in with GitHub (Settings › GitHub) to back up to \(head)."),
+                             to: store.conversation(for: .bot(bot.id)))
+            }
+            return
+        }
+        saidNotBackedUp.remove(bot.id)
         await oneAtATime(bot.id) { [self] in
             do {
                 let changes = try await changes(for: workspace)
@@ -822,7 +834,8 @@ final class RunCoordinator {
     enum WorkCopySetup: Equatable { case settingUp, failed(String) }
     /// Work copies being set up (or that failed), by bot.
     var workCopySetup: [UUID: WorkCopySetup] = [:]
-    // Red-first stub.
+    /// Finds a backed-up template bot's start on GitHub (tests); else
+    /// `GitHubRepoMaker.findStart` with your sign-in.
     var startFinder: ((String, TemplateEntry) async -> (GitHubPR.Start, String)?)?
 
     /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
@@ -839,12 +852,20 @@ final class RunCoordinator {
         var template = template
         // A template bot made while unpaired or on iPhone: its project is
         // made here from the same template, at its pinned commit.
-        if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil, bot.repoSlugs.isEmpty {
+        // Backed up to GitHub from there, it keeps its repo: the project is
+        // still made from the template, at the commit its repo started from,
+        // and its GitHub start (only on the device that made it) is found
+        // again, so backups go on.
+        if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil {
             workCopySetup[bot.id] = .settingUp
             let id = bot.useCaseId
-            guard let entry = await (templateSource ?? Self.registryTemplate)(id) else {
+            guard var entry = await (templateSource ?? Self.registryTemplate)(id) else {
                 workCopySetup[bot.id] = .failed(String(localized: "its template (\(id)) isn't in the template list anymore"))
                 return
+            }
+            if let repo = bot.repoSlugs.first, bot.githubStart == nil, let found = await findStart(repo: repo, template: entry, botName: bot.name) {
+                bot.githubStart = found.0
+                entry.ref = found.1
             }
             template = entry
         }
@@ -889,6 +910,13 @@ final class RunCoordinator {
         } catch {
             workCopySetup[bot.id] = .failed(error.localizedDescription)
         }
+    }
+
+    private func findStart(repo: String, template: TemplateEntry, botName: String) async -> (GitHubPR.Start, String)? {
+        if let startFinder { return await startFinder(repo, template) }
+        guard let token = githubToken?() else { return nil }
+        guard let found = try? await GitHubRepoMaker(token: token).findStart(repo: repo, template: template, botName: botName) else { return nil }
+        return (found.start, found.ref)
     }
 
     /// Tests stand in for darkmux's work API here; nil uses the client.
