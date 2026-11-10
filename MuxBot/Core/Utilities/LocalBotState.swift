@@ -49,11 +49,14 @@ final class LocalBotState: @unchecked Sendable {
         /// Runs finished before this are already on GitHub (Put it on GitHub
         /// pushed them to the default branch): Open PR doesn't offer them.
         var shippedThrough: Date?
+        /// Each Tweak in flight's result before it, by run id: a Tweak that
+        /// doesn't make it (after a relaunch too) goes back to it.
+        var tweakBases: [String: RunCoordinator.TweakBase]?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty
         }
     }
 

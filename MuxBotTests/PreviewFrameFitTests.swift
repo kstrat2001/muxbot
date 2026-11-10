@@ -81,7 +81,7 @@ struct PageFitsTests {
                                      url: "/", viewport: 422, left: 16, right: 16, width: 390, height: 160,
                                      paddingLeft: "24px", paddingRight: "24px", marginLeft: "0px", marginRight: "0px", x: 16, y: 900)
 
-    private func send(_ text: String, probe: MockProbe) async -> (BotStore, Bot) {
+    private func send(_ text: String, probe: MockProbe, picked: Bool = true) async -> (BotStore, Bot) {
         let store = TestStore.fresh()
         let bot = store.add(name: "site", instructions: "Site")
         store.addResource(.repo, "https://github.com/kstrat2001/muxbot-start-check-2", to: bot)
@@ -89,7 +89,11 @@ struct PageFitsTests {
         let brain = BotBrain()
         brain.useOnDeviceModel = false
         brain.layoutProbe = probe
-        await brain.send(text, in: .bot(bot.id), store: store, element: card)
+        // The brain holds its inspector weakly: kept alive for the send.
+        let inspector = MockInspector(PageFacts(viewport: 422, url: "/", matches: []))
+        brain.pageInspector = inspector
+        await brain.send(text, in: .bot(bot.id), store: store, element: picked ? card : nil)
+        withExtendedLifetime(inspector) {}
         return (store, bot)
     }
 
@@ -99,7 +103,9 @@ struct PageFitsTests {
 
     @Test func cutOffButFitsEverywhereIsNoBug() async throws {
         let probe = MockProbe([422: fitting(422), 390: fitting(390), 768: fitting(768), 1440: fitting(1440)])
-        let (store, bot) = await send("I still see the borders around each feature card off the screen to the right", probe: probe)
+        // About the page, nothing picked (sweep 2 #7: a picked element is
+        // always measured into a bug).
+        let (store, bot) = await send("the page looks cut off, it runs off the screen to the right", probe: probe, picked: false)
         let all = messages(store, bot)
         #expect(!all.contains { $0.kind == .bugCard }, "no bug drafted, so no Fix it now")
         let note = try #require(all.last { $0.kind == .guideCard })
@@ -120,14 +126,14 @@ struct PageFitsTests {
         #expect(messages(store, bot).contains { $0.kind == .bugCard })
     }
 
-    @Test(arguments: ["off the screen to the right", "the cards are cut off", "it overflows", "scrolls sideways", "clipped on the right", "wider than the screen"])
+    @Test(arguments: ["off the screen to the right", "scrolls sideways", "wider than the screen"])
     func overflowComplaints(text: String) {
-        #expect(BugReport.isOverflowComplaint(text), "\(text)")
+        #expect(BugReport.isPageOverflowComplaint(text), "\(text)")
     }
 
-    @Test(arguments: ["the borders look too thin", "make it bigger", "the font is wrong"])
+    @Test(arguments: ["the borders look too thin", "make it bigger", "the font is wrong", "the cards are cut off", "clipped on the right"])
     func notOverflowComplaints(text: String) {
-        #expect(!BugReport.isOverflowComplaint(text), "\(text)")
+        #expect(!BugReport.isPageOverflowComplaint(text), "\(text)")
     }
 }
 

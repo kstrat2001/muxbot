@@ -32,7 +32,7 @@ struct BugCardView: View {
                             .buttonStyle(.bordered)
                             .disabled(draft.issueURL == nil)
                         Spacer()
-                        if let sent = message.runId, store.run(id: sent) != nil {
+                        if let sent = store.sentRun(for: message)?.id {
                             // Already sent: go to its card instead of making another.
                             Button("Sent to Coder", systemImage: "checkmark") { router.focusRunId = sent }
                                 .buttonStyle(.bordered)

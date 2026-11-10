@@ -1638,6 +1638,9 @@
     "That isn't this bot's checkout. Choose %@." : {
 
     },
+    "That reads as a question, so I didn't start anything. Say what to change and I'll send it to the crew." : {
+
+    },
     "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
 
     },
@@ -1651,6 +1654,9 @@
 
     },
     "The change didn't finish: %@ The result before it is unchanged." : {
+
+    },
+    "The change didn't start before Mux Bot quit. The result before it is unchanged; reply to try again." : {
 
     },
     "The change didn't start on darkmux (%@) The result before it is unchanged; reply to try again." : {

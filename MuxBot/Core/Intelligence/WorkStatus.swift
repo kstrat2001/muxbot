@@ -59,17 +59,23 @@ enum WorkStatus {
         if !proposed.isEmpty {
             sections.append("Waiting for your Approve:\n" + proposed.map { line($0, nil) }.joined(separator: "\n"))
         }
-        let questions = runs.filter { $0.phase == .result && $0.changedFiles.isEmpty }.sorted(by: newest)
+        // A question: a crew that changes files came back with no change.
+        let questions = runs.filter { $0.phase == .result && $0.changedFiles.isEmpty && $0.crew.changesFiles }.sorted(by: newest)
         if !questions.isEmpty {
             sections.append("Questions for you:\n" + questions.map { r in
                 line(r, r.finishedAt.map { "waiting \(span(now.timeIntervalSince($0)))" })
             }.joined(separator: "\n"))
         }
+        let today: (BotRun) -> Bool = { r in r.finishedAt.map { now.timeIntervalSince($0) < 86400 } ?? false }
+        let unsaved = runs.filter { $0.phase == .result && !$0.changedFiles.isEmpty && $0.keptCommit == nil }.sorted(by: newest)
+        if !unsaved.isEmpty {
+            sections.append("Changes not saved (darkmux didn't commit them):\n" + unsaved.map { line($0, nil) }.joined(separator: "\n"))
+        }
         let finished = runs.filter { r in
-            r.phase == .result && !r.changedFiles.isEmpty && (r.finishedAt.map { now.timeIntervalSince($0) < 86400 } ?? false)
+            r.phase == .result && today(r) && (r.keptCommit != nil && !r.changedFiles.isEmpty || !r.crew.changesFiles)
         }.sorted(by: newest)
         if !finished.isEmpty {
-            sections.append("Finished today (committed; reply to change, or Undo):\n" + finished.map { line($0, $0.keptBranch) }.joined(separator: "\n"))
+            sections.append("Finished today:\n" + finished.map { line($0, $0.crew.changesFiles ? $0.keptBranch.map { "committed on \($0)" } : $0.crew.name) }.joined(separator: "\n"))
         }
         let failed = runs.filter { r in
             r.phase == .failed && (r.finishedAt.map { now.timeIntervalSince($0) < 86400 } ?? false)
@@ -83,7 +89,7 @@ enum WorkStatus {
     /// Questions that have waited too long for an answer.
     @MainActor
     static func nudges(runs: [BotRun], now: Date = .now) -> [String] {
-        runs.filter { $0.phase == .result && $0.changedFiles.isEmpty }
+        runs.filter { $0.phase == .result && $0.changedFiles.isEmpty && $0.crew.changesFiles }
             .compactMap { r in
                 guard let done = r.finishedAt, now.timeIntervalSince(done) >= nudgeAfter else { return nil }
                 return "\(r.botName)'s question on “\(r.task)” has waited \(span(now.timeIntervalSince(done))) for your answer."
