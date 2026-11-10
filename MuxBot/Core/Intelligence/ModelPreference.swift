@@ -83,8 +83,11 @@ final class ModelSettingsStore: @unchecked Sendable {
     }
 
     static let shared: ModelSettingsStore = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            return ModelSettingsStore(backing: UserDefaults(suiteName: "muxbot-tests-models") ?? .standard)
+        // Under tests (unit or a UI-test launch): never iCloud, never the
+        // app's own defaults.
+        if TestIsolation.isTesting {
+            let suite = TestIsolation.isUITesting ? nil : UserDefaults(suiteName: "muxbot-tests-models")
+            return ModelSettingsStore(backing: suite ?? TestIsolation.defaults)
         }
         let sync = (Bundle.main.object(forInfoDictionaryKey: "MuxBotCloudSync") as? String) == "YES"
         let kvs = (Bundle.main.object(forInfoDictionaryKey: "MuxBotKeyValueSync") as? String) == "YES"

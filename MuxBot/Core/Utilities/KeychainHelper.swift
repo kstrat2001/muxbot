@@ -15,8 +15,9 @@ struct KeychainHelper: KeychainProviding {
 
     /// The app's own item; under tests (which run inside the app, with its
     /// bundle id) a separate one, so no test can read or delete the real
-    /// tokens.
-    static let defaultService = TestIsolation.isTesting ? "com.darklyenergized.darkmuxapp.tests" : "com.darklyenergized.darkmuxapp"
+    /// tokens. A UI-test launch has its own too, emptied at each launch.
+    static let defaultService = TestIsolation.isUITesting ? TestIsolation.uiTestKeychainService
+        : TestIsolation.isTesting ? "com.darklyenergized.darkmuxapp.tests" : "com.darklyenergized.darkmuxapp"
 
     private func base(_ key: String?, modern: Bool) -> [String: Any] {
         var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
@@ -74,11 +75,37 @@ protocol KeychainProviding {
 }
 
 /// Tests run inside the app (its bundle id and container): whatever they
-/// touch by default (defaults, the Keychain, `LocalBotState`) is a separate
-/// copy, never the real app's.
+/// touch by default (defaults, the Keychain, `LocalBotState`, bug crops,
+/// model settings, the store) is a separate copy, never the real app's.
+/// One flag for all of it: unit tests, and the app as a UI test launches it
+/// (`-uiTesting`, `-uiTestingEmpty`), which has no XCTest environment.
 enum TestIsolation {
-    static let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-    /// The app's defaults, or a test suite under tests.
-    nonisolated(unsafe) static let defaults: UserDefaults =
-        isTesting ? (UserDefaults(suiteName: "muxbot-tests-app") ?? .standard) : .standard
+    /// Unit tests: the app is their host.
+    static let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    /// A UI test launched the app. Its own defaults and Keychain item are
+    /// emptied here, the first time anything asks, so each launch starts
+    /// clean before either is read.
+    static let isUITesting: Bool = {
+        guard isUITest(arguments: ProcessInfo.processInfo.arguments) else { return false }
+        UserDefaults.standard.removePersistentDomain(forName: uiTestDefaultsSuite)
+        KeychainHelper(service: uiTestKeychainService).deleteAll()
+        return true
+    }()
+    static let isTesting = isUnitTesting || isUITesting
+
+    static let uiTestDefaultsSuite = "muxbot-uitests-app"
+    static let uiTestKeychainService = "com.darklyenergized.darkmuxapp.uitests"
+
+    /// Whether launch arguments are a UI test's.
+    static func isUITest(arguments: [String]) -> Bool {
+        arguments.contains("-uiTesting") || arguments.contains("-uiTestingEmpty")
+    }
+
+    /// The app's defaults, or a separate suite under tests (a UI-test
+    /// launch has its own, apart from the unit tests').
+    nonisolated(unsafe) static let defaults: UserDefaults = {
+        if isUITesting { return UserDefaults(suiteName: uiTestDefaultsSuite) ?? UserDefaults() }
+        if isUnitTesting { return UserDefaults(suiteName: "muxbot-tests-app") ?? .standard }
+        return .standard
+    }()
 }

@@ -98,3 +98,25 @@ struct ReviewFindingsRunTests {
         second.phase = .canceled
     }
 }
+
+/// 3: a UI-test launch is isolated like a unit test.
+@Suite struct ReviewFindingsIsolationTests {
+    @Test func aUITestLaunchCountsAsTesting() {
+        #expect(TestIsolation.isUITest(arguments: ["Mux Bot", "-uiTesting", "-openBot", "My website"]))
+        #expect(TestIsolation.isUITest(arguments: ["Mux Bot", "-uiTestingEmpty"]))
+        #expect(!TestIsolation.isUITest(arguments: ["Mux Bot", "-openBot", "uiTesting"]))
+        #expect(TestIsolation.isTesting && TestIsolation.isUnitTesting)
+    }
+
+    @Test func aUITestLaunchHasItsOwnKeychainItemAndDefaults() {
+        #expect(TestIsolation.uiTestKeychainService != "com.darklyenergized.darkmuxapp")
+        #expect(TestIsolation.uiTestKeychainService != KeychainHelper.defaultService, "apart from the unit tests' too")
+        #expect(TestIsolation.uiTestDefaultsSuite != "muxbot-tests-app")
+    }
+
+    @Test func modelSettingsAreNeverICloudUnderTests() {
+        let backing = ModelSettingsStore.shared.backing
+        #expect(!(backing is NSUbiquitousKeyValueStore))
+        #expect(backing !== UserDefaults.standard)
+    }
+}

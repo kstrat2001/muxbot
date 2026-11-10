@@ -309,7 +309,7 @@ struct BotStore {
     static let shared = BugCrops()
     private var memory: [UUID: Data] = [:]
     private let dir: URL? = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return nil }
+        if TestIsolation.isTesting { return nil }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         return support?.appendingPathComponent("MuxBot/bug-crops", isDirectory: true)
     }()

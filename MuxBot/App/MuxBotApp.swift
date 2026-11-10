@@ -122,16 +122,18 @@ final class StoreLoader {
 
     /// Tests run inside the app; they must never open (or migrate) the
     /// real store.
-    static var isTestHost: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
+    static var isTestHost: Bool { TestIsolation.isUnitTesting }
     /// UI tests launch the app with `-uiTesting`: an in-memory store with one
     /// bot whose preview is a blank page, never the real store.
-    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-uiTesting") || isUITestingEmpty }
+    static var isUITesting: Bool { TestIsolation.isUITesting }
     /// `-uiTestingEmpty`: the same in-memory store with no bots (first launch).
     static var isUITestingEmpty: Bool { ProcessInfo.processInfo.arguments.contains("-uiTestingEmpty") }
 
     func load() {
         do {
-            let inMemory = Self.isTestHost || Self.isUITesting
+            // One flag (`TestIsolation`) for the store and everything else
+            // a test must not share with the real app.
+            let inMemory = TestIsolation.isTesting
             let opened = inMemory ? try SharedModelContainer.inMemory() : try SharedModelContainer.create()
             if Self.isUITesting, !Self.isUITestingEmpty {
                 let store = BotStore(context: opened.mainContext)

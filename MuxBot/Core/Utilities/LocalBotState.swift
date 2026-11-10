@@ -85,7 +85,7 @@ final class LocalBotState: @unchecked Sendable {
     /// The app's own: Application Support/MuxBot/local-bots.json, or in
     /// memory under tests so they never touch the real file.
     static let shared: LocalBotState = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return LocalBotState(fileURL: nil) }
+        if TestIsolation.isTesting { return LocalBotState(fileURL: nil) }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = support.appendingPathComponent("MuxBot")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
