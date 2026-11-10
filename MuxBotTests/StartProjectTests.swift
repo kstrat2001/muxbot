@@ -164,9 +164,11 @@ struct TemplateRegistryTests {
         #expect(await registry.template(for: Self.entry) == .refused("This template's PLAYBOOK.md doesn't say which schema it follows."))
     }
 
-    @Test func offlineTheBuiltInCopiesAreChecked() async {
+    @Test func offlineTheBuiltInCopiesAreChecked() async throws {
         let registry = TemplateRegistry(cacheURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)) { _ in throw Offline() }
-        #expect(await registry.template(for: Self.entry).playbook?.title == "Build a website")
+        // Only at the built-in copy's own pin (sweep 6b #19).
+        let bundled = try #require(TemplateRegistry.bundledTemplates().first { $0.id == "website" })
+        #expect(await registry.template(for: bundled).playbook?.title == "Build a website")
     }
 }
 

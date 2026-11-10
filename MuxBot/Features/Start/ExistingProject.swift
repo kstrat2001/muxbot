@@ -29,7 +29,18 @@ enum ExistingProject {
     }
 
     /// Where the bot's skills came from.
-    enum SkillsSource: Equatable { case projectPlaybook, general }
+    enum SkillsSource: Equatable {
+        case projectPlaybook, general
+        /// The project has a PLAYBOOK.md that can't be used, and why.
+        case invalid(String)
+    }
+
+    /// Start needs a name and a purpose, and waits for the project's
+    /// PLAYBOOK.md to be read, so a quick tap never gets general skills.
+    static func canStart(name: String, purpose: String, starting: Bool, readingPlaybook: Bool) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !starting && !readingPlaybook
+    }
 
     /// "kstrat2001/darkly-energized" → "Darkly Energized".
     nonisolated static func suggestedName(repo: String) -> String {
@@ -39,10 +50,17 @@ enum ExistingProject {
         return words.map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 
-    /// The project's own PLAYBOOK.md when it parses, else the general one.
+    /// The project's own PLAYBOOK.md when it parses, else the general one,
+    /// with why the project's can't be used.
     static func playbook(projectText: String?) -> (Playbook, SkillsSource) {
-        if let projectText, let own = try? Playbook.parse(projectText) { return (own, .projectPlaybook) }
-        return (general, .general)
+        guard let projectText else { return (general, .general) }
+        do {
+            return (try Playbook.parse(projectText), .projectPlaybook)
+        } catch let error as Playbook.ParseError {
+            return (general, .invalid(error.projectMessage))
+        } catch {
+            return (general, .invalid(error.localizedDescription))
+        }
     }
 
     static var general: Playbook {
@@ -93,18 +111,22 @@ enum ExistingProject {
             store.save()
             await runs.setUpWorkCopy(for: bot, store: store)
         }
-        store.append(.assistant, greeting(name: name, source: source, skills: skillsSource), to: thread)
+        store.append(.assistant, greeting(name: name, source: source, skills: skillsSource, madeHere: bot.workspaceName != nil), to: thread)
         return (bot, problem)
     }
 
-    static func greeting(name: String, source: Source, skills: SkillsSource) -> String {
+    static func greeting(name: String, source: Source, skills: SkillsSource, madeHere: Bool = true) -> String {
         var parts = [String(localized: "Hi, I'm \(name). Tell me what to change, or point at something in the preview.")]
-        if case .github(_, nil) = source {
+        if !madeHere {
+            parts.append(String(localized: "darkmux sets up my work copy once Mux Bot is paired with it on your Mac."))
+        } else if case .github(_, nil) = source {
             parts.append(String(localized: "darkmux cloned this repo, and a clone gets no preview: darkmux runs a preview only from your own checkout. Add your checkout with Add folder in my info to see one."))
         }
-        parts.append(skills == .projectPlaybook
-            ? String(localized: "My skills come from this project's PLAYBOOK.md.")
-            : String(localized: "This project has no PLAYBOOK.md, so I start with general skills."))
+        switch skills {
+        case .projectPlaybook: parts.append(String(localized: "My skills come from this project's PLAYBOOK.md."))
+        case .general: parts.append(String(localized: "This project has no PLAYBOOK.md, so I start with general skills."))
+        case let .invalid(why): parts.append(String(localized: "\(why) So I start with general skills."))
+        }
         return parts.joined(separator: " ")
     }
 }

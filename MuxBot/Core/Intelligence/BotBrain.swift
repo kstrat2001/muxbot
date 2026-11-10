@@ -374,6 +374,10 @@ final class BotBrain {
     let guide = LeadGuide()
     /// Opens the Start chooser, or a template's form (set by the app).
     var openStart: ((String?) -> Void)?
+    /// Shows a bot's thread (the app's router).
+    var openBot: ((UUID) -> Void)?
+    /// A bot from an approved repo link being set up (tests wait on it).
+    @ObservationIgnored var creatingBot: Task<Void, Never>?
     /// The pairing with darkmux on this Mac; when paired, approved runs go
     /// to darkmux.
     var connection: FleetConnection? {
@@ -1086,6 +1090,21 @@ final class BotBrain {
             }
             store.handOff(task: task, from: from, to: target)
             note = "Handed to \(toName): \(task). It waits for Approve in \(toName)'s thread."
+        case let .createBot(draft) where draft.resource.flatMap(GitHubIssue.repoSlug(from:)) != nil:
+            // A repo link: set up like Work on a project I already have (its
+            // own PLAYBOOK.md or the general skills, darkmux's work copy, the
+            // greeting), then its thread opens.
+            let slug = draft.resource.flatMap(GitHubIssue.repoSlug(from:)) ?? ""
+            let checkout = ExistingProject.knownCheckout(for: slug, among: store.allBots())
+            note = String(localized: "Setting up \(draft.name) for \(slug)…")
+            creatingBot = Task { [self] in
+                let data = try? await github.file(repo: slug, path: "PLAYBOOK.md")
+                let text = data.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) }
+                let (bot, problem) = await ExistingProject.start(.github(repo: slug, checkout: checkout), name: draft.name, purpose: draft.instructions,
+                                                                 projectPlaybook: text, store: store, runs: runs)
+                if let problem { store.append(.system, problem, to: store.conversation(for: .bot(bot.id))) }
+                openBot?(bot.id)
+            }
         case let .createBot(draft):
             let bot = store.add(name: draft.name, instructions: draft.instructions, systemImage: draft.systemImage)
             bot.look = BotLook.suggested(for: draft.name)

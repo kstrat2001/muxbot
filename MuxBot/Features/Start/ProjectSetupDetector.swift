@@ -73,6 +73,10 @@ enum ProjectSetupDetector {
         guard let text = packageJSON, let package = try? JSONDecoder().decode(Package.self, from: Data(text.utf8)) else { return draft }
         let scripts = package.scripts ?? [:]
         guard let name = ["dev", "start", "serve"].first(where: { scripts[$0] != nil }), let script = scripts[name] else { return draft }
+        // A script to run and no lockfile: npm, which installs without one.
+        if draft.install == nil {
+            draft.install = Found(value: "npm install --no-audit --no-fund", source: String(localized: "package.json, no lockfile"))
+        }
         let base = manager.run(name)
         let found = String(localized: "found in package.json: scripts.\(name) = “\(script)”")
         // The framework, from the dev script (an AdonisJS app also lists vite).

@@ -28,6 +28,9 @@ struct ExistingProjectView: View {
     @State private var listError: String?
     @State private var search = ""
     @State private var projectPlaybook: String?
+    /// The repo's PLAYBOOK.md is being read: Start waits for it.
+    @State private var readingPlaybook = false
+    @State private var playbookFetch: Task<Void, Never>?
     @State private var pickingFolder = false
     @State private var starting = false
 
@@ -53,8 +56,7 @@ struct ExistingProjectView: View {
             if step == .details {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start") { Task { await start() } }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                  || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || starting)
+                        .disabled(!ExistingProject.canStart(name: name, purpose: purpose, starting: starting, readingPlaybook: readingPlaybook))
                 }
             }
         }
@@ -62,6 +64,8 @@ struct ExistingProjectView: View {
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case let .success(url) = result else { return }
             source = .folder(url)
+            playbookFetch?.cancel()
+            readingPlaybook = false
             name = url.lastPathComponent
             projectPlaybook = Self.readPlaybook(in: url)
             step = .details
@@ -134,9 +138,15 @@ struct ExistingProjectView: View {
                 QuestionField(question: PlaybookQuestion(String(localized: "What is this project, in a sentence?")), text: $purpose)
             } footer: {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text(projectPlaybook == nil
-                         ? "This project has no PLAYBOOK.md, so the bot starts with general skills."
-                         : "The bot's skills come from this project's PLAYBOOK.md.")
+                    if readingPlaybook {
+                        HStack(spacing: Spacing.xs) { ProgressView().controlSize(.small); Text("Reading PLAYBOOK.md…") }
+                    } else {
+                        switch ExistingProject.playbook(projectText: projectPlaybook).1 {
+                        case .general: Text("This project has no PLAYBOOK.md, so the bot starts with general skills.")
+                        case .projectPlaybook: Text("The bot's skills come from this project's PLAYBOOK.md.")
+                        case let .invalid(why): Label("\(why) The bot starts with general skills.", systemImage: "exclamationmark.triangle")
+                        }
+                    }
                     if case let .github(repo, checkout) = source {
                         if let checkout {
                             Text("Using your checkout of \(repo) (\(checkout.folderName)) on this Mac, so it gets a preview.")
@@ -177,9 +187,13 @@ struct ExistingProjectView: View {
         name = ExistingProject.suggestedName(repo: repo.fullName)
         projectPlaybook = nil
         step = .details
-        Task {
+        readingPlaybook = true
+        playbookFetch?.cancel()
+        playbookFetch = Task {
             let data = try? await brain.github.file(repo: repo.fullName, path: "PLAYBOOK.md")
-            projectPlaybook = data.flatMap { String(data: $0, encoding: .utf8) }
+            guard !Task.isCancelled else { return }
+            projectPlaybook = data.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) }
+            readingPlaybook = false
         }
     }
 

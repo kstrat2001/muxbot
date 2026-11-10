@@ -98,6 +98,29 @@ struct GitHubRepoMaker: Sendable {
         return ascii.isEmpty ? "project" : String(ascii.prefix(90))
     }
 
+    /// A repo made from `template` (its "Start from <template>@<commit>"
+    /// commit on the default branch): where the bot's work builds on GitHub,
+    /// and the template commit it started from (the pinned one, or the
+    /// older pin it was made at). nil when the repo has no such commit.
+    func findStart(repo: String, template: TemplateEntry, botName: String) async throws -> (start: GitHubPR.Start, ref: String)? {
+        struct Repo: Decodable { var default_branch: String? }
+        struct Commit: Decodable { struct Inner: Decodable { var message: String }; var sha: String; var commit: Inner }
+        struct SHA: Decodable { var sha: String }
+        let info: Repo = try await send("GET", "https://api.github.com/repos/\(repo)", nil)
+        let branch = info.default_branch ?? "main"
+        let commits: [Commit] = try await send("GET", "https://api.github.com/repos/\(repo)/commits?sha=\(branch)&per_page=100", nil)
+        let prefix = "Start from \(template.repo)@"
+        guard let start = commits.first(where: { $0.commit.message.hasPrefix(prefix) }) else { return nil }
+        let short = String(start.commit.message.dropFirst(prefix.count).prefix { $0.isHexDigit })
+        guard !short.isEmpty else { return nil }
+        var ref = template.ref
+        if !template.ref.hasPrefix(short) {
+            let full: SHA = try await send("GET", "https://api.github.com/repos/\(template.repo)/commits/\(short)", nil)
+            ref = full.sha
+        }
+        return (GitHubPR.Start(commit: start.sha, branch: branch, head: "mux/\(Self.slug(botName))"), ref)
+    }
+
     /// Your login.
     func login() async throws -> String {
         struct User: Decodable { var login: String }

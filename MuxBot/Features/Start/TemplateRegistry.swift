@@ -22,6 +22,8 @@ struct TemplateEntry: Codable, Equatable, Identifiable, Sendable {
 /// bots' models.
 final class TemplateRegistry: Sendable {
     typealias Fetch = @Sendable (URL) async throws -> Data
+    /// GitHub has no such file (a 404), as opposed to not reaching it.
+    enum FetchError: Error { case notFound }
 
     static let listURL = URL(string: "https://raw.githubusercontent.com/kstrat2001/muxbot-templates/main/templates.json")!
 
@@ -44,7 +46,9 @@ final class TemplateRegistry: Sendable {
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        let status = (response as? HTTPURLResponse)?.statusCode
+        if status == 404 { throw FetchError.notFound }
+        guard status == 200 else { throw URLError(.badServerResponse) }
         return data
     }
 
@@ -64,17 +68,22 @@ final class TemplateRegistry: Sendable {
 
     /// A template at its pinned commit: its playbook, once its PLAYBOOK.md
     /// and .darkmux/preview.json pass the schema, or why it can't be used.
-    /// Offline, the copies built into the app.
+    /// Offline, the copy built into the app, only when it's of the same
+    /// pinned commit (an older copy is never swapped in).
     func template(for entry: TemplateEntry) async -> TemplateDetails {
         let base = "https://raw.githubusercontent.com/\(entry.repo)/\(entry.ref)/"
-        if let playbook = try? await fetch(URL(string: base + "PLAYBOOK.md")!),
-           let preview = try? await fetch(URL(string: base + ".darkmux/preview.json")!) {
+        do {
+            let playbook = try await fetch(URL(string: base + "PLAYBOOK.md")!)
+            let preview = try await fetch(URL(string: base + ".darkmux/preview.json")!)
             return Self.check(playbook: playbook, preview: preview)
+        } catch FetchError.notFound {
+            return .refused(String(localized: "This template isn't on GitHub at the commit it's pinned to, so it can't be used."))
+        } catch {
+            if Self.bundledTemplates().first(where: { $0.id == entry.id })?.ref == entry.ref, let bundled = Self.bundledFiles(for: entry.id) {
+                return Self.check(playbook: bundled.playbook, preview: bundled.preview)
+            }
+            return .refused(String(localized: "Mux Bot can't reach GitHub to read this template. It tries again when you come back here."))
         }
-        guard let bundled = Self.bundledFiles(for: entry.id) else {
-            return .refused(String(localized: "Mux Bot can't reach GitHub to read this template."))
-        }
-        return Self.check(playbook: bundled.playbook, preview: bundled.preview)
     }
 
     static func check(playbook: Data, preview: Data) -> TemplateDetails {
@@ -169,4 +178,10 @@ enum TemplateDetails: Equatable, Sendable {
     case refused(String)
 
     var playbook: Playbook? { if case let .ready(p) = self { p } else { nil } }
+}
+
+extension TemplateDetails {
+    /// A template that couldn't be used is read again when Start appears
+    /// (GitHub may answer now, or the registry has a fixed pin).
+    var retriesOnAppear: Bool { if case .refused = self { true } else { false } }
 }

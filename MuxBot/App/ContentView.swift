@@ -39,6 +39,7 @@ struct ContentView: View {
                 router.startTemplateId = template
                 router.showStartProject = true
             }
+            brain.openBot = { router.navigate(to: .bot($0)) }
         }
         .onChange(of: wantsSidebar) { router.usesSidebar = wantsSidebar }
         // Runs an earlier build kept become committed results (Open PR).
