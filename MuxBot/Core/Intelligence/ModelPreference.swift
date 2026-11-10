@@ -62,10 +62,16 @@ protocol KeyValueBacking: AnyObject {
     func array(forKey key: String) -> [Any]?
     func set(_ value: Any?, forKey key: String)
     func removeObject(forKey key: String)
+    /// Every key it holds (to remove a deleted bot's settings).
+    var storedKeys: [String] { get }
 }
 
-extension UserDefaults: KeyValueBacking {}
-extension NSUbiquitousKeyValueStore: KeyValueBacking {}
+extension UserDefaults: KeyValueBacking {
+    var storedKeys: [String] { Array(dictionaryRepresentation().keys) }
+}
+extension NSUbiquitousKeyValueStore: KeyValueBacking {
+    var storedKeys: [String] { Array(dictionaryRepresentation.keys) }
+}
 
 final class ModelSettingsStore: @unchecked Sendable {
     let backing: any KeyValueBacking
@@ -140,6 +146,15 @@ final class ModelSettingsStore: @unchecked Sendable {
 
     func setBotMode(_ mode: ModelMode?, bot: UUID, machine: String) {
         if let mode { backing.set(mode.stored, forKey: botKey(bot, machine)) } else { backing.removeObject(forKey: botKey(bot, machine)) }
+        flush()
+    }
+
+    /// A deleted bot's own modes, on every machine.
+    func removeBotModes(bot: UUID) {
+        let prefix = "models.bot.\(bot.uuidString)."
+        let keys = backing.storedKeys.filter { $0.hasPrefix(prefix) }
+        guard !keys.isEmpty else { return }
+        for key in keys { backing.removeObject(forKey: key) }
         flush()
     }
 

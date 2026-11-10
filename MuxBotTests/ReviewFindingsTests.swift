@@ -415,3 +415,41 @@ struct ReviewFindingsCopyTests {
         for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(said)") }
     }
 }
+
+/// d: deleting a bot leaves nothing of it on this device.
+@Suite(.serialized) @MainActor
+struct ReviewFindingsDeleteTests {
+    @Test func aBotsOwnModelChoicesAreRemovedOnEveryMachine() {
+        let settings = ModelSettingsStore(backing: MemoryBacking())
+        let gone = UUID(), kept = UUID()
+        settings.setBotMode(.ask, bot: gone, machine: "m-studio")
+        settings.setBotMode(.model("flint-rec"), bot: gone, machine: "m-laptop")
+        settings.setBotMode(.ask, bot: kept, machine: "m-studio")
+        settings.save(ModelSettings(mode: .ask), machine: "m-studio")
+        settings.removeBotModes(bot: gone)
+        #expect(settings.botMode(bot: gone, machine: "m-studio") == nil)
+        #expect(settings.botMode(bot: gone, machine: "m-laptop") == nil)
+        #expect(settings.botMode(bot: kept, machine: "m-studio") == .ask, "another bot's stay")
+        #expect(settings.settings(machine: "m-studio").mode == .ask, "and the app's own")
+    }
+
+    @Test func deletingABotRemovesItsBugScreenshotsAndModelChoices() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "")
+        let other = store.add(name: "other", instructions: "")
+        let card = store.append(.assistant, "{}", kind: .bugCard, to: store.conversation(for: .bot(bot.id)))
+        let otherCard = store.append(.assistant, "{}", kind: .bugCard, to: store.conversation(for: .bot(other.id)))
+        BugCrops.shared[card.id] = Data([1])
+        BugCrops.shared[otherCard.id] = Data([2])
+        ModelSettingsStore.shared.setBotMode(.ask, bot: bot.id, machine: "m-findings")
+        ModelSettingsStore.shared.setBotMode(.ask, bot: other.id, machine: "m-findings")
+        let cardId = card.id, botId = bot.id
+        store.delete(bot)
+        #expect(BugCrops.shared[cardId] == nil)
+        #expect(ModelSettingsStore.shared.botMode(bot: botId, machine: "m-findings") == nil)
+        #expect(BugCrops.shared[otherCard.id] == Data([2]), "another bot's stay")
+        #expect(ModelSettingsStore.shared.botMode(bot: other.id, machine: "m-findings") == .ask)
+        BugCrops.shared[otherCard.id] = nil
+        ModelSettingsStore.shared.removeBotModes(bot: other.id)
+    }
+}

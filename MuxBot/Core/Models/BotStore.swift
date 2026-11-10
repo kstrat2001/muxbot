@@ -201,10 +201,14 @@ struct BotStore {
         let id = bot.id
         let botId: UUID? = id
         for thread in (try? context.fetch(FetchDescriptor<ChatConversation>(predicate: #Predicate { $0.roleId == botId }))) ?? [] {
+            // Its bug cards' screenshots on this device go with it.
+            for message in thread.messages ?? [] where message.kind == .bugCard { BugCrops.shared[message.id] = nil }
             context.delete(thread)
         }
         context.delete(bot)
         LocalBotState.shared[id] = nil
+        // And its own model choices, on every machine.
+        ModelSettingsStore.shared.removeBotModes(bot: id)
         save()
     }
 

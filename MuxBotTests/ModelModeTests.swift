@@ -200,6 +200,7 @@ final class MemoryBacking: KeyValueBacking, @unchecked Sendable {
     func array(forKey key: String) -> [Any]? { values[key] as? [Any] }
     func set(_ value: Any?, forKey key: String) { values[key] = value }
     func removeObject(forKey key: String) { values[key] = nil }
+    var storedKeys: [String] { Array(values.keys) }
 }
 
 @Suite(.serialized) @MainActor
