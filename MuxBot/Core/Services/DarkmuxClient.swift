@@ -59,6 +59,8 @@ struct DarkmuxClient: Sendable {
     struct ClientError: LocalizedError {
         var message: String
         var status: Int = 0
+        /// darkmux's machine-readable reason (`code`), when it sent one.
+        var code: String? = nil
         var errorDescription: String? { message }
     }
 
@@ -353,8 +355,9 @@ struct DarkmuxClient: Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401, headers["Authorization"] != nil { onUnauthorized?() }
         guard (200..<300).contains(status) else {
-            let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-            throw ClientError(message: detail ?? "darkmux answered \(status)", status: status)
+            let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let detail = body?["error"] as? String
+            throw ClientError(message: detail ?? "darkmux answered \(status)", status: status, code: body?["code"] as? String)
         }
         return data
     }

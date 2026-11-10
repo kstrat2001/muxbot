@@ -18,6 +18,7 @@ struct PhonePreviewScreen: View {
 
     var body: some View {
         WebView(preview.page)
+            .onChange(of: preview.picked) { _, picked in if picked != nil { router.focusBarRequest += 1 } }
             .webViewBackForwardNavigationGestures(.disabled)
             .task(id: displayScale) { preview.displayScale = displayScale }
             .ignoresSafeArea(edges: .bottom)

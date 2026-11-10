@@ -1136,10 +1136,16 @@ final class BotBrain {
         runs.noRecipe.remove(bot.id)
         await runs.ensurePreview(for: bot)
         let thread = store.conversation(for: .bot(bot.id))
-        switch runs.livePreviews[bot.id]?.status {
+        let live = runs.livePreviews[bot.id]
+        switch live?.status {
         case .ready?: store.append(.system, String(localized: "The preview started from the new recipe."), to: thread)
-        case let .failed(why)?: store.append(.system, String(localized: "The preview didn't start from the new recipe: \(why). Fix the file in your checkout and open the preview again."), to: thread)
-        default: store.append(.system, String(localized: "darkmux didn't start the preview from it: \(runs.noRecipe.contains(bot.id) ? String(localized: "it still finds no recipe in your checkout") : String(localized: "it isn't ready yet")). Open the preview to try again."), to: thread)
+        case let .failed(why)?:
+            // Plain words; darkmux's text stays behind the preview's Show details.
+            let failure = PreviewFailure(reason: why, log: live?.log)
+            store.append(.system, String(localized: "The preview didn't start from the new recipe. \(failure.explanation(template: !bot.useCaseId.isEmpty))"), to: thread)
+        case let .unavailable(why)?:
+            store.append(.system, String(localized: "darkmux didn't start the preview from it: \(why.title)."), to: thread)
+        default: store.append(.system, String(localized: "darkmux didn't start the preview from it yet. Open the preview to try again."), to: thread)
         }
     }
 

@@ -247,6 +247,7 @@ struct RunsSayWhatHappenedTests {
 /// Answers every darkmux request with one status.
 final class DarkmuxStub: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var status = 200
+    nonisolated(unsafe) static var body: String?
     static var session: URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [DarkmuxStub.self]
@@ -257,7 +258,7 @@ final class DarkmuxStub: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: [:])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"error":"unknown token"}"#.utf8))
+        client?.urlProtocol(self, didLoad: Data((Self.body ?? #"{"error":"unknown token"}"#).utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

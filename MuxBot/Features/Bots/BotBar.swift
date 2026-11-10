@@ -137,7 +137,8 @@ struct BotBar: View {
         let chat = router.context
         let store = BotStore(context: context)
         if let run = tweakRun {
-            brain.runs.tweak(text, run: run, store: store)
+            // The pick goes with the Tweak's change, never dropped.
+            brain.runs.tweak(RunCoordinator.tweakChange(text, element: element), run: run, store: store)
             return
         }
         Task { await brain.send(text, in: chat, store: store, element: element) }

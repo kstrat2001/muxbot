@@ -34,11 +34,17 @@ struct PreviewPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: Spacing.sm) {
                 Image(systemName: "safari").foregroundStyle(Color.secondaryText).accessibilityHidden(true)
-                Text(url.host() ?? url.absoluteString)
+                // What the page actually shows (it may have moved on from the
+                // preview's address).
+                Text(preview.page.url?.host() ?? url.host() ?? url.absoluteString)
                     .font(AppFont.caption())
                     .foregroundStyle(Color.secondaryText)
                     .lineLimit(1)
                 Spacer()
+                Button("Reload the preview", systemImage: "arrow.clockwise") { preview.goHome() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Load the preview's own page again")
                 // One button: a screenshot of what the preview shows. (A picked
                 // element already rides along with your message as a chip.)
                 Button(copied ? "Copied" : "Copy the visible preview", systemImage: copied ? "checkmark" : "camera") { copyVisible() }
@@ -110,6 +116,8 @@ struct PreviewPanel: View {
                 }
         }
         .task(id: url) { preview.show(url, for: botId) }
+        // A pick (or Chat about this) puts the cursor in the bar for your words.
+        .onChange(of: preview.picked) { _, picked in if picked != nil { router.focusBarRequest += 1 } }
         .task { await brain.runs.checkStartOver() }
         // A run changed files (or Undo): show what the server serves now.
         .onChange(of: botId.flatMap { brain.runs.previewReloads[$0] }) { preview.reload() }

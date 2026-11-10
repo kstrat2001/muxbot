@@ -375,6 +375,9 @@
     "Changed in darkmux on your Mac, not here." : {
 
     },
+    "Check again" : {
+
+    },
     "Check it yourself" : {
 
     },
@@ -487,6 +490,9 @@
           }
         }
       }
+    },
+    "Couldn't check: the preview wasn't running." : {
+
     },
     "Couldn't get this Mac's models from darkmux: %@" : {
 
@@ -764,6 +770,9 @@
     "It needs a persona and at least one skill." : {
 
     },
+    "It was made by an older darkmux, which didn't keep what a preview needs. Start the project again from its template to get a preview." : {
+
+    },
     "Its .darkmux folder is a link, so I won't write through it." : {
 
     },
@@ -804,6 +813,9 @@
 
     },
     "Live" : {
+
+    },
+    "Load the preview's own page again" : {
 
     },
     "Loads when used" : {
@@ -1345,6 +1357,9 @@
         }
       }
     },
+    "Setting up a work copy…" : {
+
+    },
     "Setting up darkmux? Ask %@" : {
 
     },
@@ -1531,13 +1546,22 @@
     "The preview couldn't start." : {
 
     },
+    "The preview didn't start from the new recipe. %@" : {
+
+    },
     "The preview didn't start from the new recipe: %@. Fix the file in your checkout and open the preview again." : {
+
+    },
+    "The preview settings file in your checkout isn't in a form darkmux can use. Fix it in your checkout (darkmux never reads the bot's copy), then try again." : {
 
     },
     "The preview started from the new recipe." : {
 
     },
     "The preview took too long to start. Try again." : {
+
+    },
+    "The preview's container didn't start. Try again; if it keeps happening, restart Docker." : {
 
     },
     "The project gets its own repo in your GitHub account, so sign in first." : {
@@ -1549,10 +1573,22 @@
     "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them." : {
 
     },
+    "The project's server only listens inside its container. It needs to listen on 0.0.0.0 (set HOST in the preview settings)." : {
+
+    },
+    "The project's server started but never answered. Try again, or ask the bot to look at its dev script." : {
+
+    },
     "The result before the change is unchanged." : {
 
     },
     "The template can't be copied: %@" : {
+
+    },
+    "The template this project was made from has no preview settings, so darkmux can't run a preview for it." : {
+
+    },
+    "The template's preview settings aren't in a form darkmux can use, so this project's preview can't start until the template is fixed." : {
 
     },
     "There's already a .darkmux/preview.json there; I never overwrite it." : {
@@ -1574,6 +1610,9 @@
 
     },
     "This one is changed in darkmux on your Mac; here's its value." : {
+
+    },
+    "This project can't be previewed" : {
 
     },
     "This project has no PLAYBOOK.md, so I start with general skills." : {
@@ -1601,6 +1640,9 @@
 
     },
     "This project needs a newer version of Node than the preview has. darkmux needs an update for it." : {
+
+    },
+    "This project's template has no preview" : {
 
     },
     "This template needs a newer Mux Bot (its %@ is schema %lld; this Mux Bot reads schema %lld)." : {
@@ -1823,6 +1865,9 @@
     "Your bots" : {
 
     },
+    "Your checkout moved" : {
+
+    },
     "Your preview link, until darkmux runs previews itself." : {
 
     },
@@ -1866,7 +1911,16 @@
     "darkmux couldn't read what changed" : {
 
     },
+    "darkmux couldn't set up a work copy: %@" : {
+
+    },
     "darkmux didn't list its models: %@" : {
+
+    },
+    "darkmux didn't start the preview from it yet. Open the preview to try again." : {
+
+    },
+    "darkmux didn't start the preview from it: %@." : {
 
     },
     "darkmux didn't start the preview from it: %@. Open the preview to try again." : {
@@ -1892,6 +1946,9 @@
 
     },
     "darkmux is built for Apple silicon Macs; this Mac has an Intel chip, which darkmux hasn't been tested on." : {
+
+    },
+    "darkmux isn't answering on this Mac" : {
 
     },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
@@ -1927,6 +1984,9 @@
     "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does." : {
 
     },
+    "darkmux runs previews in a container, and Docker isn't running on this Mac. Open Docker, then try again." : {
+
+    },
     "darkmux says there's nothing to approve?" : {
 
     },
@@ -1943,6 +2003,12 @@
 
     },
     "darkmux's app connection has to be running on this Mac (the command above starts it)." : {
+
+    },
+    "darkmux's app connection isn't running. Start it in Terminal, then try again:" : {
+
+    },
+    "darkmux's copy of %@ is no longer linked to your checkout (it moved, or was deleted). Add your checkout again." : {
 
     },
     "darkmux's local endpoint must be running on this Mac. In another Terminal window, run:" : {

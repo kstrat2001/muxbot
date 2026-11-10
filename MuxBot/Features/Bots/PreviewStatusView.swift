@@ -10,9 +10,11 @@ struct PreviewStatusView: View {
 
     @Environment(BotBrain.self) private var brain
     @Environment(AppRouter.self) private var router
+    @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var context
     @State private var pickingFolder = false
     @State private var folderProblem: String?
+    @State private var addingFolder = false
     @State private var copied = false
 
     var body: some View {
@@ -45,6 +47,8 @@ struct PreviewStatusView: View {
         .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case let .success(url) = result else { return }
             Task {
+                addingFolder = true
+                defer { addingFolder = false }
                 folderProblem = await brain.runs.addFolder(url, to: bot, store: BotStore(context: context))
                 if folderProblem == nil { retry() }
             }
@@ -98,14 +102,36 @@ struct PreviewStatusView: View {
                 .buttonStyle(.borderedProminent)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
-        case .notYourCheckout:
-            Button("Add folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
-                .buttonStyle(.borderedProminent)
+        case .notYourCheckout, .checkoutMoved:
+            if addingFolder {
+                ProgressView("Setting up a work copy…")
+            } else {
+                Button("Add folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
+                    .buttonStyle(.borderedProminent)
+            }
             if let folderProblem { Text(folderProblem).foregroundStyle(Color.brandOrange).multilineTextAlignment(.center) }
         case .noRecipe:
             Button("Try again", systemImage: "arrow.clockwise", action: retry)
         case .newProject:
             EmptyView()
+        case .notAnswering:
+            Text(connection.serveCommand)
+                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                .padding(Spacing.sm)
+                .background(RoundedRectangle(cornerRadius: CornerRadius.md).fill(Color.cardBackground))
+            HStack {
+                Button(copied ? "Copied" : "Copy command", systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    Clipboard.copy(connection.serveCommand)
+                    copied = true
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            }
+        case .templateNoRecipe:
+            EmptyView()
+        case .remakeProject:
+            Button("Start a project…", systemImage: "plus") { router.showStartProject = true }
+                .buttonStyle(.borderedProminent)
         case .notPaired:
             Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
                 .buttonStyle(.borderedProminent)

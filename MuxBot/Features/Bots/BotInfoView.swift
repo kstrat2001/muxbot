@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 struct BotInfoView: View {
     let bot: Bot
 
+    @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(BotBrain.self) private var brain
@@ -117,7 +118,13 @@ struct BotInfoView: View {
                         if live.status == .ready || live.status == .starting || live.status == .installing {
                             Button("Stop", systemImage: "stop.circle") { Task { await brain.runs.stopPreview(for: bot) } }
                         } else {
-                            Button("Start", systemImage: "play") { Task { await brain.runs.ensurePreview(for: bot) } }
+                            // Opens the bot's thread with its preview: a preview runs
+                            // while you look at it, and stops when you leave.
+                            Button("Start", systemImage: "play") {
+                                router.infoBotId = nil
+                                router.navigate(to: .bot(bot.id))
+                                router.showPreview = true
+                            }
                         }
                     }
                 }
