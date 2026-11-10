@@ -288,12 +288,15 @@ struct ChatAboutThisTests {
         (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
-    @Test func thePickerOffersExactlyOneAction() {
+    /// One chat action; Edit (a hand edit, darkmux #3533) is the only other
+    /// button, and only where the Mac app turns it on.
+    @Test func thePickerOffersExactlyOneChatAction() {
         let script = BugReport.pageScript
         #expect(script.contains("'Chat about this'"))
         #expect(!script.contains("Ask about this"))
         #expect(!script.contains("Report a bug here"))
-        #expect(script.components(separatedBy: "document.createElement('button')").count == 2, "one button in the menu")
+        #expect(script.components(separatedBy: "document.createElement('button')").count == 3, "Chat about this, and Edit")
+        #expect(script.contains("if (window.__muxCanEdit) {"), "Edit only where the app turns it on")
         #expect(!script.contains("intent"), "the page never decides the intent")
     }
 
