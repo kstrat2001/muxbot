@@ -6,9 +6,15 @@ import Testing
 final class MockInspector: PageInspecting {
     var result: PageFacts?
     var askedTerms: [String] = []
+    /// The bot whose page is on screen; nil stands for whichever bot asks.
+    var botOnScreen: UUID?
     init(_ result: PageFacts?) { self.result = result }
-    func facts(for terms: [String]) async -> PageFacts? { askedTerms = terms; return result }
-    func snapshotPNG() async -> Data? { nil }
+    func facts(for terms: [String], bot: UUID?) async -> PageFacts? {
+        askedTerms = terms
+        if let botOnScreen, botOnScreen != bot { return nil }
+        return result
+    }
+    func snapshotPNG(bot: UUID?) async -> Data? { nil }
 }
 
 struct BugReportTests {

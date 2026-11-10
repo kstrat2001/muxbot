@@ -99,11 +99,8 @@ final class PreviewController: PageInspecting {
         }
     }
 
-    /// The crop of the element in the last message sent, for its bug card.
-    private(set) var lastSentCrop: Data?
 
     func clearPick() {
-        if picked != nil { lastSentCrop = pickedCrop }
         if picked != nil { Task { _ = try? await page.callJavaScript("if (window.__muxUnmark) window.__muxUnmark(); return true;") } }
         picked = nil
         pickedCrop = nil
@@ -134,7 +131,20 @@ final class PreviewController: PageInspecting {
         _ = page.reload()
     }
 
-    func facts(for terms: [String]) async -> PageFacts? {
+    /// Facts from `bot`'s own preview only: nil when another bot's page
+    /// (or none) is the one loaded, so a bug never measures the wrong site.
+    func facts(for terms: [String], bot: UUID?) async -> PageFacts? {
+        guard let bot, bot == botId else { return nil }
+        return await facts(for: terms)
+    }
+
+    /// A screenshot of `bot`'s own preview only.
+    func snapshotPNG(bot: UUID?) async -> Data? {
+        guard let bot, bot == botId else { return nil }
+        return await visiblePNG()
+    }
+
+    private func facts(for terms: [String]) async -> PageFacts? {
         guard loadedURL != nil, !page.isLoading else { return nil }
         let json = try? await page.callJavaScript(BugReport.factsScript, arguments: ["terms": terms]) as? String
         return json.flatMap { try? JSONDecoder().decode(PageFacts.self, from: Data($0.utf8)) }
@@ -149,7 +159,7 @@ final class PreviewController: PageInspecting {
     }
 
     /// For a bug card without a pick: what the preview shows.
-    func snapshotPNG() async -> Data? { await visiblePNG() }
+
 
     /// The picked element and a 12 pt margin, at the display's scale.
     func crop(_ element: PickedElement, scale: CGFloat? = nil) async -> Data? {

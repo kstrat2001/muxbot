@@ -133,6 +133,7 @@ struct BotBar: View {
         let element = router.context.botId == nil ? nil : preview.picked
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || element != nil, !brain.isThinking(in: router.context) else { return }
         router.barDraft = ""
+        let crop = element == nil ? nil : preview.pickedCrop
         preview.clearPick()   // a pick is about one message
         let chat = router.context
         let store = BotStore(context: context)
@@ -140,6 +141,6 @@ struct BotBar: View {
             brain.runs.tweak(text, run: run, store: store)
             return
         }
-        Task { await brain.send(text, in: chat, store: store, element: element) }
+        Task { await brain.send(text, in: chat, store: store, element: element, crop: crop) }
     }
 }

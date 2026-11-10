@@ -333,6 +333,9 @@ enum GeneratedCrew {
 /// the thread; any proposed action waits on an Approve / Cancel card.
 @MainActor @Observable
 final class BotBrain {
+    /// The crop of the element a message was sent with, until its bug card
+    /// is drafted, by thread.
+    var cropsForNextBug: [ChatContext: Data] = [:]
     /// Threads whose bot is answering right now ("thinking" shows there only).
     private(set) var thinking: Set<ChatContext> = []
     func beginThinking(_ context: ChatContext) { thinking.insert(context) }
@@ -508,7 +511,7 @@ final class BotBrain {
     /// Sends a message. `element` is what you picked in the preview;
     /// `forced` is an intent you chose (a prefix like "bug:" does the same).
     func send(_ request: String, in context: ChatContext, store: BotStore,
-              element: PickedElement? = nil, forced: Intent? = nil) async {
+              element: PickedElement? = nil, forced: Intent? = nil, crop: Data? = nil) async {
         // "no, it's a question": re-read the previous message instead.
         if let corrected = Intent.correction(in: request),
            let previous = (store.conversation(for: context).messages ?? [])
@@ -529,6 +532,8 @@ final class BotBrain {
             await reinterpret(previous, as: corrected, store: store)
             return
         }
+        // The pick's crop goes with this message only (its bug card keeps it).
+        if let crop { cropsForNextBug[context] = crop } else { cropsForNextBug[context] = nil }
         let (prefix, body) = Intent.parse(request)
         let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || element != nil else { return }
@@ -986,7 +991,7 @@ final class BotBrain {
 
     private func draftBug(_ text: String, element: PickedElement?, repo: String?, bot: Bot?, store: BotStore, conversation: ChatConversation) async {
         let facts: PageFacts?
-        if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text)) }
+        if let element { facts = element.asFacts } else { facts = await pageInspector?.facts(for: BugReport.searchTerms(in: text), bot: bot?.id) }
         let measured = facts.map(BugReport.describe) ?? []
         // The layout around the reported width, measured in the preview: the
         // switch between presets, its rule and file. No model judges it.
@@ -1026,7 +1031,10 @@ final class BotBrain {
             draft.expected = line
         }
         if let json = try? JSONEncoder().encode(draft), let body = String(data: json, encoding: .utf8) {
-            store.append(.assistant, body, kind: .bugCard, to: conversation)
+            let card = store.append(.assistant, body, kind: .bugCard, to: conversation)
+            // This bug's own screenshot: the crop sent with its message.
+            let context: ChatContext = bot.map { .bot($0.id) } ?? .lead
+            if let crop = cropsForNextBug.removeValue(forKey: context) { BugCrops.shared[card.id] = crop }
         }
     }
 

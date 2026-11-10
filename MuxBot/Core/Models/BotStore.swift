@@ -255,3 +255,46 @@ struct BotStore {
         save()
     }
 }
+
+/// Each bug card's own screenshot (the crop of the element it was about),
+/// by message id. Kept on this device, never synced: files under
+/// Application Support, in memory under tests.
+@MainActor final class BugCrops {
+    static let shared = BugCrops()
+    private var memory: [UUID: Data] = [:]
+    private let dir: URL? = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return nil }
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        return support?.appendingPathComponent("MuxBot/bug-crops", isDirectory: true)
+    }()
+
+    subscript(id: UUID) -> Data? {
+        get {
+            if let data = memory[id] { return data }
+            return dir.flatMap { try? Data(contentsOf: $0.appendingPathComponent("\(id.uuidString).png")) }
+        }
+        set {
+            memory[id] = newValue
+            guard let dir else { return }
+            let file = dir.appendingPathComponent("\(id.uuidString).png")
+            if let newValue {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try? newValue.write(to: file, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+}
+
+extension BotStore {
+    /// Fix it now: one Coder dispatch card per bug, remembered on the bug's
+    /// message (`runId`), so a second press finds it instead of another card.
+    func fixBug(_ message: ChatMessage, draft: BugDraft, bot: Bot) -> (run: BotRun, isNew: Bool) {
+        if let id = message.runId, let existing = run(id: id) { return (existing, false) }
+        let run = proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot, brief: "Fix this bug:\n\n" + draft.body)
+        message.runId = run.id
+        save()
+        return (run, true)
+    }
+}

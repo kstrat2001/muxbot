@@ -8,6 +8,7 @@ struct BugCardView: View {
     let message: ChatMessage
 
     @Environment(BotBrain.self) private var brain
+    @Environment(AppRouter.self) private var router
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
     @Environment(PreviewController.self) private var preview
@@ -31,8 +32,14 @@ struct BugCardView: View {
                             .buttonStyle(.bordered)
                             .disabled(draft.issueURL == nil)
                         Spacer()
-                        Button("Fix it now", systemImage: "hammer") { fix(draft) }
-                            .buttonStyle(.borderedProminent)
+                        if let sent = message.runId, store.run(id: sent) != nil {
+                            // Already sent: go to its card instead of making another.
+                            Button("Sent to Coder", systemImage: "checkmark") { router.focusRunId = sent }
+                                .buttonStyle(.bordered)
+                        } else {
+                            Button("Fix it now", systemImage: "hammer") { fix(draft) }
+                                .buttonStyle(.borderedProminent)
+                        }
                     }
                     Text(connection.isPaired ? "Fixes run on darkmux after you approve." : "Pair with darkmux to run fixes.")
                         .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
@@ -60,18 +67,17 @@ struct BugCardView: View {
 
     private func fix(_ draft: BugDraft) {
         guard let bot else { return }
-        let run = store.proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot,
-                                   brief: "Fix this bug:\n\n" + draft.body)
+        let (run, isNew) = store.fixBug(message, draft: draft, bot: bot)
+        guard isNew else { router.focusRunId = run.id; return }
         // The model is chosen like any other dispatch (mode, Auto order).
         Task { await brain.runs.chooseProfile(for: run) }
     }
 
     private func copySnapshot() async -> Bool {
-        // The picked element's crop if this bug came from a pick, else what
-        // the preview shows.
-        let crop = draft?.selector != nil ? preview.lastSentCrop : nil
-        var png = crop
-        if png == nil { png = await preview.snapshotPNG() }
+        // This bug's own crop when it came from a pick; else this bot's
+        // preview as it is now; never another bot's page or a stale crop.
+        var png = draft?.selector != nil ? BugCrops.shared[message.id] : nil
+        if png == nil { png = await preview.snapshotPNG(bot: bot?.id) }
         guard let png else { return false }
         return copy(png)
     }
