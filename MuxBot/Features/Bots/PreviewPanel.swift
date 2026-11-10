@@ -26,9 +26,6 @@ struct PreviewPanel: View {
     @State private var copiedNote: String?
     /// The camera shows a checkmark for a moment after a copy.
     @State private var copied = false
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    #endif
 
     var body: some View {
         VStack(spacing: 0) {

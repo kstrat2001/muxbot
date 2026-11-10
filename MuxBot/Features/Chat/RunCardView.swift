@@ -126,7 +126,7 @@ struct RunCardView: View {
             }
             if isLatest && brain.runs.unreachableRuns.contains(run.id) {
                 Label("Can't reach darkmux on this Mac. Still trying…", systemImage: "wifi.exclamationmark")
-                    .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+                    .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
             }
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
         case .resultCard:
@@ -225,7 +225,7 @@ struct RunCardView: View {
                 // but there's no checkpoint to undo.
                 Label("The checkpoint didn't happen: \(problem) The changes are in the work copy, uncommitted.",
                       systemImage: "exclamationmark.triangle")
-                    .font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+                    .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
             }
             if isLatest && run.phase == .result {
                 HStack {
@@ -254,7 +254,7 @@ struct RunCardView: View {
         if let claim = RunResultText.unbackedClaim(in: [run.notes ?? "", run.summary], crew: run.crew.name, changedFiles: run.changedFiles) {
             // Its words say it edited something; darkmux saw no change.
             Label(claim, systemImage: "exclamationmark.triangle")
-                .font(AppFont.headline()).foregroundStyle(Color.brandOrange)
+                .font(AppFont.headline()).labelStyle(.tintedIcon(Color.brandOrange))
         } else {
             Label("\(run.crew.name) changed nothing and has a question", systemImage: "questionmark.bubble")
                 .font(AppFont.headline())
@@ -297,7 +297,7 @@ struct RunCardView: View {
         } else if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
             if let why = choice.unavailable {
                 HStack {
-                    Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+                    Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
                     Spacer()
                     if let other = choice.suggestion {
                         Button("Use \(other) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
@@ -335,7 +335,7 @@ struct RunCardView: View {
             } else {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Label("Done when: not met", systemImage: "xmark.seal.fill")
-                        .font(AppFont.footnote(.semibold)).foregroundStyle(Color.brandOrange)
+                        .font(AppFont.footnote(.semibold)).labelStyle(.tintedIcon(Color.brandOrange))
                     ForEach(check.failures, id: \.self) { Text("• \($0)").font(AppFont.footnote()).textSelection(.enabled) }
                     if isLatest {
                         HStack {
@@ -362,7 +362,7 @@ struct RunCardView: View {
 
     @ViewBuilder private func decisionError(_ run: BotRun) -> some View {
         if let why = brain.runs.decisionErrors[run.id] {
-            Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).foregroundStyle(Color.brandOrange)
+            Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
         }
     }
 

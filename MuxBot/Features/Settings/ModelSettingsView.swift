@@ -81,7 +81,7 @@ struct ModelSettingsView: View {
         case let .failed(reason):
             HStack(alignment: .firstTextBaseline) {
                 Label("Couldn't get this Mac's models from darkmux: \(reason)", systemImage: "exclamationmark.triangle")
-                    .font(AppFont.footnote()).foregroundStyle(.orange)
+                    .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
                 Spacer()
                 Button("Try again") { Task { await load() } }
             }

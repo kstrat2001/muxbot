@@ -123,7 +123,7 @@ struct StartProjectView: View {
                 Text(entry.title).font(AppFont.headline())
                 if case let .refused(why)? = details[entry.id] {
                     Label(why, systemImage: "exclamationmark.triangle")
-                        .font(AppFont.footnote()).foregroundStyle(.orange)
+                        .font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
                         .lineLimit(3, reservesSpace: true)
                 } else {
                     Text(playbooks[entry.id]?.pitch ?? entry.summary ?? "")

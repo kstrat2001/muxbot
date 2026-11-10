@@ -12,8 +12,27 @@ struct PlaybookSetupCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(BotBrain.self) private var brain
     @State private var problem: String?
+    /// The pending write of your edits into the card (debounced).
+    @State private var keeping: Task<Void, Never>?
 
     var body: some View {
+        content
+            // Edits are written back into the card, so leaving the thread
+            // never loses them.
+            .onChange(of: setup) { keep() }
+            .onDisappear { keeping?.cancel(); save() }
+    }
+
+    private func keep() {
+        keeping?.cancel()
+        keeping = Task { try? await Task.sleep(for: .milliseconds(500)); if !Task.isCancelled { save() } }
+    }
+
+    private func save() {
+        BotStore(context: context).updateAction(message, to: .setUpPlaybook(setup))
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Label("Add a PLAYBOOK.md", systemImage: "book.closed").font(AppFont.headline())
             if message.actionState == .waiting {

@@ -16,7 +16,7 @@ struct WrappingStack: Layout {
         for row in Self.rows(subviews, width: bounds.width, spacing: spacing) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = Self.size(of: subviews[index], width: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
@@ -28,7 +28,7 @@ struct WrappingStack: Layout {
 
     /// Which views go on which line, for a width.
     static func rows(_ subviews: Subviews, width: CGFloat, spacing: CGFloat) -> [Row] {
-        rows(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, width: width, spacing: spacing)
+        rows(sizes: subviews.map { size(of: $0, width: width) }, width: width, spacing: spacing)
     }
 
     static func rows(sizes: [CGSize], width: CGFloat, spacing: CGFloat) -> [Row] {
@@ -85,4 +85,30 @@ struct EvenGrid: Layout {
             view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(item))
         }
     }
+}
+
+extension WrappingStack {
+    /// A view wider than the row is measured at the row's width (so a
+    /// long chip wraps its text instead of running past the edge).
+    static func fitted(_ natural: CGSize, width: CGFloat, measure: (CGFloat) -> CGSize) -> CGSize {
+        guard width.isFinite, natural.width > width else { return natural }
+        return measure(width)
+    }
+
+    static func size(of subview: LayoutSubview, width: CGFloat) -> CGSize {
+        fitted(subview.sizeThatFits(.unspecified), width: width) { subview.sizeThatFits(ProposedViewSize(width: $0, height: nil)) }
+    }
+}
+
+/// A status label whose icon carries the color and whose words stay the
+/// primary text color (green or orange text is too faint in light mode).
+struct TintedIconLabelStyle: LabelStyle {
+    var tint: Color
+    func makeBody(configuration: Configuration) -> some View {
+        Label { configuration.title } icon: { configuration.icon.foregroundStyle(tint) }
+    }
+}
+
+extension LabelStyle where Self == TintedIconLabelStyle {
+    static func tintedIcon(_ tint: Color) -> TintedIconLabelStyle { TintedIconLabelStyle(tint: tint) }
 }
