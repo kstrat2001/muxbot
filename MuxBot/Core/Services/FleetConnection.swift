@@ -48,16 +48,6 @@ final class FleetConnection {
     }
     @ObservationIgnored private var cachedToken: String??
 
-    /// How to run darkmux on this Mac, for the commands we show: `darkmux`
-    /// on PATH, or a dev build named by MUXBOT_DARKMUX_CLI in the gitignored
-    /// Config/Local.xcconfig.
-    var cliCommand: String {
-        let configured = (Bundle.main.object(forInfoDictionaryKey: "MuxBotDarkmuxCLI") as? String)?
-            .trimmingCharacters(in: .whitespaces)
-        return configured.flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 } ?? "darkmux"
-    }
-    var approveCommand: String { "\(cliCommand) client approve" }
-    var serveCommand: String { "\(cliCommand) client serve" }
     var isPaired: Bool { if case .paired = state { true } else { false } }
 
     /// Starts a pairing request and waits for `darkmux client approve`. The
@@ -137,11 +127,11 @@ final class FleetConnection {
     }
 
     /// A pairing failure in plain words. The endpoint not answering is the
-    /// usual one; the pairing screen shows the command to start it.
+    /// usual one; the pairing screen links darkmux's guide (never a command).
     static func plainError(_ error: any Error) -> String {
         if let url = error as? URLError,
            [.cannotConnectToHost, .networkConnectionLost, .timedOut, .cannotFindHost].contains(url.code) {
-            return "darkmux isn't answering on this Mac. Start it in Terminal with the command below, then try again."
+            return String(localized: "darkmux isn't running on this Mac. darkmux's guide shows how to start it; then try again.")
         }
         // darkmux's own words go behind Show details (`failureDetails`).
         if let client = error as? DarkmuxClient.ClientError, client.status == 429 {

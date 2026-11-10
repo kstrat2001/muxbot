@@ -117,7 +117,8 @@ struct SeamSweep2Tests {
         let refused = DarkmuxClient.ClientError(message: "workspace site-1 was not made for this app", status: 403)
         let sentence = DarkmuxPlain.sentence(refused)
         #expect(sentence.contains("earlier pairing") && !sentence.contains("403"), "\(sentence)")
-        #expect(DarkmuxPlain.claimCommand(workspace: "site-1", client: "Mux Bot") == "darkmux client claim site-1 \"Mux Bot\"")
+        // No claim command any more (Kain's rule): New work copy instead.
+        #expect(sentence.contains("New work copy"))
         #expect(LivePreview.Unavailable.from(status: 403, message: refused.message, template: false, code: nil) == .earlierPairing)
     }
 

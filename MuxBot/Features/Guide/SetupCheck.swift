@@ -18,8 +18,13 @@ struct SetupFacts: Equatable, Sendable {
     /// nil until looked at.
     var endpointUp: Bool? = nil
     var lmStudio: LMStudio = .unknown
-    /// You said Docker is running (the app can't see it; darkmux doctor can).
+    /// You said Docker is running: only where the app can't look.
     var dockerConfirmed = false
+    /// An app as the Mac reports it (installed, open); `unknown` where the
+    /// app can't look (on a phone).
+    enum AppPresence: Equatable, Sendable { case unknown, notInstalled, installed, running }
+    var docker: AppPresence = .unknown
+    var lmStudioApp: AppPresence = .unknown
     var paired = false
     var listing: ModelListing = .loading
     var listedModels = 0
@@ -41,15 +46,16 @@ struct SetupStep: Identifiable, Equatable, Sendable {
         /// On iPhone or iPad: runs need a Mac.
         case needsMac
     }
-    enum Action: Equatable, Sendable { case pair, gitHubSignIn, confirmDocker, openTerminal }
+    enum Action: Equatable, Sendable { case pair, gitHubSignIn, confirmDocker, openDocker, openLMStudio }
 
     var id: ID
     var title: String
     var state: State
-    /// One line in plain words: what it is, or what to do.
+    /// One line in plain words: what it is, or what to do. Never a command
+    /// to run: a button (`action`) or an official page (`link`) does it.
     var detail: String
-    var command: String? = nil
     var link: URL? = nil
+    var linkTitle: String? = nil
     var action: Action? = nil
 }
 
@@ -59,10 +65,15 @@ extension Array where Element == SetupStep {
 }
 
 enum SetupCheck {
-    static let installCommand = "brew tap kstrat2001/tap\nbrew install darkmux\ndarkmux init\ndarkmux doctor"
     static let lmStudioURL = URL(string: "https://lmstudio.ai")!
-    static let dockerURL = URL(string: "https://www.docker.com/products/docker-desktop")!
-    static let guideURL = URL(string: "https://darkmux.com/guide/")!
+    /// Docker's own Mac install page (never a brew command).
+    static let dockerURL = URL(string: "https://docs.docker.com/desktop/setup/install/mac-install/")!
+
+    static func presence(installed: Bool, running: Bool) -> SetupFacts.AppPresence {
+        running ? .running : installed ? .installed : .notInstalled
+    }
+    static let dockerBundleID = "com.docker.docker"
+    static let lmStudioBundleID = "ai.elementlabs.lmstudio"
 
     /// darkmux's tuned memory tiers (its README): 96 GB or more, 33 to 64 GB,
     /// 32 GB or less.
@@ -70,7 +81,7 @@ enum SetupCheck {
         gb >= 96 ? String(localized: "96 GB or more") : gb > 32 ? String(localized: "33 to 64 GB") : String(localized: "32 GB or less")
     }
 
-    static func steps(_ f: SetupFacts, serveCommand: String = "darkmux client serve") -> [SetupStep] {
+    static func steps(_ f: SetupFacts) -> [SetupStep] {
         let onMac = f.platform == .mac
         let later: (SetupStep.ID, String, String) -> SetupStep = { SetupStep(id: $0, title: $1, state: .later, detail: $2) }
         var steps: [SetupStep] = []
@@ -83,7 +94,7 @@ enum SetupCheck {
         } else {
             steps.append(SetupStep(id: .mac, title: String(localized: "A Mac with Apple silicon"), state: .needsMac,
                                    detail: String(localized: "Runs happen on a Mac. Set up darkmux and Mux Bot there; your bots and threads sync here."),
-                                   link: guideURL))
+                                   link: DarkmuxLinks.guide))
         }
 
         let up = f.endpointUp == true
@@ -98,40 +109,42 @@ enum SetupCheck {
             steps.append(SetupStep(
                 id: .darkmux, title: String(localized: "darkmux installed"), state: up ? .done : .unknown,
                 detail: up ? String(localized: "darkmux is answering on this Mac.")
-                    : String(localized: "Install it in Terminal with Homebrew (skip this if you have it). Mux Bot can't tell until darkmux's app connection runs."),
-                command: up ? nil : installCommand, action: up ? nil : .openTerminal))
+                    : String(localized: "Mux Bot can't install darkmux or tell it's there until darkmux answers. darkmux's guide shows how to get it."),
+                link: up ? nil : DarkmuxLinks.install, linkTitle: up ? nil : String(localized: "Get darkmux")))
             steps.append(SetupStep(
                 id: .endpoint, title: String(localized: "darkmux's app connection"), state: up ? .done : .todo,
                 detail: up ? String(localized: "Running on this Mac.")
-                    : String(localized: "Start it in Terminal and leave it running. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one."),
-                command: up ? nil : serveCommand, action: up ? nil : .openTerminal))
+                    : String(localized: "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; this ticks off once it answers."),
+                link: up ? nil : DarkmuxLinks.guide, linkTitle: up ? nil : String(localized: "darkmux guide")))
             let tier = memoryTier(gb: f.memoryGB)
+            let getLM = f.lmStudioApp == .notInstalled
             switch f.lmStudio {
             case let .models(n) where n > 0:
                 steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"), state: .done,
                                        detail: String(localized: "LM Studio has \(n) models.")))
             case .models:
                 steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"), state: .todo,
-                                       detail: String(localized: "Download a model in LM Studio. This Mac has \(f.memoryGB) GB, so pick one darkmux's \(tier) settings fit; darkmux doctor checks it."),
-                                       link: lmStudioURL))
+                                       detail: String(localized: "Download a model in LM Studio. This Mac has \(f.memoryGB) GB, so pick one darkmux's \(tier) settings fit."),
+                                       action: .openLMStudio))
             case .notAnswering, .unknown:
                 let ok = f.runningModels > 0
-                steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"), state: ok ? .done : f.lmStudio == .unknown ? .unknown : .todo,
-                                       detail: ok ? String(localized: "darkmux has models ready.")
-                                           : String(localized: "Install LM Studio and download a model, or open it and turn on its local server. This Mac has \(f.memoryGB) GB: darkmux's \(tier) settings fit it."),
-                                       link: ok ? nil : lmStudioURL))
+                let detail: String = ok ? String(localized: "darkmux has models ready.")
+                    : [.installed, .running].contains(f.lmStudioApp)
+                        ? String(localized: "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server. This Mac has \(f.memoryGB) GB: darkmux's \(tier) settings fit it.")
+                        : String(localized: "Install LM Studio and download a model, then turn on its local server. This Mac has \(f.memoryGB) GB: darkmux's \(tier) settings fit it.")
+                steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"),
+                                       state: ok ? .done : f.lmStudio == .unknown && f.lmStudioApp == .unknown ? .unknown : .todo,
+                                       detail: detail,
+                                       link: ok || !getLM ? nil : lmStudioURL, linkTitle: ok || !getLM ? nil : String(localized: "Get LM Studio"),
+                                       action: ok || getLM || f.lmStudioApp == .unknown ? nil : .openLMStudio))
             }
-            steps.append(SetupStep(id: .docker, title: String(localized: "Docker"), state: f.dockerConfirmed ? .done : .manual,
-                                   detail: f.dockerConfirmed ? String(localized: "You said Docker is running.")
-                                       : String(localized: "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does."),
-                                   command: f.dockerConfirmed ? nil : "darkmux doctor", link: f.dockerConfirmed ? nil : dockerURL,
-                                   action: f.dockerConfirmed ? nil : .confirmDocker))
+            steps.append(dockerStep(f))
             if f.paired {
                 steps.append(SetupStep(id: .pair, title: String(localized: "Pair Mux Bot"), state: .done,
                                        detail: String(localized: "Mux Bot is paired with darkmux on this Mac.")))
             } else if up {
                 steps.append(SetupStep(id: .pair, title: String(localized: "Pair Mux Bot"), state: .todo,
-                                       detail: String(localized: "Pair once, then approve it in Terminal."), action: .pair))
+                                       detail: String(localized: "Pair once, then approve it in darkmux on this Mac."), action: .pair))
             } else {
                 steps.append(later(.pair, String(localized: "Pair Mux Bot"), String(localized: "After darkmux's app connection is running.")))
             }
@@ -161,26 +174,28 @@ enum SetupCheck {
         return steps
     }
 
-    /// The installs Terminal can do, as one block to copy, with a rough
-    /// time and download estimate. nil once they're done, or on a phone.
-    struct SetupBlock: Equatable, Sendable {
-        var command: String
-        var estimate: String
-    }
-
-    static func setupBlock(_ steps: [SetupStep]) -> SetupBlock? {
-        guard steps.state(.mac) != .needsMac else { return nil }
-        let open: (SetupStep.ID) -> Bool = { id in steps.state(id).map { $0 != .done && $0 != .later } ?? false }
-        let casks = [(SetupStep.ID.docker, "docker-desktop"), (.lmStudio, "lm-studio")].filter { open($0.0) }.map(\.1)
-        var lines: [String] = []
-        if !casks.isEmpty { lines.append("brew install --cask " + casks.joined(separator: " ")) }
-        if open(.darkmux) { lines.append(installCommand) }
-        guard !lines.isEmpty else { return nil }
-        // A rough guide, not a measurement: the model is the big download.
-        let estimate = open(.lmStudio)
-            ? String(localized: "Roughly 20 to 40 minutes and 10 to 25 GB of downloads on a fresh Mac; the model you pick in LM Studio is most of it.")
-            : String(localized: "Roughly 5 to 10 minutes and 2 to 3 GB of downloads.")
-        return SetupBlock(command: lines.joined(separator: "\n"), estimate: estimate)
+    /// Docker as the Mac reports it: running is done; installed gets Open
+    /// Docker; missing gets Docker's own install page. Asking you is only
+    /// for where the app can't look.
+    static func dockerStep(_ f: SetupFacts) -> SetupStep {
+        let title = String(localized: "Docker")
+        if f.docker == .running || (f.docker == .unknown && f.dockerConfirmed) {
+            return SetupStep(id: .docker, title: title, state: .done,
+                             detail: f.docker == .running ? String(localized: "Docker Desktop is running.") : String(localized: "You said Docker is running."))
+        }
+        switch f.docker {
+        case .installed:
+            return SetupStep(id: .docker, title: title, state: .todo,
+                             detail: String(localized: "Docker Desktop is installed but not open. Open it and leave it running."), action: .openDocker)
+        case .notInstalled:
+            return SetupStep(id: .docker, title: title, state: .todo,
+                             detail: String(localized: "darkmux runs each piece of work in Docker. Get Docker Desktop from Docker's site, then open it."),
+                             link: dockerURL, linkTitle: String(localized: "Get Docker Desktop"))
+        default:
+            return SetupStep(id: .docker, title: title, state: .manual,
+                             detail: String(localized: "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; say when Docker Desktop is running."),
+                             link: dockerURL, linkTitle: String(localized: "Get Docker Desktop"), action: .confirmDocker)
+        }
     }
 
     static func summary(_ steps: [SetupStep]) -> String {
@@ -188,15 +203,24 @@ enum SetupCheck {
         return done == steps.count ? String(localized: "All set") : String(localized: "\(done) of \(steps.count) done")
     }
 
-    /// The steps as text, to send to the Mac from a phone.
+    /// The steps as text, to send to the Mac from a phone: no commands,
+    /// the Mac's own Setup check walks through each one.
     static func shareText() -> String {
         """
         Set up Mux Bot on a Mac with Apple silicon:
-        1. Install darkmux: brew tap kstrat2001/tap && brew install darkmux && darkmux init && darkmux doctor
-        2. Install LM Studio (lmstudio.ai) and download a model, and Docker Desktop.
-        3. Start darkmux's app connection: darkmux client serve (in the next darkmux release).
-        4. Open Mux Bot on the Mac and pair it with darkmux.
-        Guide: \(guideURL.absoluteString)
+        1. Get darkmux: \(DarkmuxLinks.install.absoluteString)
+        2. Get LM Studio (\(lmStudioURL.absoluteString)) and download a model, and Docker Desktop (\(dockerURL.absoluteString)).
+        3. Open Mux Bot on the Mac and ask it to check your setup: it walks you through the rest, and pairing.
+        Guide: \(DarkmuxLinks.guide.absoluteString)
         """
     }
+}
+
+/// darkmux's official pages, the app's one place for them. Until darkmux
+/// can start, approve and turn on previews by itself, the app points here
+/// instead of at a command.
+enum DarkmuxLinks {
+    static let guide = URL(string: "https://darkmux.com/guide/")!
+    /// Where to get darkmux (its guide, until it has an install page).
+    static let install = URL(string: "https://darkmux.com/guide/")!
 }

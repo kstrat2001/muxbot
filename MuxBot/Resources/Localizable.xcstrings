@@ -167,6 +167,9 @@
     "96 GB or more" : {
 
     },
+    "; installs with %@." : {
+
+    },
     "A Mac with Apple silicon" : {
 
     },
@@ -183,6 +186,9 @@
 
     },
     "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
+
+    },
+    "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on in darkmux on this Mac; darkmux's guide shows how. Then try again." : {
 
     },
     "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
@@ -577,10 +583,19 @@
     "Docker" : {
 
     },
+    "Docker Desktop is installed but not open. Open it and leave it running." : {
+
+    },
+    "Docker Desktop is running." : {
+
+    },
     "Docker is running" : {
 
     },
     "Dog" : {
+
+    },
+    "Don't have darkmux yet? Get it" : {
 
     },
     "Don't have darkmux yet? Install it" : {
@@ -594,6 +609,16 @@
     },
     "Done when: not met" : {
 
+    },
+    "Download a model in LM Studio. This Mac has %lld GB, so pick one darkmux's %@ settings fit." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Download a model in LM Studio. This Mac has %1$lld GB, so pick one darkmux's %2$@ settings fit."
+          }
+        }
+      }
     },
     "Download a model in LM Studio. This Mac has %lld GB, so pick one darkmux's %@ settings fit; darkmux doctor checks it." : {
       "localizations" : {
@@ -684,6 +709,15 @@
     "Full window" : {
 
     },
+    "Get Docker Desktop" : {
+
+    },
+    "Get LM Studio" : {
+
+    },
+    "Get darkmux" : {
+
+    },
     "GitHub" : {
 
     },
@@ -768,7 +802,13 @@
     "Hot reload" : {
 
     },
+    "How" : {
+
+    },
     "How does this work?" : {
+
+    },
+    "How it starts isn't known yet: fill it in under Show details." : {
 
     },
     "How should it feel?" : {
@@ -847,6 +887,16 @@
         }
       }
     },
+    "Install LM Studio and download a model, then turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Install LM Studio and download a model, then turn on its local server. This Mac has %1$lld GB: darkmux's %2$@ settings fit it."
+          }
+        }
+      }
+    },
     "Install Mux Bot on %@ to open pull requests: %@" : {
       "localizations" : {
         "en" : {
@@ -904,6 +954,16 @@
     },
     "LM Studio has %lld models." : {
 
+    },
+    "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server. This Mac has %1$lld GB: darkmux's %2$@ settings fit it."
+          }
+        }
+      }
     },
     "Left blank, it's %@; if you already have one by that name, the next free one." : {
 
@@ -1000,6 +1060,9 @@
 
     },
     "Move up" : {
+
+    },
+    "Mux Bot can't install darkmux or tell it's there until darkmux answers. darkmux's guide shows how to get it." : {
 
     },
     "Mux Bot can't reach GitHub right now." : {
@@ -1194,7 +1257,13 @@
     "Open Activity" : {
 
     },
+    "Open Docker" : {
+
+    },
     "Open GitHub" : {
+
+    },
+    "Open LM Studio" : {
 
     },
     "Open Mux Bot" : {
@@ -1254,6 +1323,9 @@
     "Pair once, then approve it in Terminal." : {
 
     },
+    "Pair once, then approve it in darkmux on this Mac." : {
+
+    },
     "Pair with darkmux" : {
 
     },
@@ -1276,6 +1348,9 @@
 
     },
     "Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time." : {
+
+    },
+    "Pairing lets this app send work to darkmux on this Mac. You approve it once in darkmux on this Mac; you can unpair any time." : {
 
     },
     "Panda" : {
@@ -1507,6 +1582,9 @@
     "Set up now" : {
 
     },
+    "Set up preview" : {
+
+    },
     "Set up the preview" : {
 
     },
@@ -1652,6 +1730,12 @@
 
     },
     "Started" : {
+
+    },
+    "Starts with its %@ script" : {
+
+    },
+    "Starts with its own command" : {
 
     },
     "Stop" : {
@@ -1855,6 +1939,9 @@
     "This project has no PLAYBOOK.md, so the bot starts with general skills." : {
 
     },
+    "This project has no preview recipe yet, and I couldn't work out from its files how it starts. Fill in how it starts on this card, then Approve to write it into your checkout." : {
+
+    },
     "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout." : {
 
     },
@@ -1999,6 +2086,9 @@
 
     },
     "This work copy belongs to an earlier pairing with darkmux. Claim it for this app with darkmux's claim command, or set up a new work copy (a new branch; the earlier commits stay on the old one)." : {
+
+    },
+    "This work copy belongs to an earlier pairing with darkmux. Set up a new work copy with New work copy (a new branch; the earlier commits stay on the old one)." : {
 
     },
     "This work copy is from an earlier pairing" : {
@@ -2244,6 +2334,9 @@
     "darkmux doesn't have that anymore." : {
 
     },
+    "darkmux guide" : {
+
+    },
     "darkmux has models ready." : {
 
     },
@@ -2271,10 +2364,16 @@
     "darkmux isn't answering on this Mac." : {
 
     },
+    "darkmux isn't running on this Mac. darkmux's guide shows how to start it; then try again." : {
+
+    },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
 
     },
     "darkmux made it for this app before you paired again, so it won't let this pairing use it. Claim it with this command in Terminal, or set up a new work copy (a new branch; the earlier commits stay on the old one):" : {
+
+    },
+    "darkmux made it for this app before you paired again, so it won't let this pairing use it. Set up a new work copy for it (a new branch; the earlier commits stay on the old one)." : {
 
     },
     "darkmux makes its own copy on a new branch, so your files aren't touched. A preview runs only from your own checkout, so a folder on this Mac gets one; a repo darkmux clones doesn't." : {
@@ -2290,6 +2389,9 @@
 
     },
     "darkmux makes the work copy once Mux Bot is paired with it on your Mac. You can make the bot now." : {
+
+    },
+    "darkmux needs to know how %@ starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it." : {
 
     },
     "darkmux no longer knows this app. Pair again." : {
@@ -2313,7 +2415,13 @@
     "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update." : {
 
     },
+    "darkmux runs each piece of work in Docker. Get Docker Desktop from Docker's site, then open it." : {
+
+    },
     "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does." : {
+
+    },
+    "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; say when Docker Desktop is running." : {
 
     },
     "darkmux runs previews in a container, and Docker isn't running on this Mac. Open Docker, then try again." : {
@@ -2340,7 +2448,19 @@
     "darkmux's app connection has to be running on this Mac (the command above starts it)." : {
 
     },
+    "darkmux's app connection has to be running on this Mac." : {
+
+    },
+    "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; then try again." : {
+
+    },
+    "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; this ticks off once it answers." : {
+
+    },
     "darkmux's app connection isn't running. Start it in Terminal, then try again:" : {
+
+    },
+    "darkmux's app connection must be running on this Mac. darkmux's guide shows how to start it." : {
 
     },
     "darkmux's copy of %@ is no longer linked to your checkout (it moved, or was deleted). Add your checkout again." : {

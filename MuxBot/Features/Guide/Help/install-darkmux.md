@@ -1,29 +1,21 @@
 # Installing darkmux
 
-darkmux is a free, open-source command-line tool from Homebrew. Mux Bot can't install it for you (apps can't run commands on your Mac), so you run these in Terminal.
+darkmux is free and open source, and runs the models and the work on your Mac. Mux Bot can't install it for you, and it never asks you to type commands: its setup check links darkmux's guide (darkmux.com/guide), which shows how to get it.
 
 ## Install
 
-Install it with Homebrew:
-
-    brew tap kstrat2001/tap
-    brew install darkmux
-
-Then set it up and check it:
-
-    darkmux init
-    darkmux doctor
-
-darkmux init writes its config and model profiles without overwriting anything you already have. darkmux doctor checks LM Studio, your models, Docker and your Mac's memory, and says what's missing.
+In Mux Bot's setup check, Get darkmux opens darkmux's guide. Once darkmux answers on this Mac, the step ticks itself off.
 
 ## The app connection
 
-Mux Bot talks to darkmux through its app connection on this Mac, started with darkmux client serve. It isn't in a darkmux release yet (5.9.3 doesn't have it); it comes in the next one. Until then, it needs a build of darkmux that has it.
+Mux Bot talks to darkmux through its app connection on this Mac. When it isn't running, the setup check and the preview say so and link darkmux's guide, which shows how to start it; then Try again.
 
 ## LM Studio and Docker
 
-darkmux runs local models in LM Studio (lmstudio.ai); download at least one model there. It runs each piece of work in Docker (docker.com), which pulls darkmux's image the first time.
+darkmux runs local models in LM Studio; download at least one model there and turn on its local server. Mux Bot sees whether LM Studio is installed: Get LM Studio opens its site, and Open LM Studio opens it when it's installed but not answering.
+
+darkmux runs each piece of work in Docker Desktop, which pulls darkmux's image the first time. Mux Bot sees whether Docker Desktop is installed and open: Get Docker Desktop opens Docker's own install page, and Open Docker opens it when it's installed but closed.
 
 ## Which model fits
 
-Pick a model that fits your Mac's memory (RAM). darkmux has settings tuned for 96 GB or more, for 33 to 64 GB, and for 32 GB or less; darkmux doctor says whether what you picked fits.
+Pick a model that fits your Mac's memory (RAM). darkmux has settings tuned for 96 GB or more, for 33 to 64 GB, and for 32 GB or less; the setup check says which fits this Mac.

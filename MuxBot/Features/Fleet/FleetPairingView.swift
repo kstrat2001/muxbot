@@ -7,7 +7,8 @@ import AppKit
 #endif
 
 /// Pair this app with darkmux on this Mac. The app shows a code; you approve
-/// it on the Mac with `darkmux client approve`. Until then runs can't start.
+/// it in darkmux on the Mac (darkmux's guide shows how; never a command
+/// here). Until then runs can't start.
 struct FleetPairingView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(\.dismiss) private var dismiss
@@ -31,34 +32,27 @@ struct FleetPairingView: View {
                 }
                 #else
                 Section {
-                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in Terminal; you can revoke it any time.")
+                    Text("Pairing lets this app send work to darkmux on this Mac. You approve it once in darkmux on this Mac; you can unpair any time.")
                         .foregroundStyle(Color.secondaryText)
                 }
                 if case let .failed(message) = connection.state {
                     Section {
                         Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(Color.secondaryText)
-                        CommandBox(command: connection.serveCommand)
+                        Link(destination: DarkmuxLinks.guide) { Label("darkmux guide", systemImage: "safari") }
                     }
                 }
                 Section {
                     Button("Pair with darkmux", systemImage: "link") { connection.pair() }
                 } footer: {
-                    Text("darkmux's app connection has to be running on this Mac (the command above starts it).")
+                    Text("darkmux's app connection has to be running on this Mac.")
                 }
                 #endif
             case let .waiting(code, expires):
                 Section {
-                    #if os(macOS)
-                    step(1, "Open Terminal on this Mac.") {
-                        Button("Open Terminal", systemImage: "terminal") { openTerminal() }
-                            .controlSize(.small)
+                    step(1, "Approve Mux Bot in darkmux on this Mac.") {
+                        Link(destination: DarkmuxLinks.guide) { Label("How", systemImage: "safari") }.font(AppFont.footnote())
                     }
-                    #else
-                    step(1, "Open Terminal on your Mac.") { EmptyView() }
-                    #endif
-                    step(2, "Paste this command and press Return.") { EmptyView() }
-                    CommandBox(command: connection.approveCommand)
-                    step(3, "Check that darkmux shows this code, then type y and press Return.") { EmptyView() }
+                    step(2, "Check that darkmux shows this code.") { EmptyView() }
                     Text(code)
                         .font(.system(.largeTitle, design: .monospaced, weight: .bold))
                         .frame(maxWidth: .infinity)
@@ -78,9 +72,9 @@ struct FleetPairingView: View {
                 }
                 Section {
                     DisclosureGroup("darkmux says there's nothing to approve?") {
-                        Text("darkmux's local endpoint must be running on this Mac. In another Terminal window, run:")
+                        Text("darkmux's app connection must be running on this Mac. darkmux's guide shows how to start it.")
                             .font(AppFont.footnote())
-                        CommandBox(command: connection.serveCommand)
+                        Link(destination: DarkmuxLinks.guide) { Label("darkmux guide", systemImage: "safari") }.font(AppFont.footnote())
                     }
                 }
             case let .paired(name):
@@ -93,17 +87,12 @@ struct FleetPairingView: View {
                 }
                 Section {
                     Button("Unpair this app", role: .destructive) { connection.unpair() }
-                } footer: {
-                    VStack(alignment: .leading) {
-                        Text("You can also revoke it in Terminal:")
-                        CommandBox(command: "\(connection.cliCommand) client revoke \(name)")
-                    }
                 }
             }
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
-            Link("Don't have darkmux yet? Install it", destination: URL(string: "https://github.com/kstrat2001/darkmux#readme")!)
+            Link("Don't have darkmux yet? Get it", destination: DarkmuxLinks.install)
                 .font(AppFont.footnote())
                 .tint(Color.accentText)
                 .padding(.bottom, Spacing.md)
@@ -136,13 +125,6 @@ struct FleetPairingView: View {
             if case .waiting = connection.state { justPaired = true }
         }
     }
-
-    #if os(macOS)
-    private func openTerminal() {
-        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-        NSWorkspace.shared.openApplication(at: terminal, configuration: NSWorkspace.OpenConfiguration())
-    }
-    #endif
 
     private func step(_ number: Int, _ text: String, @ViewBuilder trailing: () -> some View) -> some View {
         Label {

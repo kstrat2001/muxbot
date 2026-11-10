@@ -1310,12 +1310,11 @@ final class BotBrain {
         }
         let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
         let draft = ProjectSetupDetector.detect(packageJSON: files.packageJSON, files: files.files)
-        guard !draft.isEmpty else {
-            let note = String(localized: "There's no preview yet, and I couldn't work out how to run this project from its files (no package.json with a dev, start or serve script). Add .darkmux/preview.json to your checkout to get one.")
-            if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
-            return
-        }
-        store.append(.assistant, String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
+        // Nothing worked out from its files: the card still comes, blank, to
+        // fill in (never a file to add by hand).
+        store.append(.assistant, draft.isEmpty
+            ? String(localized: "This project has no preview recipe yet, and I couldn't work out from its files how it starts. Fill in how it starts on this card, then Approve to write it into your checkout.")
+            : String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
         store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
     }
 

@@ -44,20 +44,11 @@ struct SetupChecklistView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            let steps = facts.map { SetupCheck.steps($0, serveCommand: connection.serveCommand) } ?? []
+            let steps = facts.map { SetupCheck.steps($0) } ?? []
             HStack {
                 Label("Setup check", systemImage: "checklist").font(AppFont.headline())
                 Spacer()
                 if facts == nil { ProgressView().controlSize(.small) } else { Text(SetupCheck.summary(steps)).font(AppFont.footnote()).foregroundStyle(Color.secondaryText) }
-            }
-            if let block = SetupCheck.setupBlock(steps) {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("Everything to install, in one go").font(AppFont.body(.semibold))
-                    Text("Paste this into Terminal. It needs Homebrew (brew.sh). \(block.estimate)")
-                        .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    CommandBox(command: block.command)
-                }
             }
             ForEach(steps) { step in row(step) }
             #if os(iOS)
@@ -82,10 +73,9 @@ struct SetupChecklistView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(step.title).font(AppFont.body(.semibold))
                 Text(step.detail).font(AppFont.footnote()).foregroundStyle(Color.secondaryText).fixedSize(horizontal: false, vertical: true)
-                if let command = step.command { CommandBox(command: command) }
                 HStack(spacing: Spacing.md) {
                     if let action = step.action { button(action) }
-                    if let link = step.link { Link(destination: link) { Label(link.host() ?? "Open", systemImage: "safari") }.font(AppFont.footnote()) }
+                    if let link = step.link { Link(destination: link) { Label(step.linkTitle ?? link.host() ?? "Open", systemImage: "safari") }.font(AppFont.footnote()) }
                 }
             }
         }
@@ -107,13 +97,13 @@ struct SetupChecklistView: View {
                 facts?.dockerConfirmed = true
             }
             .buttonStyle(.bordered).controlSize(.small)
-        case .openTerminal:
+        case .openDocker, .openLMStudio:
             #if os(macOS)
-            Button("Open Terminal", systemImage: "terminal") {
-                NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"),
-                                                   configuration: NSWorkspace.OpenConfiguration())
+            let docker = action == .openDocker
+            Button(docker ? "Open Docker" : "Open LM Studio", systemImage: "arrow.up.forward.app") {
+                SetupProbe.openApp(bundleID: docker ? SetupCheck.dockerBundleID : SetupCheck.lmStudioBundleID)
             }
-            .buttonStyle(.bordered).controlSize(.small)
+            .buttonStyle(.borderedProminent).tint(Color.brandGreen).controlSize(.small)
             #else
             EmptyView()
             #endif
@@ -314,21 +304,17 @@ struct HelpArticleView: View {
 
 }
 
-/// Help text: paragraphs as inline Markdown; indented lines are commands.
+/// Help text: paragraphs as inline Markdown (never a command to run).
 struct HelpText: View {
     let text: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             ForEach(Array(text.components(separatedBy: "\n\n").enumerated()), id: \.offset) { _, block in
-                if block.hasPrefix("    ") {
-                    CommandBox(command: block.components(separatedBy: "\n").map { String($0.drop { $0 == " " }) }.joined(separator: "\n"))
-                } else {
-                    Text((try? AttributedString(markdown: block, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block))
-                        .font(AppFont.body())
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                Text((try? AttributedString(markdown: block, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block))
+                    .font(AppFont.body())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
