@@ -260,9 +260,9 @@ struct TemplateSchemaTests {
     }
 
     @Test func aNewerSchemaIsRefusedByName() {
-        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 3")
-        #expect(throws: Playbook.ParseError.newerSchema(3)) { try Playbook.parse(playbook) }
-        #expect(Playbook.ParseError.newerSchema(3).message.hasPrefix("This template needs a newer Mux Bot"))
+        let playbook = PlaybookParserTests.minimal().replacingOccurrences(of: "schema: 1", with: "schema: 4")
+        #expect(throws: Playbook.ParseError.newerSchema(4)) { try Playbook.parse(playbook) }
+        #expect(Playbook.ParseError.newerSchema(4).message.hasPrefix("This template needs a newer Mux Bot"))
         #expect(throws: TemplateSchema.Problem.newerSchema(file: ".darkmux/preview.json", 3)) {
             try TemplateSchema.checkPreview(Data(#"{"schema":3,"command":"x"}"#.utf8))
         }

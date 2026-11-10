@@ -20,17 +20,26 @@ struct Playbook: Equatable, Sendable {
     var bodyHex: String?
     var eyeHex: String?
     var crew: [CrewRole]
+    /// The questions you answer in words, in order: the name, what it's
+    /// for, how it should feel.
     var questions: [String]
+    /// Schema 3: questions you answer by picking one of its choices, each
+    /// shown with its preview images when the registry has them.
+    var choices: [PlaybookChoice] = []
     /// The bot's persona, with `{name}` for its name.
     var persona: String
     var skills: [BotSkill]
-    /// `## First run`: lines with `{name}`, `{purpose}` and `{feel}`.
+    /// `## First run`: lines with `{name}`, `{purpose}`, `{feel}` and, since
+    /// schema 3, each choice's `{key}`.
     var firstRun: String? = nil
     /// The schema the file follows.
     var schema: Int = TemplateSchema.supported
     /// Schema 2: `page_file`, `pages`, `viewports` and `## Conventions`, the
     /// app's hints about the repo (darkmux's recipe holds none of them).
     var hints = RepoHints()
+    /// Schema 3 `previews: desktop, phone`: the template's own pictures, in
+    /// the registry, for its card. Optional.
+    var previews: [TemplatePreview.Viewport] = []
 
     enum ParseError: Error, Equatable {
         case missing(String)
@@ -39,6 +48,9 @@ struct Playbook: Equatable, Sendable {
         case notASchema(String)
         case unknownKey(String, closest: String)
         case missingSection(String)
+        /// Schema 3: a choice question that isn't written the way SCHEMA.md
+        /// says (a `key:`, two or more `- id: Title.` lines, ids unique).
+        case badChoice(String)
 
         /// What the start screen says about a template it can't use.
         var message: String {
@@ -57,6 +69,8 @@ struct Playbook: Equatable, Sendable {
                 String(localized: "This template's PLAYBOOK.md is missing its “\(section)” section.")
             case .tooLarge:
                 String(localized: "This template's PLAYBOOK.md is too large.")
+            case .badChoice(let question):
+                String(localized: "This template's PLAYBOOK.md has a choice it can't read: “\(question)”.")
             }
         }
     }
@@ -70,12 +84,13 @@ struct Playbook: Equatable, Sendable {
     /// The first run's task from your answers: each line of `## First run`
     /// with its placeholders filled in, and a line whose answer is blank left
     /// out. nil when there's no section or nothing but blanks is left.
-    func firstRunTask(name: String, purpose: String, feel: String) -> String? {
+    func firstRunTask(name: String, purpose: String, feel: String, choices picked: [String: String] = [:]) -> String? {
         guard let firstRun else { return nil }
         let clean: (String) -> String = {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ".!"))
         }
-        let answers = ["{name}": clean(name), "{purpose}": clean(purpose), "{feel}": clean(feel)]
+        var answers = ["{name}": clean(name), "{purpose}": clean(purpose), "{feel}": clean(feel)]
+        for choice in choices { answers["{\(choice.key)}"] = picked[choice.key] ?? choice.options.first?.id ?? "" }
         var lines: [String] = []
         var usedAnAnswer = false
         for line in firstRun.split(separator: "\n").map({ $0.trimmingCharacters(in: .whitespaces) }) where !line.isEmpty {
@@ -113,10 +128,17 @@ struct Playbook: Equatable, Sendable {
                                 bodyHex: hex.first ?? nil, eyeHex: hex.dropFirst().first ?? nil,
                                 crew: crew.isEmpty ? [.coder] : crew, questions: [], persona: "", skills: [])
         playbook.schema = schema
+        if let value = header["previews"] {
+            guard schema >= 3 else { throw ParseError.unknownKey("previews", closest: TemplateSchema.closest(to: "previews", in: schemaOneKeys + hintKeys)) }
+            guard let viewports = TemplatePreview.viewports(value) else { throw ParseError.missing("previews") }
+            playbook.previews = viewports
+        }
         playbook.hints = RepoHints(pageFile: header["page_file"].flatMap { $0.isEmpty ? nil : $0 },
                                    pages: list("pages"), viewports: list("viewports"))
         for (heading, body) in sections {
-            if heading == "Questions" {
+            if heading == "Questions", schema >= 3 {
+                (playbook.questions, playbook.choices) = try questionsAndChoices(body)
+            } else if heading == "Questions" {
                 playbook.questions = body.split(separator: "\n")
                     .map { $0.trimmingCharacters(in: .whitespaces) }
                     .filter { $0.hasPrefix("- ") || $0.hasPrefix("* ") }
@@ -139,6 +161,48 @@ struct Playbook: Equatable, Sendable {
         return playbook
     }
 
+    /// Schema 3's `## Questions`: a question is a `- ` bullet at the start of
+    /// its line; one with indented lines under it is a choice: `key: <key>`
+    /// names its answer (`{key}` in First run), and each indented
+    /// `- <id>: <Title>. <what it fits>` is one choice.
+    private static func questionsAndChoices(_ body: String) throws -> ([String], [PlaybookChoice]) {
+        var items: [(text: String, key: String?, previews: [TemplatePreview.Viewport], options: [PlaybookChoice.Option])] = []
+        for raw in body.components(separatedBy: "\n") where !raw.trimmingCharacters(in: .whitespaces).isEmpty {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            let indented = raw.first?.isWhitespace == true
+            let bullet = line.hasPrefix("- ") || line.hasPrefix("* ")
+            if !indented, bullet {
+                items.append((String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces), nil, [], []))
+            } else if indented, !items.isEmpty, line.hasPrefix("key:") {
+                items[items.count - 1].key = line.dropFirst(4).trimmingCharacters(in: .whitespaces)
+            } else if indented, !items.isEmpty, line.hasPrefix("previews:") {
+                guard let viewports = TemplatePreview.viewports(String(line.dropFirst(9))) else { throw ParseError.badChoice(items[items.count - 1].text) }
+                items[items.count - 1].previews = viewports
+            } else if indented, !items.isEmpty, bullet {
+                let text = line.dropFirst(2)
+                guard let colon = text.firstIndex(of: ":") else { throw ParseError.badChoice(String(text)) }
+                let id = text[..<colon].trimmingCharacters(in: .whitespaces)
+                guard PlaybookChoice.isId(id) else { throw ParseError.badChoice(String(text)) }
+                let rest = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                let stop = rest.range(of: ". ")
+                let title = stop.map { String(rest[..<$0.lowerBound]) } ?? rest.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                let detail = stop.map { rest[$0.upperBound...].trimmingCharacters(in: .whitespaces) } ?? ""
+                guard !title.isEmpty else { throw ParseError.badChoice(String(text)) }
+                items[items.count - 1].options.append(.init(id: id, title: title, detail: detail))
+            }
+        }
+        var questions: [String] = []
+        var choices: [PlaybookChoice] = []
+        for item in items {
+            if item.options.isEmpty, item.key == nil, item.previews.isEmpty { questions.append(item.text); continue }
+            guard let key = item.key, PlaybookChoice.isId(key), !["name", "purpose", "feel"].contains(key),
+                  !choices.contains(where: { $0.key == key }) else { throw ParseError.badChoice(item.text) }
+            guard item.options.count >= 2, Set(item.options.map(\.id)).count == item.options.count else { throw ParseError.badChoice(item.text) }
+            choices.append(PlaybookChoice(label: item.text, key: key, previews: item.previews, options: item.options))
+        }
+        return (questions, choices)
+    }
+
     /// The `key: value` lines before the first `##` section, and each
     /// section's heading and trimmed text.
     private static func split(_ text: String) throws -> ([String: String], [(String, String)]) {
@@ -158,7 +222,7 @@ struct Playbook: Equatable, Sendable {
 
     private static let schemaOneKeys = ["schema", "title", "icon", "pitch", "animal", "colors", "crew"]
     private static let hintKeys = ["page_file", "pages", "viewports"]
-    private static let keys = schemaOneKeys + hintKeys
+    private static let keys = schemaOneKeys + hintKeys + ["previews"]
 
     /// A header key is a lowercase word at the start of the line, a colon,
     /// then the value; other prose is ignored. An unknown key is refused.
@@ -172,6 +236,33 @@ struct Playbook: Equatable, Sendable {
 
     private static func isHex(_ s: String) -> Bool {
         s.count == 6 && s.allSatisfy(\.isHexDigit)
+    }
+}
+
+/// Schema 3: a question you answer by picking one choice ("Pick a
+/// design."). The answer is the choice's id, `{key}` in First run. When the
+/// question asks for them, each choice's preview pictures live in the
+/// registry repo (`TemplatePreview`), so a template's files never carry them.
+struct PlaybookChoice: Equatable, Sendable {
+    struct Option: Equatable, Sendable, Identifiable {
+        var id: String
+        var title: String
+        /// What it fits, in a sentence (may be empty).
+        var detail: String
+    }
+
+    var label: String
+    var key: String
+    /// `previews: desktop, phone`: each choice has these pictures in the
+    /// registry. Optional: without it the choices are chips.
+    var previews: [TemplatePreview.Viewport] = []
+    var options: [Option]
+
+    /// Lowercase letters, digits and dashes, starting with a letter or digit.
+    static func isId(_ s: String) -> Bool {
+        let ok: (Character) -> Bool = { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
+        guard let first = s.first, ok(first) else { return false }
+        return s.allSatisfy { ok($0) || $0 == "-" }
     }
 }
 
@@ -265,6 +356,8 @@ extension Playbook.ParseError {
             String(localized: "This project's PLAYBOOK.md is missing its “\(section)” section.")
         case .tooLarge:
             String(localized: "This project's PLAYBOOK.md is too large.")
+        case .badChoice(let question):
+            String(localized: "This project's PLAYBOOK.md has a choice it can't read: “\(question)”.")
         }
     }
 }
