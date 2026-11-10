@@ -86,7 +86,11 @@ final class BotRun {
     }
 
     /// Needs you (and not hidden here) first, then running, then the rest.
-    @MainActor var statusRank: Int { NeedsYou.isWaiting(self) ? 0 : phase.isActive ? 1 : 2 }
+    var statusRank: Int {
+        // NeedsYou.isWaiting, read here without the main actor (a sort key).
+        let hidden = bot.map { LocalBotState.shared[$0.id]?.dismissedRuns?.contains(id.uuidString) ?? false } ?? false
+        return needsYou && !hidden ? 0 : phase.isActive ? 1 : 2
+    }
 
     var durationSeconds: Double? {
         guard let startedAt else { return nil }
