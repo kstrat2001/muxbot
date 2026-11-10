@@ -152,7 +152,7 @@ struct RunsSayWhatHappenedTests {
                                          defaults: UserDefaults(suiteName: "muxbot-tests-401-\(UUID().uuidString)")!)
         var shown = false
         connection.onRevoked = { shown = true }
-        connection.revoked()
+        connection.revoked(token: "t0ken")
         #expect(connection.token == nil)
         #expect(connection.state == .failed(FleetConnection.revokedMessage))
         #expect(FleetConnection.revokedMessage == "darkmux no longer knows this app. Pair again.")
@@ -164,10 +164,10 @@ struct RunsSayWhatHappenedTests {
         var client = DarkmuxClient()
         client.session = DarkmuxStub.session
         let seen = Recorder()
-        client.onUnauthorized = { seen.add("401") }
+        client.onUnauthorized = { seen.add($0) }
         _ = try? await client.workStatus(token: "old", workId: "w-1")
         try await Task.sleep(for: .milliseconds(50))
-        #expect(seen.values == ["401"])
+        #expect(seen.values == ["old"], "with the token that was refused")
     }
 
     @Test func unpairedThePreviewAsksForPairingInsteadOfWaiting() async {

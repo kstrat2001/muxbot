@@ -35,7 +35,7 @@ final class FleetConnection {
         if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
             state = .paired(name: name)
         }
-        client.onUnauthorized = { [weak self] in Task { @MainActor in self?.revoked() } }
+        client.onUnauthorized = { [weak self] refused in Task { @MainActor in self?.revoked(token: refused) } }
     }
 
     /// The token, read from the Keychain once and kept: views ask for it on
@@ -105,10 +105,12 @@ final class FleetConnection {
     /// Shows pairing (set by the app).
     var onRevoked: (() -> Void)?
 
-    /// darkmux answered 401 with this app's token: the pairing was revoked
-    /// there. Forget the token, say so plainly, and show pairing.
-    func revoked() {
-        guard token != nil else { return }
+    /// darkmux answered 401 to `refused`: when that's this app's token now,
+    /// the pairing was revoked there. Forget the token, say so plainly, and
+    /// show pairing. A late answer about an earlier pairing's token changes
+    /// nothing: the app has paired again since.
+    func revoked(token refused: String) {
+        guard let token, token == refused else { return }
         unpair()
         state = .failed(Self.revokedMessage)
         onRevoked?()

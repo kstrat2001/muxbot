@@ -144,6 +144,40 @@ struct ReviewFindingsClientTests {
         #expect(connection.client.session === DarkmuxClient.defaultSession)
     }
 
+    // 8: a late 401 for an old token never erases a new pairing.
+
+    @Test func aLate401ForAnOldTokenKeepsTheNewPairing() async throws {
+        let keychain = MemoryKeychain()
+        keychain.items["darkmux.client.token"] = "old-token"
+        let defaults = UserDefaults(suiteName: "muxbot-tests-client-\(UUID().uuidString)")!
+        defaults.set("Mux Bot", forKey: "darkmux.client.name")
+        let connection = FleetConnection(keychain: keychain, defaults: defaults)
+        var shown = false
+        connection.onRevoked = { shown = true }
+        connection.client.session = ClientStub.session
+        // Paired again while a request with the old token was still out.
+        connection.completePairing(token: "new-token", name: "Mux Bot")
+        ClientStub.status = 401
+        _ = try? await connection.client.workStatus(token: "old-token", workId: "w-1")
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(connection.token == "new-token")
+        #expect(connection.isPaired)
+        #expect(!shown)
+        // The current token refused: that is a revoked pairing.
+        _ = try? await connection.client.workStatus(token: "new-token", workId: "w-1")
+        for _ in 0..<50 where connection.token != nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(connection.token == nil)
+        #expect(connection.state == .failed(FleetConnection.revokedMessage))
+        #expect(shown)
+    }
+
+    @Test func theRefusedTokenComesFromTheRequest() {
+        #expect(DarkmuxClient.bearerToken("Bearer abc") == "abc")
+        #expect(DarkmuxClient.bearerToken("Basic abc") == nil)
+        #expect(DarkmuxClient.bearerToken("Bearer ") == nil)
+        #expect(DarkmuxClient.bearerToken(nil) == nil)
+    }
+
     @Test func theRecipeGoesThroughTheClientsSession() async throws {
         ClientStub.status = 404
         var client = DarkmuxClient()

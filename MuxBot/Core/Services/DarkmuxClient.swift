@@ -9,8 +9,10 @@ struct DarkmuxClient: Sendable {
     /// reaches the network (`defaultSession`).
     var session: URLSession = DarkmuxClient.defaultSession
     /// darkmux answered 401 to a call with this app's token: it no longer
-    /// knows this app (the pairing was revoked).
-    var onUnauthorized: (@Sendable () -> Void)?
+    /// knows that token (the pairing was revoked). Called with the token
+    /// that was refused: a late answer about an old one must never undo a
+    /// newer pairing.
+    var onUnauthorized: (@Sendable (_ refused: String) -> Void)?
 
     /// The app's shared session; under tests (`TestIsolation`) one whose
     /// every request fails as "can't connect", so a test that forgot its
@@ -380,6 +382,13 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(WorkStatus.self, from: data)
     }
 
+    /// The token in an `Authorization: Bearer <token>` header.
+    static func bearerToken(_ header: String?) -> String? {
+        guard let header, header.hasPrefix("Bearer ") else { return nil }
+        let token = String(header.dropFirst("Bearer ".count))
+        return token.isEmpty ? nil : token
+    }
+
     private func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
                       headers: [String: String] = [:], query: [URLQueryItem] = [], timeout: TimeInterval = 5) async throws -> Data {
         // The query goes in as query items: in the path, `?` would be encoded.
@@ -395,7 +404,7 @@ struct DarkmuxClient: Sendable {
         }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 401, headers["Authorization"] != nil { onUnauthorized?() }
+        if status == 401, let refused = Self.bearerToken(headers["Authorization"]) { onUnauthorized?(refused) }
         guard (200..<300).contains(status) else {
             let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let detail = body?["error"] as? String
