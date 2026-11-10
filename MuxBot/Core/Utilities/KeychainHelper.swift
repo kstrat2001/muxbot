@@ -9,9 +9,14 @@ struct KeychainHelper: KeychainProviding {
     private let service: String
     private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "keychain")
 
-    init(service: String = "com.darklyenergized.darkmuxapp") {
+    init(service: String = KeychainHelper.defaultService) {
         self.service = service
     }
+
+    /// The app's own item; under tests (which run inside the app, with its
+    /// bundle id) a separate one, so no test can read or delete the real
+    /// tokens.
+    static let defaultService = TestIsolation.isTesting ? "com.darklyenergized.darkmuxapp.tests" : "com.darklyenergized.darkmuxapp"
 
     private func base(_ key: String?, modern: Bool) -> [String: Any] {
         var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
@@ -66,4 +71,14 @@ protocol KeychainProviding {
     func get(key: String) -> String?
     func delete(key: String)
     func deleteAll()
+}
+
+/// Tests run inside the app (its bundle id and container): whatever they
+/// touch by default (defaults, the Keychain, `LocalBotState`) is a separate
+/// copy, never the real app's.
+enum TestIsolation {
+    static let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    /// The app's defaults, or a test suite under tests.
+    nonisolated(unsafe) static let defaults: UserDefaults =
+        isTesting ? (UserDefaults(suiteName: "muxbot-tests-app") ?? .standard) : .standard
 }
