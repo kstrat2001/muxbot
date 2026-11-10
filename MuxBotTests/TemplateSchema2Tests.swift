@@ -47,9 +47,9 @@ struct TemplateSchema2Tests {
         #expect((try? Playbook.parse(plain))?.hints.conventions == nil, "a schema 1 playbook's sections stay as they were")
     }
 
-    @Test func schemaThreeIsNewer() {
-        let three = Self.playbook2.replacingOccurrences(of: "schema: 2", with: "schema: 3")
-        #expect(throws: Playbook.ParseError.newerSchema(3)) { try Playbook.parse(three) }
+    @Test func schemaFourIsNewer() {
+        let three = Self.playbook2.replacingOccurrences(of: "schema: 2", with: "schema: 4")
+        #expect(throws: Playbook.ParseError.newerSchema(4)) { try Playbook.parse(three) }
     }
 
     @Test func darkmuxsRecipeIsATemplatesPreview() throws {
@@ -83,7 +83,7 @@ struct TemplateSchema2Tests {
         for id in ["website", "book"] {
             let files = try #require(TemplateRegistry.bundledFiles(for: id))
             let playbook = try #require(TemplateRegistry.check(playbook: files.playbook, preview: files.preview).playbook, "\(id) is ready")
-            #expect(playbook.schema == 2)
+            #expect(playbook.schema >= 2, "schema 2 or later (the website is 3)")
             #expect(playbook.hints.pageFile != nil)
             #expect(playbook.hints.conventions != nil)
             let recipe = try #require(try JSONSerialization.jsonObject(with: files.preview) as? [String: Any])

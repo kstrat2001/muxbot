@@ -117,6 +117,11 @@ struct StartProjectView: View {
     private func tile(_ entry: TemplateEntry) -> some View {
         CardView {
             VStack(alignment: .leading, spacing: Spacing.sm) {
+                // Schema 3: the template's own picture, when it has one.
+                if let viewport = playbooks[entry.id]?.previews.first {
+                    PreviewPicture(url: TemplatePreview.url(template: entry.id, viewport), viewport: viewport)
+                        .frame(maxWidth: .infinity)
+                }
                 Image(systemName: playbooks[entry.id]?.icon ?? entry.icon)
                     .font(.title)
                     .foregroundStyle(Color.brandBlue)
@@ -153,6 +158,10 @@ struct StartProjectView: View {
                 QuestionField(question: question(playbook, 0, String(localized: "Name")), text: $answers.name, lines: 1...1)
                 QuestionField(question: question(playbook, 1, String(localized: "What is it for?")), text: $answers.purpose)
                 QuestionField(question: question(playbook, 2, String(localized: "How should it feel?")), text: $answers.style)
+                ForEach(playbook.choices, id: \.key) { choice in
+                    ChoiceField(template: entry.id, choice: choice,
+                                picked: Binding { answers.choices[choice.key] } set: { answers.choices[choice.key] = $0 })
+                }
             } footer: {
                 if connection.isPaired {
                     Text("darkmux makes the project on this Mac from the template, on its own. It stays on this Mac until you put it on GitHub.")

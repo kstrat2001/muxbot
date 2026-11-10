@@ -4,12 +4,15 @@ import Foundation
 /// number for templates.json and PLAYBOOK.md. Since schema 2 a template's
 /// .darkmux/preview.json is darkmux's own recipe (`schema_version` "1.0",
 /// darkmux's keys only) and the app's hints live in PLAYBOOK.md; schema 1
-/// templates (hints in preview.json, `"schema": 1`) still read. An
+/// templates (hints in preview.json, `"schema": 1`) still read. Schema 3
+/// adds choice questions to PLAYBOOK.md and makes preview images standard:
+/// every template has a desktop and a phone picture, and so does each
+/// choice, in the registry repo (`TemplatePreview`). An
 /// added optional key keeps the number; a new required key, or a renamed
 /// or removed one, is the next. Mux Bot refuses a missing schema, or one
 /// newer than it reads, by name, and never guesses.
 enum TemplateSchema {
-    static let supported = 2
+    static let supported = 3
 
     /// Checks a file's schema value: present, a number, and not newer.
     static func check<E: Error>(_ value: String?, missing: E, newer: (Int) -> E, notANumber: (String) -> E) throws {

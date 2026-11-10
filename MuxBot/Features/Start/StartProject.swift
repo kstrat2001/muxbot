@@ -11,6 +11,9 @@ enum StartProject {
         var name: String
         var purpose: String = ""
         var style: String = ""
+        /// Schema 3: each choice question's pick (its key to the choice's
+        /// id); a question you didn't touch is its first choice.
+        var choices: [String: String] = [:]
         /// On by default: the project gets its own GitHub repo too. Off, it
         /// stays on this Mac.
         var backUpToGitHub: Bool = true
@@ -71,7 +74,7 @@ enum StartProject {
         store.save()
         // The bot says hello in its own words, then offers its first run,
         // written from your answers, behind Approve.
-        let first = playbook.firstRunTask(name: name, purpose: answers.purpose, feel: answers.style)
+        let first = playbook.firstRunTask(name: name, purpose: answers.purpose, feel: answers.style, choices: answers.choices)
         store.append(.assistant, BotGreeting.started(name: name, hasFirstRun: first != nil),
                      to: store.conversation(for: .bot(bot.id)))
         let run = first.map { store.proposeRun(task: $0, crew: playbook.crew.first ?? .coder, on: bot) }
@@ -87,6 +90,10 @@ enum StartProject {
         let style = answers.style.trimmingCharacters(in: .whitespacesAndNewlines)
         if !purpose.isEmpty { parts.append("It's for: \(purpose)") }
         if !style.isEmpty { parts.append("How it should feel: \(style)") }
+        for choice in playbook.choices {
+            let id = answers.choices[choice.key] ?? choice.options.first?.id
+            if let option = choice.options.first(where: { $0.id == id }) { parts.append("\(choice.label) \(option.title) (\(option.id))") }
+        }
         return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }

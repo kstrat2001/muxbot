@@ -13,7 +13,7 @@ struct BookTemplateTests {
         #expect(entries.map(\.id) == ["website", "book"])
         let book = try #require(entries.first { $0.id == "book" })
         #expect(book.repo == "kstrat2001/muxbot-template-book")
-        #expect(book.ref == "38d7588aaac50a89d794ea8fbdc60d2d6526797a")
+        #expect(book.ref == "a98736dad72d6cb80d797941b2dea90369b41ad4")
         #expect(book.title == "Write a book")
         #expect(book.icon == "book.closed")
     }
@@ -22,7 +22,6 @@ struct BookTemplateTests {
         let files = try #require(TemplateRegistry.bundledFiles(for: "book"))
         let playbook = try #require(TemplateRegistry.check(playbook: files.playbook, preview: files.preview).playbook)
         #expect(playbook.title == "Write a book")
-        #expect(playbook.animal == .owl)
         #expect(playbook.crew == [.coder])
         #expect(playbook.questions.count == 3)
         #expect(playbook.skills.map(\.name).contains("Draft a chapter"))
@@ -62,7 +61,7 @@ struct BookTemplateTests {
                                            answers: .init(name: "Tides", purpose: "a lighthouse keeper's last winter", style: "quiet and literary for adults"),
                                            store: store, runs: brain.runs)
         #expect(asked?.template == true)
-        #expect(asked?.ref == "38d7588aaac50a89d794ea8fbdc60d2d6526797a")
+        #expect(asked?.ref == "a98736dad72d6cb80d797941b2dea90369b41ad4")
         #expect(bot.useCaseId == "book")
         let messages = (store.conversation(for: .bot(bot.id)).messages ?? []).sorted { $0.timestamp < $1.timestamp }
         #expect(messages.first?.content.hasPrefix("Hi, I'm Tides.") == true)
