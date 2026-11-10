@@ -215,3 +215,56 @@ final class ClientStub: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {}
 }
+
+/// 5: a damaged local-bots.json costs as little as it can. Each test uses
+/// its own folder, never `.shared`.
+struct ReviewFindingsLocalStateTests {
+    private func tempFolder() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("local-bots-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    @Test func oneBadEntryCostsOnlyItself() throws {
+        let dir = try tempFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("local-bots.json")
+        let good = UUID(), bad = UUID()
+        // The bad entry's workspace name is a number, not a string.
+        try Data(#"{"\#(good.uuidString)":{"workspaceName":"site-1","localRuns":["r1"]},"\#(bad.uuidString)":{"workspaceName":7}}"#.utf8).write(to: file)
+        let local = LocalBotState(fileURL: file)
+        #expect(local[good]?.workspaceName == "site-1")
+        #expect(local[good]?.localRuns == ["r1"])
+        #expect(local[bad] == nil)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names == ["local-bots.json"], "a readable file stays where it is: \(names)")
+    }
+
+    @Test func anUnreadableFileIsMovedAsideNeverOverwritten() throws {
+        let dir = try tempFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("local-bots.json")
+        let damaged = Data("{ not json".utf8)
+        try damaged.write(to: file)
+        let local = LocalBotState(fileURL: file)
+        let id = UUID()
+        #expect(local[id] == nil)
+        // The next change saves a new file; the damaged one is still there.
+        local.update(id) { $0.workspaceName = "site-1" }
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        #expect(names.count == 2, "\(names)")
+        let aside = try #require(names.first { $0.hasPrefix("local-bots.json.unreadable-") })
+        let kept = try Data(contentsOf: dir.appendingPathComponent(aside))
+        #expect(kept == damaged)
+        #expect(LocalBotState(fileURL: file)[id]?.workspaceName == "site-1")
+    }
+
+    @Test func aMissingFileStartsEmptyAndMovesNothing() throws {
+        let dir = try tempFolder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let local = LocalBotState(fileURL: dir.appendingPathComponent("local-bots.json"))
+        #expect(local[UUID()] == nil)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names.isEmpty)
+    }
+}
