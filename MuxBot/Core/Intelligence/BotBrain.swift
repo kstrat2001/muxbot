@@ -116,18 +116,27 @@ enum FallbackBrain {
             let draft = draft(from: text)
             return BotTurn(reply: "I can set up \(draft.name). Approve to add it.", action: .createBot(draft))
         }
-        if let named = others.first(where: { lower.contains($0.name.lowercased()) }) {
+        // A bot named as a whole word; in a bot's own thread, only when the
+        // message is addressed to it ("ask site to…", "site: …", "@site").
+        if let named = others.first(where: { addresses(lower, to: $0.name.lowercased(), inBotThread: speaker != nil) }) {
             return handOff(text, to: named)
         }
         if speaker != nil, isVisualReport(lower) {
             return visualReportTurn(text)
+        }
+        // A request with work in it goes to the crew before any path in it
+        // is taken as a link to keep.
+        if speaker != nil, let crew = crew(for: lower), !GuideRoute.isQuestion(lower) {
+            return BotTurn(reply: "I'll send this to the \(crew.name) crew. Approve to dispatch.",
+                           action: .dispatch(crew: crew, task: text))
         }
         if let speaker, let value = resourceValue(in: text) {
             let kind = ResourceKind.guess(for: value)
             return BotTurn(reply: "Want me to keep that as a \(kind.label.lowercased()) for \(speaker.name)?",
                            action: .addResource(kind: kind, value: value))
         }
-        if tokens(lower).contains(where: { word in fleetWords.contains { word.hasPrefix($0) } }) {
+        // The fleet answer only for a question about it.
+        if GuideRoute.isQuestion(lower), tokens(lower).contains(where: { word in fleetWords.contains { word.hasPrefix($0) } }) {
             return BotTurn(reply: fleetAnswer, action: nil)
         }
         guard speaker != nil else {
@@ -209,6 +218,17 @@ enum FallbackBrain {
         text.split(whereSeparator: \.isWhitespace)
             .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)(\"'")) }
             .first { $0.hasPrefix("http://") || $0.hasPrefix("https://") || $0.hasPrefix("~/") || ($0.hasPrefix("/") && $0.count > 1) }
+    }
+
+    /// Whether `lower` names the bot `name` as a whole word, and, in another
+    /// bot's thread, is addressed to it.
+    static func addresses(_ lower: String, to name: String, inBotThread: Bool) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        guard lower.range(of: "(^|[^a-z0-9-])\(escaped)($|[^a-z0-9-])", options: .regularExpression) != nil else { return false }
+        guard inBotThread else { return true }
+        let cues = ["ask \(name)", "tell \(name)", "hand it to \(name)", "hand this to \(name)", "give it to \(name)",
+                    "@\(name)", "\(name):", "\(name),", "for \(name) to", "\(name) should"]
+        return cues.contains { lower.contains($0) }
     }
 
     /// darkmux doesn't report its machines to apps yet: say so.
@@ -313,9 +333,18 @@ enum GeneratedCrew {
 /// the thread; any proposed action waits on an Approve / Cancel card.
 @MainActor @Observable
 final class BotBrain {
-    var isThinking = false
-    /// Shown in the bar when the keyword fallback answered.
-    var fallbackNote: String?
+    /// Threads whose bot is answering right now ("thinking" shows there only).
+    private(set) var thinking: Set<ChatContext> = []
+    func beginThinking(_ context: ChatContext) { thinking.insert(context) }
+    func endThinking(_ context: ChatContext) { thinking.remove(context) }
+    func isThinking(in context: ChatContext) -> Bool { thinking.contains(context) }
+    /// The keyword-fallback note, by thread.
+    var fallbackNotes: [ChatContext: String] = [:]
+    /// Stopped or failed runs already offered as a follow-up (offered once).
+    var followUpOffered: Set<UUID> = []
+    /// The Tweak a message started on its own (bot → run and message), so a
+    /// correction of that message can stop it.
+    var autoTweaks: [UUID: (run: UUID, message: UUID)] = [:]
     /// A dispatch waiting on one answer from you, by bot: "What's still
     /// wrong?" about a PR, or "What should change?" about a measured issue.
     /// Your next message answers it; anything else drops it.
@@ -491,6 +520,12 @@ final class BotBrain {
             for run in (context.botId.flatMap(store.bot(id:))?.runs ?? []) where run.phase == .proposed && run.createdAt >= previous.timestamp {
                 store.apply(.cancel, to: run)
             }
+            // Stop a Tweak the misread started (the result before it stays).
+            if let botId = context.botId, let tweak = autoTweaks[botId], tweak.message == previous.id,
+               let run = store.run(id: tweak.run), run.phase == .running {
+                autoTweaks[botId] = nil
+                await runs.stop(run, store: store)
+            }
             await reinterpret(previous, as: corrected, store: store)
             return
         }
@@ -535,15 +570,15 @@ final class BotBrain {
            intent == nil || intent == .ask, let route = GuideRoute.route(text),
            // A question about one of your bots is the lead bot's, not the help's.
            route != .help || !bots.contains(where: { text.lowercased().contains($0.name.lowercased()) }) {
-            isThinking = true
-            defer { isThinking = false }
+            beginThinking(context)
+            defer { endThinking(context) }
             await guide.respond(route, to: text, store: store, brain: self)
             return
         }
 
-        isThinking = true
-        defer { isThinking = false }
-        fallbackNote = nil
+        beginThinking(context)
+        defer { endThinking(context) }
+        fallbackNotes[context] = nil
 
         // A bot reads its own repos; the lead bot reads every bot's.
         let repos = (speaker.map { [$0] } ?? bots).flatMap { bot in
@@ -563,8 +598,10 @@ final class BotBrain {
             return
         }
         // The answer to the bot's one question becomes the run it was about.
-        if let bot, let pending = pendingAnswers.removeValue(forKey: bot.id), explicit == nil || explicit == .fix,
-           Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()) {
+        if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix,
+           !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)),
+           Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()),
+           let pending = pendingAnswers.removeValue(forKey: bot.id) {
             message.intentRaw = Intent.fix.rawValue
             store.append(.assistant, "I'll send this to the \(pending.crew.name) crew. Approve to dispatch.", to: conversation)
             let run = store.proposeRun(task: pending.task, crew: pending.crew, on: bot, brief: pending.brief(text + target))
@@ -611,13 +648,20 @@ final class BotBrain {
            !WorkStatus.isWorkQuestion(text.lowercased()),
            let last = (bot.runs ?? []).max(by: { $0.createdAt < $1.createdAt }),
            [.result, .failed, .canceled].contains(last.phase),
+           // Only work that changes files continues (a review or research
+           // result isn't edited by your next message).
+           last.crew.changesFiles,
+           // A stopped or failed run is offered as a follow-up once.
+           last.phase == .result || !followUpOffered.contains(last.id),
            // A proposal canceled before it ever ran has nothing to follow up.
            last.startedAt != nil,
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
             if last.phase == .result {
                 // Your reply after a result changes that same run (a Tweak).
+                autoTweaks[bot.id] = (last.id, message.id)
                 await rerun(last, change: text, store: store)
             } else {
+                followUpOffered.insert(last.id)
                 // A stopped or failed run runs again only after Approve.
                 store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Run it again with that change?", to: conversation)
                 store.proposeAction(.tweak(runId: last.id, change: text), in: context)
@@ -727,7 +771,7 @@ final class BotBrain {
             toldFallback.insert(context)
             store.append(.system, "The on-device model isn't working here (\(reason)). I'm using simple keyword matching: I can list issues and send work to the crew, but I can't hold a real conversation.", to: conversation)
         }
-        fallbackNote = !useOnDeviceModel || turn != nil ? nil
+        fallbackNotes[context] = !useOnDeviceModel || turn != nil ? nil
             : unavailableReason != nil ? "Keyword matching: the on-device model isn't available."
             : turnNote.map { "\($0) I used keyword matching for this message." }
             ?? "The on-device model's answer wasn't usable, so I used keyword matching."
@@ -789,6 +833,10 @@ final class BotBrain {
     /// `nextModel`: the done-when wasn't met, so it runs on the next model
     /// the app may use; otherwise it keeps the model it ran on.
     func rerun(_ run: BotRun, change: String, store: BotStore, nextModel: Bool = false, model: String? = nil) async {
+        // One at a time: a second tap while this one plans would skip a model.
+        guard !runs.rerunning.contains(run.id) else { return }
+        runs.rerunning.insert(run.id)
+        defer { runs.rerunning.remove(run.id) }
         let plan = await rerunPlan(for: run, change: change)
         if run.phase == .result {
             runs.runChecks[run.id] = nil
@@ -796,7 +844,9 @@ final class BotBrain {
             if nextModel { await runs.chooseProfile(for: run, next: true) }
             if let model { runs.override(run, with: model) }
             runs.tweak(change, run: run, store: store, echo: false, message: plan?.brief)
-        } else if let bot = run.bot {
+        } else if [.failed, .canceled].contains(run.phase), let bot = run.bot {
+            // Only a stopped or failed run runs again as a new one; one that's
+            // already running (a second tap) is left alone.
             let again = store.proposeRun(task: run.task, crew: run.crew, on: bot,
                                          brief: plan?.brief ?? RunCoordinator.tweakMessage(for: run, change: change))
             runs.checkSpecs[again.id] = plan?.check
@@ -1043,6 +1093,12 @@ final class BotBrain {
             return
         case let .addResource(kind, value):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
+            // Folders come only from Add folder (a bookmark on this Mac): a
+            // typed path would be saved in synced data.
+            guard kind != .folder else {
+                store.append(.system, String(localized: "Folders are added with Add folder in the bot's info, so Mux Bot can open them."), to: store.conversation(for: chat))
+                return
+            }
             store.addResource(kind, value, to: bot)
             note = "Added \(kind.label.lowercased()): \(value)"
         case let .setUpPreview(setup):

@@ -63,11 +63,16 @@ struct NoChangeResultTests {
         #expect(brain.runs.decisionErrors[run.id] == "Can't do that yet: this app isn't paired with darkmux.")
     }
 
+    /// Sweep batch 3: only a later run that ran replaces a result, and a
+    /// result that still needs you (a question) never collapses.
     @Test func aResultALaterRunReplacedCollapses() {
-        let (store, bot, run, _) = finished(changed: [])
+        let (store, bot, run, _) = finished(changed: ["a.txt +1 −0"])
         #expect(!RunCardState.isReplaced(run))
         let next = store.proposeRun(task: "Fix #10 again", crew: .coder, on: bot)
         next.createdAt = run.createdAt.addingTimeInterval(5)
+        #expect(!RunCardState.isReplaced(run), "still waiting for Approve")
+        store.apply(.approve, to: next)
+        next.startedAt = Date()
         #expect(RunCardState.isReplaced(run))
     }
 

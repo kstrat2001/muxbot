@@ -60,6 +60,10 @@ enum RunResultText {
             .joined(separator: "\n")
     }
 
+    /// darkmux couldn't read a run's changes (`changes_error`): never
+    /// "changed nothing".
+    static let changesUnreadable = String(localized: "darkmux couldn't read what changed")
+
     /// darkmux answered 404 for a run it was running: it restarted, or it
     /// ended long ago. Never "Stopped.": nobody stopped it.
     static let lostTrack = String(localized: "darkmux restarted and lost track of this run. Check the project before running it again.")

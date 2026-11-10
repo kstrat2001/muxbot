@@ -68,6 +68,16 @@
         }
       }
     },
+    "%@'s changes weren't saved: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@'s changes weren't saved: %2$@"
+          }
+        }
+      }
+    },
     "%@'s dev server reloads changes" : {
 
     },
@@ -603,6 +613,9 @@
 
     },
     "Fixes run on darkmux after you approve." : {
+
+    },
+    "Folders are added with Add folder in the bot's info, so Mux Bot can open them." : {
 
     },
     "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it." : {
@@ -1443,6 +1456,9 @@
     "Stop tweaking (Esc)" : {
 
     },
+    "Stopped the change. The result before it is unchanged." : {
+
+    },
     "Tap an answer, or reply in your own words." : {
 
     },
@@ -1473,10 +1489,22 @@
     "The bot's skills come from this project's PLAYBOOK.md." : {
 
     },
+    "The change didn't finish: %@ The result before it is unchanged." : {
+
+    },
+    "The change didn't start on darkmux (%@). The result before it is unchanged; reply to try again." : {
+
+    },
+    "The change was stopped. The result before it is unchanged." : {
+
+    },
     "The checkpoint didn't happen: %@ The changes are in the work copy, uncommitted." : {
 
     },
     "The code expired. Cancel and pair again." : {
+
+    },
+    "The latest change was undone, but not the earlier one. " : {
 
     },
     "The messages go; runs stay in Activity." : {
@@ -1519,6 +1547,9 @@
 
     },
     "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them." : {
+
+    },
+    "The result before the change is unchanged." : {
 
     },
     "The template can't be copied: %@" : {
@@ -1690,6 +1721,9 @@
         }
       }
     },
+    "Waiting for a free slot: darkmux runs two of this app's runs at a time. It starts when one finishes." : {
+
+    },
     "Waiting for you to approve… code expires in %lld:%@" : {
       "localizations" : {
         "en" : {
@@ -1824,6 +1858,12 @@
 
     },
     "darkmux couldn't free the model for this run." : {
+
+    },
+    "darkmux couldn't get the latest from GitHub, so this work copy may be behind it." : {
+
+    },
+    "darkmux couldn't read what changed" : {
 
     },
     "darkmux didn't list its models: %@" : {
