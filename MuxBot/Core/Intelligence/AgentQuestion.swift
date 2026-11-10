@@ -53,8 +53,14 @@ enum RunCardState {
     @MainActor
     static func isReplaced(_ run: BotRun) -> Bool {
         guard run.phase == .result, !run.needsYou else { return false }
-        return (run.bot?.runs ?? []).contains {
-            $0.id != run.id && $0.createdAt > run.createdAt && $0.startedAt != nil && $0.phase != .canceled
+        // Only a later run that got as far as a result (or changed files)
+        // replaces it; one that failed, was stopped or was undone never
+        // hides this result or its Undo.
+        let reachedResult: [RunPhase] = [.result, .kept, .done, .prOpened]
+        return (run.bot?.runs ?? []).contains { later in
+            later.id != run.id && later.createdAt > run.createdAt
+                && ![RunPhase.failed, .canceled, .discarded].contains(later.phase)
+                && (reachedResult.contains(later.phase) || !later.changedFiles.isEmpty)
         }
     }
 }

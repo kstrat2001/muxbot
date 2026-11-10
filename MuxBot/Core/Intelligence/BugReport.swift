@@ -72,17 +72,16 @@ extension BugReport {
     /// screen and the page fits at every width it measured.
     static let pageFitsText = "The page itself fits at every width I checked. If the preview looks cut off, it may be the preview panel."
 
-    /// A complaint about the page running past the screen's edge.
-    // Red-first stub.
-    static func isPageOverflowComplaint(_ text: String) -> Bool { isOverflowComplaint(text) }
-
-    static func isOverflowComplaint(_ text: String) -> Bool {
+    /// A complaint about the page itself running off the side ("off the
+    /// screen", "scrolls sideways", "wider than the screen"); "cut off" or
+    /// "clipped" can be any element, so they're measured into a bug.
+    static func isPageOverflowComplaint(_ text: String) -> Bool {
         let lower = text.lowercased()
-        let phrases = ["off the screen", "off screen", "off-screen", "offscreen", "cut off", "cut-off", "overflow",
-                       "sideways", "horizontal scroll", "scrolls horizontally", "wider than", "clipped", "off the edge",
-                       "past the edge", "off the side", "spills"]
+        let phrases = ["off the screen", "off screen", "off-screen", "offscreen", "sideways", "horizontal scroll",
+                       "scrolls horizontally", "wider than", "off the side", "off the edge", "past the edge", "beyond the edge"]
         return phrases.contains { lower.contains($0) }
     }
+
 }
 
 struct BugDraft: Sendable, Equatable, Codable {

@@ -61,6 +61,8 @@ struct RunLoopSweepTests {
         let ran = store.proposeRun(task: "later", crew: .coder, on: bot)
         store.apply(.approve, to: ran)
         ran.startedAt = Date()
+        // Sweep 2 #1: replaced once the later run has a result.
+        store.apply(.finish(summary: "later"), to: ran)
         #expect(RunCardState.isReplaced(result))
     }
 

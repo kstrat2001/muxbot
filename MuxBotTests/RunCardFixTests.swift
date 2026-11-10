@@ -73,6 +73,10 @@ struct NoChangeResultTests {
         #expect(!RunCardState.isReplaced(run), "still waiting for Approve")
         store.apply(.approve, to: next)
         next.startedAt = Date()
+        // Sweep 2 #1: only once it reaches a result (a run that fails or is
+        // stopped never hides this one).
+        #expect(!RunCardState.isReplaced(run), "still running")
+        store.apply(.finish(summary: "again"), to: next)
         #expect(RunCardState.isReplaced(run))
     }
 

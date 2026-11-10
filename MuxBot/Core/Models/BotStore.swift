@@ -71,9 +71,9 @@ struct BotStore {
     /// it runs only after Approve there (never a bot left "Working" with
     /// nothing running).
     @discardableResult
-    func handOff(task title: String, from sender: String, to role: Bot) -> BotRun {
+    func handOff(task title: String, from sender: String, to role: Bot, brief: String? = nil) -> BotRun {
         append(.system, "From \(sender): \(title)", to: conversation(for: .bot(role.id)))
-        return proposeRun(task: title, crew: .coder, on: role)
+        return proposeRun(task: title, crew: .coder, on: role, brief: brief)
     }
 
     /// Saves an action (hand-off, new bot, new resource) as an Approve card
@@ -213,6 +213,10 @@ struct BotStore {
     /// latest card, so it can still be decided here.
     func clearConversation(_ chat: ChatContext) {
         let messages = conversation(for: chat).messages ?? []
+        // Runs already in a PR stay shipped once its card is gone.
+        if let botId = chat.botId, let lastPR = messages.filter({ $0.kind == .prCard }).map(\.timestamp).max() {
+            LocalBotState.shared.update(botId) { $0.shippedThrough = max($0.shippedThrough ?? .distantPast, lastPR) }
+        }
         var keep = Set<UUID>()
         let byRun = Dictionary(grouping: messages.filter { $0.runId != nil }, by: { $0.runId! })
         for (runId, cards) in byRun {
@@ -332,11 +336,16 @@ struct BotStore {
 extension BotStore {
     /// Fix it now: one Coder dispatch card per bug, remembered on the bug's
     /// message (`runId`), so a second press finds it instead of another card.
-    // Red-first stub.
-    func sentRun(for message: ChatMessage) -> BotRun? { message.runId.flatMap { run(id: $0) } }
+    /// The run a bug card sent to Coder, unless you canceled it (or it
+    /// failed before darkmux had it): then the card offers Fix it now again.
+    func sentRun(for message: ChatMessage) -> BotRun? {
+        guard let id = message.runId, let run = run(id: id) else { return nil }
+        if run.phase == .canceled || (run.phase == .failed && run.darkmuxWorkId == nil) { return nil }
+        return run
+    }
 
     func fixBug(_ message: ChatMessage, draft: BugDraft, bot: Bot) -> (run: BotRun, isNew: Bool) {
-        if let id = message.runId, let existing = run(id: id) { return (existing, false) }
+        if let existing = sentRun(for: message) { return (existing, false) }
         let run = proposeRun(task: "Fix: \(draft.title)", crew: .coder, on: bot, brief: "Fix this bug:\n\n" + draft.body)
         message.runId = run.id
         save()

@@ -57,8 +57,21 @@ enum Intent: String, Codable, CaseIterable, Sendable {
                 if let r = lower.range(of: pattern, options: [.regularExpression, .backwards]), best == nil || r.lowerBound > best!.1 { best = (intent, r.lowerBound) }
             }
         }
-        return best?.0
+        guard let found = best?.0 else { return nil }
+        // Only when the message is just the correction: "actually, also fix
+        // the footer" is a new request.
+        let cueWords = Set(cues.flatMap(\.1).flatMap { $0.split(separator: " ").map(String.init) })
+        let words = lower.split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "’" }).map { String($0).replacingOccurrences(of: "’", with: "'") }
+        let left = words.dropFirst().filter { !cueWords.contains($0) && !correctionFiller.contains($0) }
+        return left.isEmpty ? found : nil
     }
+
+    /// Words a correction is made of besides its cue.
+    private static let correctionFiller: Set<String> = [
+        "it", "it's", "its", "is", "was", "a", "an", "the", "just", "only", "i", "i'm", "meant", "mean", "wanted", "want",
+        "please", "that", "that's", "this", "not", "no", "nope", "actually", "really", "should", "be", "to", "as", "so",
+        "ok", "okay", "oh", "sorry", "like", "of", "for", "me", "my", "you", "please", "instead", "rather", "wasn't", "isn't",
+    ]
 
     /// "#8", ".../issues/8", "PR 9" or "pull request 9" → the number.
     static func issueNumber(in text: String) -> Int? {
@@ -126,6 +139,8 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         if issueNumber(in: text) != nil, lower.contains("fix") { return .fix }
         if FallbackBrain.isIssueQuestion(lower) { return .issues }
         if hasElement { return aboutElement(lower) }
+        // "Can you change the header color?" asks for a change, not an answer.
+        if isPoliteChangeRequest(lower) { return .fix }
         if FallbackBrain.isVisualReport(lower) { return .bug }
         if lower.hasSuffix("?") { return .ask }
         return nil
@@ -147,6 +162,16 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         if changeVerbs.contains(verb) { return .fix }
         if GuideRoute.isQuestion(text) { return problemWords.contains { text.contains($0) } ? .bug : .ask }
         return .bug
+    }
+
+    /// "can/could/would/will you <change verb> …".
+    static func isPoliteChangeRequest(_ lower: String) -> Bool {
+        let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let polite = ["can you ", "could you ", "would you ", "will you "].first(where: text.hasPrefix) else { return false }
+        var request = String(text.dropFirst(polite.count))
+        if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }
+        let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        return changeVerbs.contains(verb)
     }
 
     /// A message about a picked element that starts with one of these asks

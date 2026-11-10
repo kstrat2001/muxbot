@@ -219,7 +219,7 @@ final class RunCoordinator {
             } catch let error as DarkmuxClient.ClientError where error.status == 404 {
                 // darkmux no longer knows this run (restarted, or it ended long
                 // ago). Nobody stopped it: say what happened.
-                if tweakBases[run.id] != nil {
+                if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: RunResultText.lostTrack + " " + String(localized: "The result before the change is unchanged."))
                 } else {
                     store.apply(.fail(reason: RunResultText.lostTrack, details: nil), to: run)
@@ -234,7 +234,7 @@ final class RunCoordinator {
             switch status.status {
             case "running", "cancelling": continue
             case "cancelled":
-                if tweakBases[run.id] != nil {
+                if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: String(localized: "The change was stopped. The result before it is unchanged."))
                 } else {
                     store.apply(.stop, to: run)
@@ -247,7 +247,7 @@ final class RunCoordinator {
                 // An error is a failure, worded from darkmux's code; only
                 // "cancelled" (above) is a stop.
                 let why = RunResultText.failure(code: status.code, error: status.error ?? "", reason: status.reason)
-                if tweakBases[run.id] != nil {
+                if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: String(localized: "The change didn't finish: \(why) The result before it is unchanged."))
                     return
                 }
@@ -270,7 +270,7 @@ final class RunCoordinator {
         let newPaths = Set(now.map(path))
         run.changedFiles = run.changedFiles.filter { !newPaths.contains(path($0)) } + now
         if let diff = status.changes?.diff { run.diff = diff }
-        tweakBases[run.id] = nil
+        setTweakBase(run, nil)
         // darkmux committed the changes to the work copy's branch. A tweak
         // that ended with nothing new to commit keeps the commit it was built
         // on (Open PR needs it); a commit error replaces any older one.
@@ -396,7 +396,8 @@ final class RunCoordinator {
             do {
                 let changes = try await changes(for: workspace)
                 guard !changes.files.isEmpty else { return }
-                let pusher = prPusher ?? { try await GitHubPR(token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) }
+                let session = githubSession ?? .shared
+                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) }
                 _ = try await pushMovingOn(bot, changes: changes, store: store) {
                     try await pusher(changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, $0)
                 }
@@ -463,8 +464,14 @@ final class RunCoordinator {
         // and this Mac's darkmux never had them.
         for run in runs where run.phase == .running && run.startedHere {
             guard let workId = run.darkmuxWorkId else {
-                // Approved, but the app quit before darkmux had it.
-                if !starting.contains(run.id) { store.apply(.fail(reason: RunResultText.quitBeforeStart, details: nil), to: run) }
+                guard !starting.contains(run.id) else { continue }
+                // A Tweak darkmux never had: back to the result it continued.
+                if tweakBase(run) != nil {
+                    restoreTweak(run, store: store, saying: Self.tweakQuitBeforeStart)
+                } else {
+                    // Approved, but the app quit before darkmux had it.
+                    store.apply(.fail(reason: RunResultText.quitBeforeStart, details: nil), to: run)
+                }
                 continue
             }
             Task { await follow(run, workId: workId, store: store) }
@@ -496,8 +503,11 @@ final class RunCoordinator {
                 return
             }
         }
+        // Not on darkmux yet (waiting for a slot, or being handed over):
+        // nothing to cancel there, and it never starts later.
+        if run.darkmuxWorkId == nil { queued.removeAll { $0.run.id == run.id } }
         // A Tweak stops back to the result it continued.
-        if tweakBases[run.id] != nil {
+        if tweakBase(run) != nil {
             restoreTweak(run, store: store, saying: String(localized: "Stopped the change. The result before it is unchanged."))
             return
         }
@@ -1068,7 +1078,7 @@ final class RunCoordinator {
 
     /// A result as it was before a Tweak: put back when the Tweak doesn't
     /// start, fails or is stopped, so its Undo and Open PR are never lost.
-    struct TweakBase {
+    struct TweakBase: Codable, Equatable, Sendable {
         var summary: String
         var changedFiles: [String]
         var diff: String?
@@ -1076,12 +1086,30 @@ final class RunCoordinator {
         var keptBranch: String?
         var details: String?
         var finishedAt: Date?
+        /// The turn the Tweak continues: the run's darkmux work id until the
+        /// Tweak's own is accepted.
+        var workId: String? = nil
     }
-    private var tweakBases: [UUID: TweakBase] = [:]
+
+    /// Kept on this Mac (`LocalBotState`), so it survives a relaunch.
+    func tweakBase(_ run: BotRun) -> TweakBase? {
+        run.bot.flatMap { LocalBotState.shared[$0.id]?.tweakBases?[run.id.uuidString] }
+    }
+
+    private func setTweakBase(_ run: BotRun, _ base: TweakBase?) {
+        guard let bot = run.bot else { return }
+        LocalBotState.shared.update(bot.id) { entry in
+            var bases = entry.tweakBases ?? [:]
+            bases[run.id.uuidString] = base
+            entry.tweakBases = bases.isEmpty ? nil : bases
+        }
+    }
 
     /// Puts a Tweak's run back to the result it continued, saying why.
     private func restoreTweak(_ run: BotRun, store: BotStore, saying line: String) {
-        guard let base = tweakBases.removeValue(forKey: run.id) else { return }
+        guard let base = tweakBase(run) else { return }
+        setTweakBase(run, nil)
+        if run.darkmuxWorkId == nil { run.darkmuxWorkId = base.workId }
         run.summary = base.summary
         run.changedFiles = base.changedFiles
         run.diff = base.diff
@@ -1097,6 +1125,7 @@ final class RunCoordinator {
         store.save()
     }
 
+    static let tweakQuitBeforeStart = String(localized: "The change didn't start before Mux Bot quit. The result before it is unchanged; reply to try again.")
     static let stopUnpaired = String(localized: "Pair Mux Bot with darkmux again to stop it.")
     static let stopElsewhere = String(localized: "Stop it from the Mac it runs on.")
 
@@ -1247,7 +1276,7 @@ final class RunCoordinator {
                 store.append(.system, Self.waitingForSlot, to: thread)
             } catch {
                 starting.remove(run.id)
-                if tweakBases[run.id] != nil {
+                if tweakBase(run) != nil {
                     restoreTweak(run, store: store, saying: String(localized: "The change didn't start on darkmux (\(DarkmuxPlain.sentence(error))) The result before it is unchanged; reply to try again."))
                 } else {
                     store.apply(Self.startFailure(error), to: run)
@@ -1451,10 +1480,15 @@ final class RunCoordinator {
         let base = TweakBase(summary: run.summary, changedFiles: run.changedFiles, diff: run.diff, keptCommit: run.keptCommit,
                              keptBranch: run.keptBranch, details: run.details, finishedAt: run.finishedAt)
         guard store.apply(.tweak, to: run) else { return }
-        tweakBases[run.id] = base
-        runChecks[run.id] = nil   // the last done-when result was about the earlier version
         // darkmux keeps a Tweak's changes together with the run it continues.
         let continues = run.darkmuxWorkId
+        var kept = base
+        kept.workId = continues
+        setTweakBase(run, kept)
+        // Until darkmux accepts the Tweak the run has no work id of its own:
+        // the earlier turn's is never followed (or stopped) as the Tweak's.
+        run.darkmuxWorkId = nil
+        runChecks[run.id] = nil   // the last done-when result was about the earlier version
         _ = startRealRun(run, message: composed, store: store, continues: continues)
     }
 
@@ -1463,7 +1497,7 @@ final class RunCoordinator {
 
     // MARK: Pull requests
 
-    // Red-first stub.
+    /// GitHub's session for pushes and PRs (tests); else `.shared`.
     var githubSession: URLSession?
     /// Bots with a PR being opened (their button waits).
     var openingPR: Set<UUID> = []
@@ -1519,7 +1553,8 @@ final class RunCoordinator {
     private func openPR(_ bot: Bot, workspace: String, repo: String, token: String, darkmux: String, connection: FleetConnection,
                         store: BotStore, github: GitHubAuth, thread: ChatConversation) async {
         do {
-            let changes = try await connection.client.changes(token: darkmux, workspace: workspace)
+            let readAt = Date()
+            let changes = try await changes(for: workspace)
             guard !changes.files.isEmpty else {
                 store.append(.system, "Nothing to open a PR with: \(changes.branch) has no changes against \(changes.baseBranch).", to: thread); return
             }
@@ -1527,10 +1562,12 @@ final class RunCoordinator {
             let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
             let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
             let pr = try await pushMovingOn(bot, changes: changes, store: store) {
-                try await GitHubPR(token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
+                try await GitHubPR(session: githubSession ?? .shared, token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
                                                       extraFiles: approved, start: $0)
             }
             store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
+            // Its runs are in this PR now, even after the thread is cleared.
+            LocalBotState.shared.update(bot.id) { $0.shippedThrough = max($0.shippedThrough ?? .distantPast, readAt) }
             for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
             for (path, why) in pr.skipped.sorted(by: { $0.key < $1.key }) {
                 switch why {
