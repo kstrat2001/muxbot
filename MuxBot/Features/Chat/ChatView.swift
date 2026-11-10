@@ -9,6 +9,7 @@ struct ChatView: View {
     var isThinking = false
 
     @Environment(AppRouter.self) private var router
+    @Environment(BotBrain.self) private var brain
     @Query private var bots: [Bot]
 
     /// The thread's bot's first GitHub repo, for linking "#8".
@@ -43,6 +44,9 @@ struct ChatView: View {
                         Group {
                             if message.kind == .text {
                                 ChatBubbleView(role: message.role, content: message.content, repo: repo)
+                                if let details = brain.runs.messageDetails[message.id] {
+                                    TechnicalDetails(text: details).chatColumn(alignment: .leading)
+                                }
                             } else if message.kind == .bugCard {
                                 BugCardView(message: message)
                             } else if message.kind == .actionCard {

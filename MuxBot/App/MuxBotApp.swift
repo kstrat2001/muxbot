@@ -75,7 +75,10 @@ struct MuxBotApp: App {
                     brain.connection = connection
                     brain.notifier = notifications
                     brain.runs.githubToken = { [github] in github.token }
-                    GitHubSession.refresh = { [github] in await github.refresh() }
+                    GitHubSession.refresh = { [github] in await github.renewal() }
+                    // A sign-in kept from before is checked (renewed if it
+                    // expired, else you're told to sign in again).
+                    if github.token != nil { await github.loadUser() }
                     brain.runs.adoptLegacyRuns(store: BotStore(context: container.mainContext))
                     brain.runs.resumeFollowing(store: BotStore(context: container.mainContext))
                     #if os(macOS)

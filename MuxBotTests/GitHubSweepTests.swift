@@ -100,7 +100,7 @@ struct GitHubSweepTests {
 
     @Test func aWriteThatGets401RetriesWithTheRefreshedToken() async throws {
         GitHubStub.reset()
-        GitHubSession.refresh = { "fresh" }
+        GitHubSession.refresh = { .token("fresh") }
         defer { GitHubSession.refresh = nil }
         GitHubStub.on("GET /user", 401, #"{"message":"Bad credentials"}"#)
         GitHubStub.on("GET /user", 200, #"{"login":"kain"}"#)
@@ -134,7 +134,7 @@ struct GitHubSweepTests {
 
     @Test func a401ThatCantBeRenewedSaysTheSignInExpired() async {
         GitHubStub.reset()
-        GitHubSession.refresh = { nil }
+        GitHubSession.refresh = { .expired }
         defer { GitHubSession.refresh = nil }
         GitHubStub.on("GET /user", 401, #"{"message":"Bad credentials"}"#)
         do {
@@ -274,7 +274,10 @@ struct GitHubRunSweepTests {
         _ = try await PutOnGitHub.run(bot, isPublic: false, make: { makes.begin(); makes.end(); return made }, push: push, store: store, runs: runs)
         #expect(makes.count == 0, "no second repo")
         #expect(!PutOnGitHub.canResume(bot))
-        #expect(bot.githubStart?.commit == "work1", "mux/<bot> builds on the pushed work")
+        // Sweep 2 #3: the template's start stays the tree base; Put's commit
+        // is the parent a new mux/<bot> goes on.
+        #expect(bot.githubStart?.commit == "s1")
+        #expect(bot.githubStart?.parent == "work1", "mux/<bot> builds on the pushed work")
         #expect(runs.unshippedRuns(bot, store: store).isEmpty, "earlier work isn't offered again")
     }
 }

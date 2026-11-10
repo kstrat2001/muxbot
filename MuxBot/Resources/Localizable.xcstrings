@@ -525,6 +525,9 @@
         }
       }
     },
+    "Couldn't open the PR: %@" : {
+
+    },
     "Couldn't set up %@ on this Mac. Try again." : {
 
     },
@@ -777,10 +780,19 @@
     "I can show this once darkmux on your Mac has answered, so the setting goes to the right machine." : {
 
     },
+    "I couldn't find where this project starts on GitHub (its “Start from …” commit), so I didn't make it here. Try again in a moment." : {
+
+    },
+    "I couldn't read this project's PLAYBOOK.md from GitHub: %@" : {
+
+    },
     "I don't know that one: it isn't in Mux Bot's help. I can help you get set up, make your first bot, and answer questions about Mux Bot and darkmux." : {
 
     },
     "I don't know that one: it isn't in Mux Bot's help. I can help you start a project, get set up, and answer questions about Mux Bot and darkmux." : {
+
+    },
+    "I don't know where this project starts on GitHub on this Mac, so I can't open a pull request for it yet. Sign in with GitHub (Settings › GitHub), then try again." : {
 
     },
     "I made github.com/%@, but couldn't add the template's files to it (%@). It's empty: delete it on GitHub or try again with another name." : {
@@ -789,6 +801,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "I made github.com/%1$@, but couldn't add the template's files to it (%2$@). It's empty: delete it on GitHub or try again with another name."
+          }
+        }
+      }
+    },
+    "I made github.com/%@, but couldn't put the template's files in it yet (%@). Choose Finish putting it on GitHub to try again; it goes into the same repo." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "I made github.com/%1$@, but couldn't put the template's files in it yet (%2$@). Choose Finish putting it on GitHub to try again; it goes into the same repo."
           }
         }
       }
@@ -1527,6 +1549,9 @@
 
     },
     "Sign in with GitHub" : {
+
+    },
+    "Sign in with GitHub (Settings › GitHub) so I can find where this project starts on GitHub, then make the project again." : {
 
     },
     "Sign in with GitHub to back the project up there, or switch Back up to GitHub off." : {
@@ -2269,6 +2294,9 @@
       }
     },
     "iCloud sync" : {
+
+    },
+    "it can't be filled from here" : {
 
     },
     "it didn't start within %lld minutes" : {

@@ -285,8 +285,8 @@ struct PutOnGitHubTests {
         let moves = GitHubStub.seen.filter { $0.method == "PATCH" }.compactMap { $0.body?["sha"] as? String }
         #expect(moves == ["start1", "work1"], "main ends at the project's latest work")
         #expect(bot.repoSlugs == ["kain/tides"])
-        // Later backups go to mux/tides, built on the pushed work (sweep 6a
-        // #6: this used to be the template's commit, start1).
-        #expect(bot.githubStart == GitHubPR.Start(commit: "work1", branch: "main", head: "mux/tides"), "later backups go to mux/tides")
+        // Sweep 2 #3: the tree base stays the template's start; Put's work
+        // is the parent.
+        #expect(bot.githubStart == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides", parent: "work1"), "later backups go to mux/tides")
     }
 }

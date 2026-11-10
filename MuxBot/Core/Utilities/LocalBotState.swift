@@ -43,6 +43,9 @@ final class LocalBotState: @unchecked Sendable {
         /// Put it on GitHub made the repo but hasn't pushed the project's
         /// work into it yet: Put resumes into that repo, and backups wait.
         var putPending: Bool?
+        /// Put it on GitHub made this repo but couldn't fill it: Put again
+        /// fills it, never a second one.
+        var putMadeRepo: String?
         /// Runs finished before this are already on GitHub (Put it on GitHub
         /// pushed them to the default branch): Open PR doesn't offer them.
         var shippedThrough: Date?
@@ -53,7 +56,7 @@ final class LocalBotState: @unchecked Sendable {
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty
         }
     }
 
