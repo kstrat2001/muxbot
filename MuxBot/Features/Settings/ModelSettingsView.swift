@@ -35,7 +35,13 @@ struct ModelSettingsView: View {
             } header: {
                 Text("On \(brain.runs.machinePhrase)")
             } footer: {
-                Text("Each machine has its own models, so this is set per machine and shared with your other devices.").font(AppFont.caption())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Each machine has its own models, so this is set per machine and shared with your other devices.")
+                    if !brain.runs.fitOrder.isEmpty {
+                        Link("Listed by fit: how each model did on Macs like this one", destination: EvalsFit.site)
+                    }
+                }
+                .font(AppFont.caption())
             }
             Section {
                 ForEach(Array(settings.order.enumerated()), id: \.element) { index, name in
@@ -142,11 +148,13 @@ struct ModelSettingsView: View {
     private func row(_ name: String) -> ModelRow { ModelRow(name: name, listed: listed, listing: brain.runs.listing) }
 
     /// One per model and engine (darkmux lists a profile per lab setup).
-    private var names: [String] { ModelLabel.distinct(listed).map(\.name) }
+    private var names: [String] { brain.runs.modelChoices(listed).map(\.name) }
 
     private func load() async {
         brain.runs.listing = .loading
+        async let fit: Void = brain.runs.loadFitOrder()
         listed = await brain.runs.listedProfiles()
+        await fit
         // The listing names the machine; its settings are keyed by it.
         settings = brain.runs.currentModelSettings()
     }
