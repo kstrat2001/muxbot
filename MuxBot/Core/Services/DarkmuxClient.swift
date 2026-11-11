@@ -324,6 +324,29 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(EditResult.self, from: data)
     }
 
+    /// An image added to a workspace (darkmux #3545). `matches` only when a
+    /// reference to replace was sent; `workId` only when darkmux committed.
+    struct ImageResult: Decodable, Sendable, Equatable {
+        var matches: Int?
+        var path: String?
+        var url: String?
+        var workId: String?
+        var commit: String?
+        var branch: String?
+        enum CodingKeys: String, CodingKey { case matches, path, url, commit, branch; case workId = "work_id" }
+    }
+
+    /// Sends an image's bytes (never a path) for darkmux to add to the
+    /// workspace and commit; with `replace` (an `<img>`'s `src` as the page
+    /// has it), the one place that holds it points at the new image.
+    func addImage(token: String, workspace: String, name: String, data: Data, replace: String?) async throws -> ImageResult {
+        struct Body: Encodable { var name: String; var data: String; var replace: String? }
+        let body = Body(name: name, data: data.base64EncodedString(), replace: replace)
+        let reply = try await send("POST", "/client/workspaces/\(workspace)/image", body: body,
+                                   headers: ["Authorization": "Bearer \(token)"], timeout: 120)
+        return try JSONDecoder().decode(ImageResult.self, from: reply)
+    }
+
     struct UndoResult: Decodable, Sendable, Equatable {
         var revert: String
         var files: [String]

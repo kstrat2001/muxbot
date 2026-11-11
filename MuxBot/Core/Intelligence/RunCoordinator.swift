@@ -1304,6 +1304,102 @@ final class RunCoordinator {
         store.proposeRun(task: Self.handEditTask(old: old, new: new), crew: .coder, on: bot, brief: brief)
     }
 
+    // MARK: Your own pictures
+
+    /// Tests answer an added picture here (workspace, file name, bytes, replace).
+    var imageAdder: ((String, String, Data, String?) async throws -> DarkmuxClient.ImageResult)?
+
+    /// The largest picture darkmux takes (darkmux #3545).
+    static let maxImageBytes = 10 * 1024 * 1024
+    static let imageNeedsMac = String(localized: "Pictures are added from the Mac app, with this bot's project set up on that Mac.")
+    static let imageWaitForRun = String(localized: "A run is changing this project right now. Add the picture once it finishes.")
+    static let imageTooLarge = String(localized: "That picture is larger than 10 MB. Pick a smaller one, or save it smaller first.")
+
+    /// A picture you chose on this device, sent to darkmux as bytes (never a
+    /// path, so it works the same from another machine later). darkmux adds
+    /// it to the project and commits it, and the thread shows the result with
+    /// Undo; choosing the file is the approval, as Save is for a hand edit.
+    /// With `element` (a picked `<img>`), the page then shows the new picture
+    /// in its place; when darkmux can't find that spot in the files, the
+    /// picture is still added and Coder gets a dispatch card to put it there.
+    /// Returns the picture's address on the site once it's in the project.
+    @discardableResult
+    func addImage(named name: String, data: Data, replacing element: PickedElement?, bot: Bot, store: BotStore) async -> String? {
+        let thread = store.conversation(for: .bot(bot.id))
+        guard let workspace = bot.workspaceName, imageAdder != nil || connection?.token != nil else {
+            store.append(.system, Self.imageNeedsMac, to: thread)
+            return nil
+        }
+        if (bot.runs ?? []).contains(where: { $0.phase == .running && $0.startedHere }) {
+            store.append(.system, Self.imageWaitForRun, to: thread)
+            return nil
+        }
+        guard data.count <= Self.maxImageBytes else {
+            store.append(.system, Self.imageTooLarge, to: thread)
+            return nil
+        }
+        let send: (String?) async throws -> DarkmuxClient.ImageResult = { [self] replace in
+            if let imageAdder { return try await imageAdder(workspace, name, data, replace) }
+            guard let connection, let token = connection.token else { throw CancellationError() }
+            return try await connection.client.addImage(token: token, workspace: workspace, name: name, data: data, replace: replace)
+        }
+        let replace = element?.src
+        var result: DarkmuxClient.ImageResult
+        do {
+            result = try await send(replace)
+            if replace != nil, result.matches != 1 {
+                // The spot isn't in the files as written: add the picture alone.
+                result = try await send(nil)
+                if let url = result.url, let element { proposeImageToCoder(element, name: name, url: url, bot: bot, store: store) }
+            }
+        } catch {
+            store.append(.system, String(localized: "Couldn't add that picture: \(DarkmuxPlain.sentence(error))"), to: thread)
+            return nil
+        }
+        guard let url = result.url else { return nil }
+        guard let workId = result.workId else {
+            store.append(.system, String(localized: "\(name) is already in this project."), to: thread)
+            return url
+        }
+        let placed = replace != nil && result.matches == 1
+        let status: DarkmuxClient.WorkStatus?
+        if let workStatusFetcher {
+            status = try? await workStatusFetcher(workId)
+        } else if let connection, let token = connection.token {
+            status = try? await connection.client.workStatus(token: token, workId: workId)
+        } else {
+            status = nil
+        }
+        let run = store.recordHandEdit(task: placed ? String(localized: "Replace a picture with \(name)") : String(localized: "Add the picture \(name)"), on: bot)
+        markStartedHere(run)
+        run.darkmuxWorkId = workId
+        recordWork(workId, for: run)
+        run.keptCommit = result.commit
+        run.keptBranch = result.branch
+        run.changedFiles = [result.path ?? url]
+        if let changes = status?.changes {
+            run.changedFiles = changes.files.map { "\($0.path) +\($0.added ?? 0) −\($0.removed ?? 0)" }
+            run.diff = changes.diff
+        }
+        store.apply(.finish(summary: placed
+            ? String(localized: "Replaced the picture with \(name).")
+            : String(localized: "Added \(name) to the project.")), to: run)
+        Task { await self.refreshPreview(for: bot) }
+        if bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
+        return url
+    }
+
+    /// A picture darkmux added but couldn't put in place itself, as a Coder
+    /// dispatch card naming where it was picked and the picture's address.
+    func proposeImageToCoder(_ element: PickedElement, name: String, url: String, bot: Bot, store: BotStore) {
+        let brief = """
+            On the page \(element.url), the image in the element `\(element.selector)` (now `\(element.src ?? "")`)
+            should show the picture at \(url) instead. The file is already in the project.
+            Change only that image, where it appears on that page.
+            """
+        store.proposeRun(task: String(localized: "Replace a picture with \(name)"), crew: .coder, on: bot, brief: brief)
+    }
+
     /// The darkmux work ids of a run, oldest first: the run and each Tweak
     /// (its own commit). Kept on this Mac (LocalBotState), never synced.
     func recordWork(_ workId: String, for run: BotRun) {
