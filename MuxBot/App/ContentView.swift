@@ -12,6 +12,8 @@ struct ContentView: View {
     @Environment(NotificationService.self) private var notifications
     @Query private var runs: [BotRun]
     @Query private var bots: [Bot]
+    /// Bots in the lists (archived ones aren't).
+    private var activeCount: Int { bots.filter { !$0.isArchived }.count }
 
     /// Runs waiting on a decision: the app badge.
     private var waitingCount: Int { RunNotice.badgeCount(runs) }
@@ -30,7 +32,7 @@ struct ContentView: View {
         }
         .onAppear {
             router.usesSidebar = wantsSidebar
-            router.openOnStart(botCount: bots.count)
+            router.openOnStart(botCount: activeCount)
             // darkmux forgot this app (401): show pairing, which says why.
             let router = router
             connection.onRevoked = { router.showPairing = true }
@@ -41,7 +43,7 @@ struct ContentView: View {
             }
             brain.openBot = { router.navigate(to: .bot($0)) }
         }
-        .onChange(of: wantsSidebar) { router.layoutChanged(toSidebar: wantsSidebar, botCount: bots.count) }
+        .onChange(of: wantsSidebar) { router.layoutChanged(toSidebar: wantsSidebar, botCount: activeCount) }
         // Runs an earlier build kept become committed results (Open PR).
         .task {
             BotStore(context: context).migrateKeptRuns()
@@ -50,13 +52,27 @@ struct ContentView: View {
         }
         // A bot deleted (here or on another device): its thread is left.
         .onChange(of: bots.map(\.id)) { old, new in
-            router.botsChanged(existing: Set(new))
+            router.botsChanged(existing: Set(bots.filter { !$0.isArchived }.map(\.id)))
             // Deleted (maybe on another device): its runs and preview here stop.
             for gone in Set(old).subtracting(new) { Task { await brain.runs.botDisappeared(gone) } }
         }
         #if DEBUG
         .task { openThreadFromLaunchArgument() }
         #endif
+        // A bot archived (here or on another device): its thread is left
+        // and its preview here stops.
+        .onChange(of: bots.filter(\.isArchived).map(\.id)) { old, new in
+            router.botsChanged(existing: Set(bots.filter { !$0.isArchived }.map(\.id)))
+            for archived in bots where Set(new).subtracting(old).contains(archived.id) {
+                Task { await brain.runs.stopPreview(for: archived) }
+            }
+        }
+        .sheet(item: $router.showPutAway) { kind in
+            NavigationStack { ArchivedBotsView(kind: kind) }
+                #if os(macOS)
+                .frame(minWidth: 460, minHeight: 360)
+                #endif
+        }
         .sheet(isPresented: $router.showNewBot) {
             NavigationStack { NewBotView() }
                 #if os(macOS)
@@ -159,7 +175,7 @@ struct ContentView: View {
                     case .lead?: BotThreadView(context: .lead)
                     case nil:
                         // No bots yet: start with what you want to get done.
-                        if bots.isEmpty { StartProjectView(inline: true) } else { BotThreadView(context: .lead) }
+                        if activeCount == 0 { StartProjectView(inline: true) } else { BotThreadView(context: .lead) }
                     }
                 }
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }

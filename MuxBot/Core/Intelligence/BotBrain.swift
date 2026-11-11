@@ -572,7 +572,8 @@ final class BotBrain {
 
     private func respond(to message: ChatMessage, text: String, context: ChatContext, store: BotStore,
                          element: PickedElement?, explicit: Intent?) async {
-        let bots = store.allBots().map(\.summary)
+        // Archived bots aren't handed work or named (their own thread aside).
+        let bots = store.allBots().filter { !$0.isArchived || $0.id == context.botId }.map(\.summary)
         let speaker = context.botId.flatMap { id in bots.first { $0.id == id } }
         let conversation = store.conversation(for: context)
         // "what's this?" about a picked element: explain it from its facts.

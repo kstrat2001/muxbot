@@ -7,7 +7,15 @@ struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Bot.createdAt) private var bots: [Bot]
+    /// Archived bots are out of the list (`ArchivedBotsView`), hidden ones
+    /// under Hidden Bots at the bottom;
+    /// a hidden one comes back while something waits on you.
+    @Query(sort: \Bot.createdAt) private var allBots: [Bot]
+    @State private var showHidden = false
+    private var bots: [Bot] { allBots.filter(BotStore.isListed) }
+    private var archived: [Bot] { allBots.filter(\.isArchived) }
+    /// Hidden and not back up top for something waiting on you.
+    private var hidden: [Bot] { allBots.filter { $0.isHidden && !BotStore.isListed($0) } }
     @Query(sort: \ChatConversation.createdAt) private var threads: [ChatConversation]
 
     var body: some View {
@@ -48,7 +56,7 @@ struct BotSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.secondaryText)
-                if bots.isEmpty {
+                if allBots.isEmpty {
                     Button { BotStore(context: modelContext).addExample() } label: {
                         plainRow("Add an example bot", systemImage: "sparkles")
                     }
@@ -58,8 +66,38 @@ struct BotSidebar: View {
             } header: {
                 Text("Bots")
             }
+            if !hidden.isEmpty {
+                // Hidden bots open in place, at the bottom of the list, and
+                // keep working; one waiting on you is back up top meanwhile.
+                Section {
+                    DisclosureGroup(isExpanded: $showHidden) {
+                        ForEach(hidden) { bot in
+                            Self.row(name: bot.name, look: bot.look, id: bot.id, unread: unread(bot.id), state: NeedsYou.shownState(bot))
+                                .tag(SidebarItem.bot(bot.id))
+                                .id(bot.id)
+                                .botContextMenu(bot)
+                        }
+                    } label: {
+                        HStack {
+                            Text("Hidden Bots")
+                            Spacer(minLength: 0)
+                            Text("\(hidden.count)").foregroundStyle(Color.secondaryText).monospacedDigit()
+                        }
+                        .foregroundStyle(Color.secondaryText)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
             Section {
                 plainRow("Activity", systemImage: "waveform.path.ecg").tag(SidebarItem.activity)
+                if !archived.isEmpty {
+                    Button { router.showPutAway = .archived } label: {
+                        plainRow("Archived", systemImage: "archivebox")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.secondaryText)
+                    .accessibilityValue("\(archived.count)")
+                }
             }
         }
         .toolbar {

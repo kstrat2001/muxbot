@@ -222,17 +222,55 @@ struct BotThreadView: View {
             if context.botId != nil && bot == nil {
                 // Deleted (maybe on another device): no chat bar to send into.
                 EmptyStateView(systemImage: "questionmark.circle", title: "Bot not found", message: "It may have been removed.")
+            } else if let bot, bot.isArchived {
+                // Opened from Search or Activity: read nothing, send nothing,
+                // until it's back.
+                VStack(spacing: Spacing.md) {
+                    EmptyStateView(systemImage: "archivebox", title: "\(bot.name) is archived",
+                                   message: "Its conversation and runs are kept. Restore it to see them and work with it again.")
+                    Button("Restore \(bot.name)") { BotStore(context: modelContext).restore(bot) }
+                        .buttonStyle(.borderedProminent)
+                }
             } else {
                 Group {
                     if let conversation = conversations.first {
                         ChatView(conversation: conversation, isThinking: brain.isThinking(in: context))
-                            .safeAreaInset(edge: .top) { needsYouBanner }
+                            .safeAreaInset(edge: .top) {
+                                VStack(spacing: 0) {
+                                    clearedBanner
+                                    needsYouBanner
+                                }
+                            }
                     } else {
                         ProgressView()
                     }
                 }
                 .safeAreaInset(edge: .bottom) { BotBar() }
             }
+        }
+    }
+
+    /// After Clear Conversation: Undo brings the messages back (this
+    /// device, until the app quits); × keeps it cleared.
+    @ViewBuilder private var clearedBanner: some View {
+        if let cleared = router.cleared, cleared.context == context, !cleared.messages.isEmpty {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "eraser").accessibilityHidden(true)
+                Text("Conversation cleared.")
+                Spacer(minLength: 0)
+                Button("Undo") {
+                    BotStore(context: modelContext).undoClear(cleared)
+                    router.cleared = nil
+                }
+                .buttonStyle(.bordered)
+                Button("Dismiss", systemImage: "xmark") { router.cleared = nil }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+            }
+            .font(AppFont.footnote(.semibold))
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
+            .background(.bar)
         }
     }
 
