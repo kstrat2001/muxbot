@@ -17,6 +17,9 @@ final class LocalBotState: @unchecked Sendable {
         /// The preview's device size (`PreviewViewport` raw value) you last
         /// picked for this bot.
         var previewViewport: String?
+        /// The preview pane's width you last set for this bot on this Mac
+        /// (dragged or double-clicked); without one the pane fits the page.
+        var previewPaneWidth: Double?
         /// Runs whose "needs you" you hid here (the banner's ×), by id.
         var dismissedRuns: [String]?
         /// The commit this Mac last wrote to each of the bot's GitHub
@@ -57,7 +60,7 @@ final class LocalBotState: @unchecked Sendable {
         var runPairings: [String: String]?
 
         var isEmpty: Bool {
-            workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil
+            workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil && previewPaneWidth == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
                 && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
         }

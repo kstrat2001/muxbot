@@ -100,8 +100,18 @@ struct PreviewPanel: View {
                     .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }
                     .onAppear { settled = currentViewport.layout(in: geometry.size) }
                     #if os(macOS)
-                    // Double-click the divider beside the panel: it fits the page.
-                    .background(SplitDividerDoubleClick(paneWidth: currentViewport.fittedPanelWidth(panelHeight: geometry.size.height)))
+                    // Opening, another bot or another device size: the pane takes
+                    // the width you set, else fits the page. Double-click the
+                    // divider to fit it again; the width you leave it at is kept.
+                    .background(SplitDividerDoubleClick(
+                        key: "\(botId?.uuidString ?? "")-\(currentViewport.rawValue)-\(router.previewFullScreen)",
+                        paneWidth: currentViewport.openingPaneWidth(stored: botId.flatMap { LocalBotState.shared[$0]?.previewPaneWidth },
+                                                                    panelHeight: geometry.size.height),
+                        fitWidth: currentViewport.fittedPanelWidth(panelHeight: geometry.size.height),
+                        resized: { width in
+                            guard let botId else { return }
+                            LocalBotState.shared.update(botId) { $0.previewPaneWidth = Double(width) }
+                        }))
                     #endif
             }
                 .overlay(alignment: .top) {
@@ -167,7 +177,8 @@ struct PreviewPanel: View {
 
     private func choose(_ option: PreviewViewport) {
         if let botId {
-            LocalBotState.shared.update(botId) { $0.previewViewport = option.rawValue }
+            // A new device size fits the pane to it afresh.
+            LocalBotState.shared.update(botId) { $0.previewViewport = option.rawValue; $0.previewPaneWidth = nil }
         } else {
             viewport = option
         }

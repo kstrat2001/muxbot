@@ -87,6 +87,17 @@ struct PreviewDeviceLayoutTests {
         #expect(PreviewViewport.fit.fittedPanelWidth(panelHeight: 900) == nil)
     }
 
+    /// Opening the preview: the width you set wins, else the page's fit;
+    /// nothing before the panel has a real height, and nothing for Fit.
+    @Test func theOpeningPaneIsYourWidthElseTheFit() {
+        #expect(PreviewViewport.tablet.openingPaneWidth(stored: 700, panelHeight: 900) == 700)
+        #expect(PreviewViewport.tablet.openingPaneWidth(stored: nil, panelHeight: 900)
+                == PreviewViewport.tablet.fittedPanelWidth(panelHeight: 900))
+        #expect(PreviewViewport.tablet.openingPaneWidth(stored: nil, panelHeight: 0) == nil)
+        #expect(PreviewViewport.fit.openingPaneWidth(stored: nil, panelHeight: 900) == nil)
+        #expect(PreviewViewport.fit.openingPaneWidth(stored: 600, panelHeight: 900) == 600)
+    }
+
     @Test func fitIsThePanelAsIs() {
         let l = PreviewViewport.fit.layout(in: CGSize(width: 683, height: 900))
         #expect(l == .init(width: 683, height: 900, scale: 1))
@@ -118,6 +129,7 @@ struct PreviewDeviceMemoryTests {
 
     @Test func aDeviceSizeAloneIsWorthKeeping() {
         #expect(!LocalBotState.Entry(previewViewport: "tablet").isEmpty)
+        #expect(!LocalBotState.Entry(previewPaneWidth: 700).isEmpty)
     }
 
     @Test func anUnknownStoredSizeFallsBackToTheRecipe() {
