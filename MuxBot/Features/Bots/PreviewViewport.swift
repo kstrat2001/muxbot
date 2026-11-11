@@ -95,6 +95,15 @@ enum PreviewViewport: String, CaseIterable, Sendable {
         return (width * min(1, room / height)).rounded(.up) + 2 * Self.devicePadding
     }
 
+    /// The pane's width when the preview opens: the width you last set,
+    /// else the page's fit (nil for Fit: the pane stays as it is). nil too
+    /// before the panel has a real height to fit to.
+    func openingPaneWidth(stored: Double?, panelHeight: CGFloat) -> CGFloat? {
+        if let stored, stored > 0 { return CGFloat(stored) }
+        guard panelHeight >= 100 else { return nil }
+        return fittedPanelWidth(panelHeight: panelHeight)
+    }
+
     /// What the panel draws for a panel of `size`. A device or Fit is
     /// always the panel's current fit: a device's page keeps its own CSS
     /// width, so a resize only changes the scale and never re-lays out the
