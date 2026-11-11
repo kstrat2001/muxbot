@@ -36,6 +36,9 @@
     "%@ has a run going on another Mac. Delete it from the Mac it runs on, or stop the run there first." : {
 
     },
+    "%@ has a run going. Stop it or let it finish, then archive." : {
+
+    },
     "%@ has no %@" : {
       "localizations" : {
         "en" : {
@@ -188,6 +191,9 @@
     "A later run changed the same files. Undo the later run first." : {
 
     },
+    "A model this Mac doesn't list" : {
+
+    },
     "A preview runs the project's own code (its package.json scripts, which a bot may have changed) on this Mac as you, outside darkmux's sandbox. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
 
     },
@@ -248,7 +254,13 @@
     "After an earlier step" : {
 
     },
+    "After darkmux is running." : {
+
+    },
     "After darkmux's app connection is running." : {
+
+    },
+    "After pairing, this checks darkmux's models. No model engine yet? darkmux's guide shows how (Flint, TensorFold or LM Studio)." : {
 
     },
     "After pairing." : {
@@ -269,7 +281,13 @@
     "Always %@ (not on this Mac)" : {
 
     },
+    "Always a model this Mac doesn't list" : {
+
+    },
     "Always ask" : {
+
+    },
+    "Always the model you chose" : {
 
     },
     "Another Mac" : {
@@ -316,6 +334,21 @@
       }
     },
     "Approved" : {
+
+    },
+    "Archive" : {
+
+    },
+    "Archive %@" : {
+
+    },
+    "Archived %@" : {
+
+    },
+    "Archived Bots" : {
+
+    },
+    "Archived bots keep their conversation, runs and links, on every device." : {
 
     },
     "Auto" : {
@@ -370,6 +403,9 @@
 
     },
     "Bug: %@" : {
+
+    },
+    "Can't archive %@ yet" : {
 
     },
     "Can't reach darkmux" : {
@@ -499,6 +535,12 @@
     "Committed. Open a pull request from the thread's Open PR." : {
 
     },
+    "Computers" : {
+
+    },
+    "Conversation cleared." : {
+
+    },
     "Copied" : {
 
     },
@@ -593,16 +635,25 @@
     "Delete" : {
 
     },
+    "Delete %@" : {
+
+    },
     "Delete %@?" : {
 
     },
     "Delete %@…" : {
 
     },
+    "Delete…" : {
+
+    },
     "Desktop" : {
 
     },
     "Details" : {
+
+    },
+    "Dismiss" : {
 
     },
     "Dispatch to %@" : {
@@ -759,6 +810,9 @@
     "Full window" : {
 
     },
+    "General" : {
+
+    },
     "Get Docker Desktop" : {
 
     },
@@ -837,10 +891,25 @@
     "Hi, I'm %@. Tell me what to change, or point at something in the preview." : {
 
     },
+    "Hidden %@" : {
+
+    },
+    "Hidden Bots" : {
+
+    },
+    "Hidden and Archived" : {
+
+    },
+    "Hidden bots keep working and come back to the sidebar while something waits for you." : {
+
+    },
     "Hide" : {
 
     },
     "Hide Preview" : {
+
+    },
+    "Hide from Sidebar" : {
 
     },
     "Hide preview" : {
@@ -1005,10 +1074,16 @@
     "Kind" : {
 
     },
+    "LM Studio (optional)" : {
+
+    },
     "LM Studio and a model" : {
 
     },
     "LM Studio has %lld models." : {
+
+    },
+    "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server." : {
 
     },
     "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server. This Mac has %lld GB: darkmux's %@ settings fit it." : {
@@ -1049,6 +1124,9 @@
 
     },
     "Looking at this Mac's models…" : {
+
+    },
+    "Mac · Runs start from the Mac app for now" : {
 
     },
     "Machine" : {
@@ -1110,6 +1188,9 @@
 
     },
     "More" : {
+
+    },
+    "More for %@" : {
 
     },
     "Move down" : {
@@ -1244,10 +1325,19 @@
     "None yet." : {
 
     },
+    "Not archived" : {
+
+    },
+    "Not available" : {
+
+    },
     "Not available: %@." : {
 
     },
     "Not backed up: sign in with GitHub (Settings › GitHub) to back up to %@." : {
+
+    },
+    "Not deleted" : {
 
     },
     "Not found in the project's files." : {
@@ -1298,6 +1388,9 @@
     "Notifications are on." : {
 
     },
+    "OK" : {
+
+    },
     "Octopus" : {
 
     },
@@ -1323,6 +1416,12 @@
 
     },
     "On-device model" : {
+
+    },
+    "One engine darkmux can run models with." : {
+
+    },
+    "One engine darkmux can run models with. You don't need it if you use Flint or TensorFold." : {
 
     },
     "Open %@ on GitHub" : {
@@ -1365,6 +1464,9 @@
 
     },
     "Opens it" : {
+
+    },
+    "Optional" : {
 
     },
     "Or make a bot for code you already have with New bot." : {
@@ -1425,6 +1527,9 @@
 
     },
     "Pairing lets this app send work to darkmux on this Mac. You approve it once in darkmux on this Mac; you can unpair any time." : {
+
+    },
+    "Pairing lets this app send work to darkmux on this Mac. You approve it once in darkmux; you can unpair any time." : {
 
     },
     "Panda" : {
@@ -1566,6 +1671,12 @@
     "Resources" : {
 
     },
+    "Restore" : {
+
+    },
+    "Restore %@" : {
+
+    },
     "Revert this run's commit" : {
 
     },
@@ -1601,6 +1712,9 @@
 
     },
     "Running on this Mac." : {
+
+    },
+    "Runs can't start until you pair again." : {
 
     },
     "Runs happen on a Mac. Set up darkmux and Mux Bot there; your bots and threads sync here." : {
@@ -1640,6 +1754,9 @@
 
     },
     "Sent to Coder" : {
+
+    },
+    "Server" : {
 
     },
     "Set to %@ on %@." : {
@@ -1715,6 +1832,9 @@
     "Setting up on %@…" : {
 
     },
+    "Settings" : {
+
+    },
     "Setup check" : {
 
     },
@@ -1731,6 +1851,9 @@
 
     },
     "Show details" : {
+
+    },
+    "Show in Sidebar" : {
 
     },
     "Show preview" : {
@@ -1822,6 +1945,9 @@
 
     },
     "Starting the model…" : {
+
+    },
+    "Starts when used" : {
 
     },
     "Starts with its %@ script" : {
@@ -1930,6 +2056,9 @@
     "The messages go; runs stay in Activity." : {
 
     },
+    "The messages go; runs stay in Activity. You can undo it until Mux Bot quits." : {
+
+    },
     "The model doesn't fit on this Mac. Pick a smaller one in Settings › Models." : {
 
     },
@@ -2023,10 +2152,25 @@
     "This Mac has Apple silicon." : {
 
     },
+    "This Mac · Checking…" : {
+
+    },
+    "This Mac · Not paired" : {
+
+    },
+    "This Mac · Online now" : {
+
+    },
+    "This Mac · darkmux isn't answering" : {
+
+    },
     "This Mux Bot build isn't set up to sign in with GitHub." : {
 
     },
     "This app isn't paired with darkmux now, so it can't stop this run. Stop it on the Mac with darkmux." : {
+
+    },
+    "This can't be undone. Its conversation, runs and links go for good, on every device. darkmux's work copy and your project folder are left alone." : {
 
     },
     "This one is changed in darkmux on your Mac; here's its value." : {
@@ -2232,7 +2376,16 @@
     "Undo it from the Mac it ran on." : {
 
     },
+    "Unnamed model" : {
+
+    },
+    "Unpair" : {
+
+    },
     "Unpair this app" : {
+
+    },
+    "Unpair this app from darkmux?" : {
 
     },
     "Unread" : {
@@ -2356,13 +2509,28 @@
     "Your GitHub sign-in expired. Sign in again." : {
 
     },
+    "Your Mac" : {
+
+    },
     "Your Mac and GitHub" : {
 
     },
     "Your bots" : {
 
     },
+    "Your bots' work runs in darkmux on these computers." : {
+
+    },
     "Your checkout moved" : {
+
+    },
+    "Your computers" : {
+
+    },
+    "Your default model isn't available to Mux Bot on this Mac." : {
+
+    },
+    "Your default model isn't running on this Mac." : {
 
     },
     "Your preview link, until darkmux runs previews itself." : {
@@ -2372,6 +2540,9 @@
 
     },
     "Your project stays on this Mac. You can put it on GitHub later from its info." : {
+
+    },
+    "a model this Mac no longer lists" : {
 
     },
     "a schema 2 template's preview.json is darkmux's recipe: write “schema_version”: “%@” and keep the app's hints in PLAYBOOK.md." : {
@@ -2478,16 +2649,25 @@
     "darkmux is busy with that right now. Try again in a moment." : {
 
     },
+    "darkmux is running on this Mac." : {
+
+    },
     "darkmux isn't answering on this Mac" : {
 
     },
     "darkmux isn't answering on this Mac." : {
 
     },
+    "darkmux isn't answering on this Mac. Install it or start it; darkmux's guide shows both." : {
+
+    },
     "darkmux isn't running on this Mac. darkmux's guide shows how to start it; then try again." : {
 
     },
     "darkmux lists %lld models but none answer now. Open LM Studio, or start your model's server." : {
+
+    },
+    "darkmux lists %lld models, but none answer now. Start the engine they run on (Flint, TensorFold or LM Studio); darkmux's guide shows how." : {
 
     },
     "darkmux made it for this app before you paired again, so it won't let this pairing use it. Claim it with this command in Terminal, or set up a new work copy (a new branch; the earlier commits stay on the old one):" : {
@@ -2509,6 +2689,9 @@
 
     },
     "darkmux makes the work copy once Mux Bot is paired with it on your Mac. You can make the bot now." : {
+
+    },
+    "darkmux needs a model engine set up on this Mac (Flint, TensorFold or LM Studio). darkmux's guide shows how." : {
 
     },
     "darkmux needs to know how %@ starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it." : {
