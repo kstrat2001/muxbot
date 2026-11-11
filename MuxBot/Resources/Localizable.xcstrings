@@ -254,7 +254,13 @@
     "After an earlier step" : {
 
     },
+    "After darkmux is running." : {
+
+    },
     "After darkmux's app connection is running." : {
+
+    },
+    "After pairing, this checks darkmux's models. No model engine yet? darkmux's guide shows how (Flint, TensorFold or LM Studio)." : {
 
     },
     "After pairing." : {
@@ -1460,6 +1466,9 @@
     "Opens it" : {
 
     },
+    "Optional" : {
+
+    },
     "Or make a bot for code you already have with New bot." : {
 
     },
@@ -2640,10 +2649,16 @@
     "darkmux is busy with that right now. Try again in a moment." : {
 
     },
+    "darkmux is running on this Mac." : {
+
+    },
     "darkmux isn't answering on this Mac" : {
 
     },
     "darkmux isn't answering on this Mac." : {
+
+    },
+    "darkmux isn't answering on this Mac. Install it or start it; darkmux's guide shows both." : {
 
     },
     "darkmux isn't running on this Mac. darkmux's guide shows how to start it; then try again." : {

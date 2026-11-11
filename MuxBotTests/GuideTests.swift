@@ -100,20 +100,19 @@ struct SetupCheckTests {
 
     @Test func theStepsGoInOrder() {
         // Optional rows (LM Studio, GitHub) come last.
-        #expect(SetupCheck.steps(fresh).map(\.id) == [.mac, .darkmux, .endpoint, .docker, .pair, .models, .lmStudio, .github])
+        // One darkmux row (installed and its app connection are one thing to
+        // the app); optional rows (LM Studio, GitHub) come last.
+        #expect(SetupCheck.steps(fresh).map(\.id) == [.mac, .darkmux, .docker, .pair, .models, .lmStudio, .github])
     }
 
     @Test func aFreshMacWithNothingInstalled() {
         let steps = SetupCheck.steps(fresh)
         #expect(steps.state(.mac) == .done)
-        #expect(steps.state(.darkmux) == .unknown, "can't tell installed from not serving")
-        #expect(steps[.darkmux]?.link == DarkmuxLinks.install, "darkmux's guide, never a command")
-        #expect(steps.state(.endpoint) == .todo)
-        #expect(steps[.endpoint]?.link == DarkmuxLinks.guide)
-        #expect(steps.state(.pair) == .later, "pairing waits for the app connection")
-        // No model engine known yet: the models step says to set one up
-        // (it used to wait for pairing whatever the engine).
-        #expect(steps.state(.models) == .todo)
+        #expect(steps.state(.darkmux) == .todo, "one row: install it or start it")
+        #expect(steps[.darkmux]?.link == DarkmuxLinks.guide, "darkmux's guide, never a command")
+        #expect(steps.state(.pair) == .later, "pairing waits for darkmux")
+        // Before pairing the app can't see darkmux's engines: it waits for pairing.
+        #expect(steps.state(.models) == .later)
         #expect(steps.state(.docker) == .manual)
     }
 
@@ -121,7 +120,6 @@ struct SetupCheckTests {
         var facts = fresh; facts.endpointUp = true
         let steps = SetupCheck.steps(facts)
         #expect(steps.state(.darkmux) == .done)
-        #expect(steps.state(.endpoint) == .done)
         #expect(steps.state(.pair) == .todo)
     }
 
@@ -130,10 +128,11 @@ struct SetupCheckTests {
         facts.lmStudio = .notAnswering
         // Installed but not serving (where the app can't look, it's unknown).
         facts.lmStudioApp = .installed
-        #expect(SetupCheck.steps(facts).state(.lmStudio) == .todo)
+        // Optional: not done is shown as optional, never a to-do.
+        #expect(SetupCheck.steps(facts).state(.lmStudio) == .optional)
         facts.lmStudio = .models(0)
         let empty = SetupCheck.steps(facts)
-        #expect(empty.state(.lmStudio) == .todo)
+        #expect(empty.state(.lmStudio) == .optional)
         #expect(empty[.lmStudio]?.detail.contains("128 GB") == true)
         facts.lmStudio = .models(3)
         #expect(SetupCheck.steps(facts).state(.lmStudio) == .done)
@@ -154,7 +153,7 @@ struct SetupCheckTests {
     @Test func theCountLeavesOutOptionalGitHub() {
         var facts = fresh
         facts.endpointUp = true; facts.lmStudio = .models(16); facts.docker = .running
-        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "4 of 6 done", "pairing and models still to go")
+        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "3 of 5 done", "pairing and models still to go")
         facts.paired = true; facts.listing = .listed; facts.listedModels = 4; facts.runningModels = 2
         #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "All set", "signed out of GitHub, still all set")
         facts.githubSignedIn = true
@@ -179,9 +178,11 @@ struct SetupCheckTests {
         let line = "darkmux needs a model engine set up on this Mac (Flint, TensorFold or LM Studio). darkmux's guide shows how."
         var facts = fresh
         facts.endpointUp = true; facts.lmStudioApp = .notInstalled; facts.lmStudio = .notAnswering
+        // Before pairing the app can't see darkmux's engines (Flint or
+        // TensorFold may be there): it waits, and says where to look if not.
         var models = SetupCheck.steps(facts)[.models]
-        #expect(models?.state == .todo)
-        #expect(models?.detail == line)
+        #expect(models?.state == .later)
+        #expect(models?.detail == "After pairing, this checks darkmux's models. No model engine yet? darkmux's guide shows how (Flint, TensorFold or LM Studio).")
         #expect(models?.link == DarkmuxLinks.models)
         facts.paired = true; facts.listing = .listed; facts.listedModels = 0; facts.runningModels = 0
         models = SetupCheck.steps(facts)[.models]
@@ -199,6 +200,23 @@ struct SetupCheckTests {
         var facts = fresh
         facts.endpointUp = true; facts.lmStudio = .models(16)
         #expect(SetupCheck.steps(facts)[.models]?.state == .later)
+    }
+
+    /// Optional rows not done look optional, never like a to-do.
+    @Test func optionalRowsAreNeverToDos() {
+        var facts = fresh
+        facts.lmStudioApp = .notInstalled; facts.lmStudio = .notAnswering
+        let steps = SetupCheck.steps(facts)
+        #expect(steps.state(.lmStudio) == .optional)
+        #expect(steps.state(.github) == .optional)
+    }
+
+    /// darkmux not answering: one row, plain words, darkmux's guide.
+    @Test func darkmuxIsOneRow() {
+        let steps = SetupCheck.steps(fresh)
+        #expect(steps[.darkmux]?.title == "darkmux")
+        #expect(steps[.darkmux]?.detail == "darkmux isn't answering on this Mac. Install it or start it; darkmux's guide shows both.")
+        #expect(steps[.pair]?.detail == "After darkmux is running.")
     }
 
     @Test func aFailedListingSaysWhy() {

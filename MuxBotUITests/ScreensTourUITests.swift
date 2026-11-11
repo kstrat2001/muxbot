@@ -81,7 +81,7 @@ final class ScreensTourUITests: XCTestCase {
         let chip = app.buttons["Check my setup"].firstMatch
         XCTAssertTrue(chip.waitForExistence(timeout: 10))
         chip.tap()
-        XCTAssertTrue(element(app, "darkmux installed").waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "Pair Mux Bot").waitForExistence(timeout: 10))
         keep(app, "setup-check")
     }
 

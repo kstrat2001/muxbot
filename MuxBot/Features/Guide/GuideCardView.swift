@@ -145,6 +145,7 @@ struct SetupChecklistView: View {
         case .manual: "hand.raised.circle"
         case .later: "circle.dotted"
         case .needsMac: "laptopcomputer"
+        case .optional: "circle.dashed"
         }
     }
 
@@ -153,7 +154,7 @@ struct SetupChecklistView: View {
         case .done: .brandGreen
         case .todo: .brandOrange
         case .unknown, .manual, .needsMac: .brandBlue
-        case .later: .secondary
+        case .later, .optional: .secondary
         }
     }
 
@@ -165,6 +166,7 @@ struct SetupChecklistView: View {
         case .manual: String(localized: "Check it yourself")
         case .later: String(localized: "After an earlier step")
         case .needsMac: String(localized: "Needs a Mac")
+        case .optional: String(localized: "Optional")
         }
     }
 }
