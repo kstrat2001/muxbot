@@ -13,6 +13,7 @@ struct BotThreadView: View {
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
     @State private var showInfo = false
+    @State private var startingReview = false
 
     init(context: ChatContext) {
         self.context = context
@@ -114,14 +115,12 @@ struct BotThreadView: View {
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
                     }
-                    if let bot, brain.runs.canOpenPR(bot, store: BotStore(context: modelContext), github: github) {
+                    if let bot, brain.runs.canStartReview(bot, store: BotStore(context: modelContext), github: github) {
                         if brain.runs.openingPR.contains(bot.id) {
                             ProgressView().controlSize(.small)
                         } else {
-                            Button("Open PR", systemImage: "arrow.triangle.pull") {
-                                Task { await brain.runs.openPR(for: bot, store: BotStore(context: modelContext), github: github) }
-                            }
-                            .help("Open a pull request with this bot's committed changes")
+                            Button("Start review", systemImage: "checkmark.bubble") { startingReview = true }
+                                .help("Review this task's saved changes, then merge them into the project")
                         }
                     }
                     #if !os(macOS)
@@ -212,6 +211,9 @@ struct BotThreadView: View {
         .sheet(isPresented: $showInfo) {
             if let bot { NavigationStack { BotInfoView(bot: bot) } }
         }
+        .sheet(isPresented: $startingReview) {
+            if let bot { StartReviewSheet(bot: bot) }
+        }
     }
 
     /// The transcript with the chat bar pinned under it. Each screen pins
@@ -239,6 +241,7 @@ struct BotThreadView: View {
                                 VStack(spacing: 0) {
                                     clearedBanner
                                     needsYouBanner
+                                    if let bot { ReviewCardView(bot: bot) }
                                 }
                             }
                     } else {

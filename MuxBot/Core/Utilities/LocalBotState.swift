@@ -58,11 +58,18 @@ final class LocalBotState: @unchecked Sendable {
         var tweakBases: [String: RunCoordinator.TweakBase]?
         /// The pairing each run was submitted under (`FleetConnection.pairingId`).
         var runPairings: [String: String]?
+        /// The bot's task number on this Mac: 1 (nil) until a merge starts
+        /// the next one, whose work copy starts from the project's main
+        /// version (`RunCoordinator.workspaceKey`).
+        var task: Int?
+        /// The current task's open review (`TaskReview.State`).
+        var review: TaskReview.State?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil && previewPaneWidth == nil
                 && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
                 && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
+                && task == nil && review == nil
         }
     }
 

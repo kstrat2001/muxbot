@@ -367,6 +367,7 @@ final class RunCoordinator {
         }
         let summary = await summarize(report: report, files: (status.changes?.files ?? []).map(\.path), botName: run.bot?.name)
         store.apply(.finish(summary: summary), to: run)
+        noteReviewer(run, report: report)
         // Show the change in the preview you have open.
         if !run.changedFiles.isEmpty, let bot = run.bot { Task { await self.refreshPreview(for: bot) } }
         if !run.changedFiles.isEmpty, checkSpecs[run.id] != nil {
@@ -385,6 +386,8 @@ final class RunCoordinator {
         // the run's slot is free without waiting for GitHub (a bot's pushes
         // still go one at a time, in order: `oneAtATime`).
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
+        // A change saved while the task is in review joins the review.
+        if status.commit != nil, let bot = run.bot, bot.githubStart == nil, review(for: bot) != nil { Task { await self.updateReview(bot, store: store) } }
     }
 
     /// A use case's template, from the registry (or the test seam).
@@ -1065,7 +1068,7 @@ final class RunCoordinator {
         }
         let bodyAndAccess = template.map {
             (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: $0.repoURL, sourcePath: nil, bot: bot.name, template: true, ref: $0.ref)), release: {})
-        } ?? sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: bot.name)), release: {}) }
+        } ?? sourcePath.map { (body: DarkmuxClient.WorkspaceBody?.some(.init(repoURL: nil, sourcePath: $0, bot: workspaceKey(bot))), release: {}) }
             ?? workspaceRequest(for: bot)
         guard let body = bodyAndAccess.body else {
             workCopySetup[bot.id] = .failed(RunBlocker.noCode.message)
@@ -1560,11 +1563,11 @@ final class RunCoordinator {
     private func workspaceRequest(for bot: Bot) -> (body: DarkmuxClient.WorkspaceBody?, release: () -> Void) {
         if let data = bot.folderBookmark, let url = Self.resolve(bookmark: data) {
             let accessing = url.startAccessingSecurityScopedResource()
-            return (DarkmuxClient.WorkspaceBody(repoURL: nil, sourcePath: url.path, bot: bot.name),
+            return (DarkmuxClient.WorkspaceBody(repoURL: nil, sourcePath: url.path, bot: workspaceKey(bot)),
                     { if accessing { url.stopAccessingSecurityScopedResource() } })
         }
         if let repo = bot.repoSlugs.first {
-            return (DarkmuxClient.WorkspaceBody(repoURL: "https://github.com/\(repo)", sourcePath: nil, bot: bot.name), {})
+            return (DarkmuxClient.WorkspaceBody(repoURL: "https://github.com/\(repo)", sourcePath: nil, bot: workspaceKey(bot)), {})
         }
         return (nil, {})
     }
@@ -2043,6 +2046,10 @@ final class RunCoordinator {
     var githubSession: URLSession?
     /// Bots with a PR being opened (their button waits).
     var openingPR: Set<UUID> = []
+    /// Where each bot's open review stands on GitHub (this launch).
+    var reviewStandings: [UUID: TaskReview.Standing] = [:]
+    /// Bots whose review is being merged (Merge waits).
+    var merging: Set<UUID> = []
 
     /// Why GitHub refused a write, from whether the App is installed there:
     /// the install link only when it isn't.
@@ -2077,44 +2084,51 @@ final class RunCoordinator {
     /// Opens (or updates) the PR for the bot's branch: darkmux hands over the
     /// committed changes; the app creates the branch and PR with your GitHub
     /// sign-in. The link goes in the thread.
-    func openPR(for bot: Bot, store: BotStore, github: GitHubAuth) async {
+    @discardableResult
+    func openPR(for bot: Bot, store: BotStore, github: GitHubAuth, title: String? = nil) async -> GitHubPR.PR? {
         let thread = store.conversation(for: .bot(bot.id))
         guard let token = github.token else {
-            store.append(.system, "Sign in with GitHub (Settings › GitHub) to open pull requests.", to: thread); return
+            store.append(.system, "Sign in with GitHub (Settings › GitHub) to start a review.", to: thread); return nil
         }
         guard let workspace = bot.workspaceName, let repo = bot.repoSlugs.first, let connection, let darkmux = connection.token else {
-            store.append(.system, "This bot needs a work copy and a GitHub repo to open a pull request.", to: thread); return
+            store.append(.system, "This bot needs a work copy and a GitHub repo to start a review.", to: thread); return nil
         }
         // A template project needs its start on GitHub (never its local
         // branch name): found again if this Mac doesn't know it.
         if !canPush(bot), !(await recoverStart(bot)) {
             store.append(.system, String(localized: "I don't know where this project starts on GitHub on this Mac, so I can't open a pull request for it yet. Sign in with GitHub (Settings › GitHub), then try again."), to: thread)
-            return
+            return nil
         }
         openingPR.insert(bot.id)
         defer { openingPR.remove(bot.id) }
+        let opened = OpenedPR()
         await oneAtATime(bot.id) { [self] in
-            await openPR(bot, workspace: workspace, repo: repo, token: token, darkmux: darkmux, connection: connection,
-                         store: store, github: github, thread: thread)
+            opened.pr = await openPR(bot, workspace: workspace, repo: repo, token: token, darkmux: darkmux, connection: connection,
+                                     store: store, github: github, thread: thread, title: title)
         }
+        return opened.pr
     }
 
+    /// The PR a push in `oneAtATime` opened, handed back to its caller.
+    @MainActor private final class OpenedPR { var pr: GitHubPR.PR? }
+
     private func openPR(_ bot: Bot, workspace: String, repo: String, token: String, darkmux: String, connection: FleetConnection,
-                        store: BotStore, github: GitHubAuth, thread: ChatConversation) async {
+                        store: BotStore, github: GitHubAuth, thread: ChatConversation, title: String?) async -> GitHubPR.PR? {
         do {
             let readAt = Date()
             let changes = try await changes(for: workspace)
             guard !changes.files.isEmpty else {
-                store.append(.system, "Nothing to open a PR with: \(changes.branch) has no changes against \(changes.baseBranch).", to: thread); return
+                store.append(.system, String(localized: "Nothing to review: this task has no saved changes that the project's main version doesn't already have."), to: thread); return nil
             }
             let runs = unshippedRuns(bot, store: store)
-            let text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
+            var text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
+            if let title { text.title = title }
             let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
             let pr = try await pushMovingOn(bot, changes: changes, store: store) {
                 try await GitHubPR(session: githubSession ?? .shared, token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
                                                       extraFiles: approved, start: $0)
             }
-            store.append(.system, "Opened PR #\(pr.number): \(pr.url.absoluteString)", kind: .prCard, runId: runs.last?.id, to: thread)
+            store.append(.system, String(localized: "In review: pull request #\(pr.number), \(pr.url.absoluteString)"), kind: .prCard, runId: runs.last?.id, to: thread)
             // Its runs are in this PR now, even after the thread is cleared.
             LocalBotState.shared.update(bot.id) { $0.shippedThrough = max($0.shippedThrough ?? .distantPast, readAt) }
             for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
@@ -2127,14 +2141,16 @@ final class RunCoordinator {
                     store.append(.system, String(localized: "Left out \(path) you approved: the repo already has one, and I don't write over it."), to: thread)
                 }
             }
+            return pr
         } catch GitHubPR.Failure.cantWrite(let repo) {
             let install = await github.installState(for: repo)
             store.append(.system, Self.cantWriteText(repo, install), to: thread)
         } catch {
             let said = Self.plain(error)
-            let line = store.append(.system, String(localized: "Couldn't open the PR: \(said.sentence)"), to: thread)
+            let line = store.append(.system, String(localized: "Couldn't start the review: \(said.sentence)"), to: thread)
             messageDetails[line.id] = said.details
         }
+        return nil
     }
 }
 
