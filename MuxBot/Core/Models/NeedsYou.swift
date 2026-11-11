@@ -12,8 +12,9 @@ enum NeedsYou {
     }
 
     /// Waiting on you and not hidden here.
+    /// An archived bot's runs wait for nothing until it's restored.
     static func isWaiting(_ run: BotRun, in local: LocalBotState = .shared) -> Bool {
-        run.needsYou && !isDismissed(run, in: local)
+        run.needsYou && run.bot?.isArchived != true && !isDismissed(run, in: local)
     }
 
     static func waiting(_ runs: [BotRun], in local: LocalBotState = .shared) -> [BotRun] {

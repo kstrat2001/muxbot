@@ -20,7 +20,7 @@ Hide from Sidebar takes a bot out of the sidebar and Home without stopping anyth
 
 ## Archiving a bot
 
-Done with a bot for now? Choose Archive from its menu (right-click on the Mac, touch and hold on iPhone and iPad). It leaves your bot list, but its conversation, runs and links are kept on all your devices. A bot with a run going, or something waiting for you, can be archived once that's finished.
+Done with a bot for now? Choose Archive from its menu (right-click on the Mac, touch and hold on iPhone and iPad). It leaves your bot list, but its conversation, runs and links are kept on all your devices. A bot with a run going can be archived once the run finishes. Anything waiting for you comes back when you restore the bot.
 
 To bring one back, open Archived (in the sidebar, or the Hidden and Archived menu on Home) and choose Restore. Deleting a bot for good is there too, and it can't be undone.
 

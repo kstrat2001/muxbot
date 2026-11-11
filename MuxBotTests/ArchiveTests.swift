@@ -41,12 +41,19 @@ struct ArchiveTests {
         #expect(!bot.isHidden)
     }
 
-    @Test func openWorkBlocksArchiving() {
+    @Test func onlyARunGoingBlocksArchiving() {
         let store = TestStore.fresh()
         let bot = store.add(name: "site", instructions: "Site")
         #expect(BotStore.archiveBlocker(bot) == nil)
         let run = store.proposeRun(task: "x", crew: .coder, on: bot)
-        #expect(BotStore.archiveBlocker(bot) != nil, "a dispatch waiting for Approve")
+        // A card waiting (even one the thread no longer shows) doesn't hold
+        // the bot; archived, it stops counting as waiting until Restore.
+        #expect(BotStore.archiveBlocker(bot) == nil)
+        #expect(NeedsYou.isWaiting(run))
+        store.archive(bot)
+        #expect(!NeedsYou.isWaiting(run), "an archived bot's card leaves Needs you")
+        store.restore(bot)
+        #expect(NeedsYou.isWaiting(run), "and comes back with Restore")
         store.apply(.approve, to: run)
         #expect(BotStore.archiveBlocker(bot) != nil, "a run going")
         store.apply(.stop, to: run)

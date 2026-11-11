@@ -34,15 +34,13 @@ struct BotStore {
         allBots().filter(\.isArchived).sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
     }
 
-    /// Why a bot can't be archived now: work running (here or on another
-    /// Mac) or waiting on you. Nil when it can.
+    /// Why a bot can't be archived now: a run going (here or on another
+    /// Mac). Nil when it can. Something waiting on you doesn't block: an
+    /// archived bot's runs leave Needs you (`NeedsYou.isWaiting`) and come
+    /// back with Restore, so an old card nobody can see never holds it.
     static func archiveBlocker(_ bot: Bot) -> String? {
-        let runs = bot.runs ?? []
-        if runs.contains(where: { $0.phase.isActive }) {
+        if (bot.runs ?? []).contains(where: { $0.phase.isActive }) {
             return String(localized: "\(bot.name) has a run going. Stop it or let it finish, then archive.")
-        }
-        if runs.contains(where: \.needsYou) {
-            return String(localized: "\(bot.name) has something waiting for you. Decide it in its thread, then archive.")
         }
         return nil
     }
