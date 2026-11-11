@@ -1885,9 +1885,9 @@ final class RunCoordinator {
         EvalsFit.ordered(ModelLabel.distinct(listed), by: fitOrder)
     }
 
-    /// The evals site's model families for this Mac's chip, in its order
+    /// The evals site's setups for this Mac's chip, in its order
     /// (`EvalsFit`); empty until read, or when it can't be.
-    var fitOrder: [String] = []
+    var fitOrder = EvalsFit.Order()
     private var fitLoaded = false
     /// Reads the Fit order (tests); else evals.darkmux.com for this Mac's chip.
     var fitSource: (() async throws -> Data)?
@@ -1906,8 +1906,9 @@ final class RunCoordinator {
         }
         guard let source else { return }
         fitLoaded = true
-        if let data = try? await source(), let families = try? EvalsFit.families(from: data) {
-            fitOrder = families
+        if let data = try? await source(), let order = try? EvalsFit.order(from: data) {
+            EvalsFit.current.withLock { $0 = order }
+            fitOrder = order
         } else {
             fitLoaded = false
         }

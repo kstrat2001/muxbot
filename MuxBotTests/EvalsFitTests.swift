@@ -30,17 +30,29 @@ struct EvalsFitTests {
 
     @Test func theSitesOrderFirstThenDarkmuxsOrder() throws {
         let json = #"{"data":{"points":[{"family":"qwen3.8-27b"},{"family":"gpt-oss-120b"},{"family":"qwen3.8-27b"}]},"meta":{}}"#
-        let fit = try EvalsFit.families(from: Data(json.utf8))
-        #expect(fit == ["qwen3.8-27b", "gpt-oss-120b"])
+        let fit = try EvalsFit.order(from: Data(json.utf8))
+        #expect(fit.families == ["qwen3.8-27b", "gpt-oss-120b"])
         let listed = [p("phi", "phi-4"), p("big", "gpt-oss-120b"), p("fold", "mlx-community/Qwen3.8-27B-4bit", "tensorfold"), p("other", "devstral")]
         #expect(EvalsFit.ordered(listed, by: fit).map(\.name) == ["fold", "big", "phi", "other"])
-        #expect(EvalsFit.ordered(listed, by: []).map(\.name) == listed.map(\.name), "no data: darkmux's order")
+        #expect(EvalsFit.ordered(listed, by: EvalsFit.Order()).map(\.name) == listed.map(\.name), "no data: darkmux's order")
+    }
+
+    @Test func theSitesIdsMatchAndNameTheModel() throws {
+        // The owner aliased rec's flint-int4 to "Flint"; the frontier lists both ids.
+        let json = #"{"data":{"points":[{"family":"qwen3.8-27b","model":"Qwen3.8 27B","ids":["qwen/qwen3.8-27b"]},{"family":"flint","model":"Flint","ids":["Flint","RecursiveSI/flint-int4"]}]}}"#
+        let fit = try EvalsFit.order(from: Data(json.utf8))
+        let listed = [p("turbo", "qwen3.8-27b-turboquant-mlx"), p("flint", "flint-int4", "flint"), p("qwen", "qwen3.8-27b")]
+        #expect(EvalsFit.ordered(listed, by: fit).map(\.name) == ["turbo", "qwen", "flint"], "a family match still sorts")
+        #expect(fit.name("darkmux:flint-int4") == "Flint")
+        #expect(fit.name("qwen3.8-27b") == "Qwen3.8 27B")
+        #expect(fit.name("qwen3.8-27b-turboquant-mlx") == nil, "another conversion keeps its own id")
+        #expect(fit.name("phi-4") == nil)
     }
 
     @Test func recsFlintMatchesItsEvalsRuns() throws {
         // Evals runs name rec's model `flint` (quant int4); darkmux lists it as `flint-int4`.
         for site in ["flint", "flint-int4"] {
-            let fit = try EvalsFit.families(from: Data(#"{"data":{"points":[{"family":"\#(site)"}]}}"#.utf8))
+            let fit = try EvalsFit.order(from: Data(#"{"data":{"points":[{"family":"\#(site)"}]}}"#.utf8))
             let listed = [p("qwen", "qwen3.8-27b"), p("flint", "flint-int4", "flint")]
             #expect(EvalsFit.ordered(listed, by: fit).map(\.name) == ["flint", "qwen"])
         }
@@ -57,6 +69,6 @@ struct EvalsFitLoadTests {
         #expect(brain.runs.fitOrder.isEmpty)
         brain.runs.fitSource = { Data(#"{"data":{"points":[{"family":"phi-4"}]}}"#.utf8) }
         await brain.runs.loadFitOrder()
-        #expect(brain.runs.fitOrder == ["phi-4"])
+        #expect(brain.runs.fitOrder.families == ["phi-4"])
     }
 }

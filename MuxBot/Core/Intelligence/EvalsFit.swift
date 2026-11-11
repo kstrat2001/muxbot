@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// The Fit order: how setups on Macs with this chip did on the public evals
 /// at evals.darkmux.com (`GET /api/v1/frontier`, pass rate first), used only
@@ -68,30 +69,70 @@ enum EvalsFit {
 
     struct Reply: Decodable {
         struct Body: Decodable { var points: [Point] }
-        struct Point: Decodable { var family: String }
+        struct Point: Decodable {
+            var family: String
+            /// The site's display name: the owner's alias, else a spelling its runs used.
+            var model: String?
+            /// The model ids its runs reported, with the raw ids the owner's
+            /// display names cover (darklyenergized: frontier `ids`).
+            var ids: [String]?
+        }
         var data: Body
+    }
+
+    /// The site's order for this chip: families first-seen in its order, the
+    /// ids that name each one, and its display names.
+    struct Order: Equatable, Sendable {
+        var families: [String] = []
+        var byId: [String: Int] = [:]
+        var names: [Int: String] = [:]
+        var isEmpty: Bool { families.isEmpty }
+
+        /// Where a model goes: by an id the site lists for it (the owner's
+        /// aliases, so `flint-int4` finds Flint), else by family.
+        func place(_ model: String) -> Int? {
+            byId[EvalsFit.key(model)] ?? families.firstIndex(of: EvalsFit.family(model))
+        }
+
+        /// The site's display name for a model, only by an id the site lists:
+        /// a family match could name a different conversion (turboquant) as
+        /// the one the site ran.
+        func name(_ model: String) -> String? { byId[EvalsFit.key(model)].flatMap { names[$0] } }
+    }
+
+    /// An id as matched: without darkmux's namespace or a publisher, any case.
+    static func key(_ id: String) -> String { (ModelLabel.model(id) ?? id).lowercased() }
+
+    static func order(from data: Data) throws -> Order {
+        var out = Order()
+        for point in try JSONDecoder().decode(Reply.self, from: data).data.points {
+            let fam = family(point.family)
+            let i: Int
+            if let at = out.families.firstIndex(of: fam) { i = at } else { i = out.families.count; out.families.append(fam) }
+            if out.names[i] == nil, let name = point.model?.trimmingCharacters(in: .whitespaces), !name.isEmpty { out.names[i] = name }
+            for id in point.ids ?? [] where out.byId[key(id)] == nil { out.byId[key(id)] = i }
+        }
+        return out
     }
 
     /// The families in the site's order, each once, matched the way the app
     /// matches its own models (`family`), so both sides strip the same suffixes.
-    static func families(from data: Data) throws -> [String] {
-        var seen = Set<String>()
-        return try JSONDecoder().decode(Reply.self, from: data).data.points
-            .map { family($0.family) }
-            .filter { seen.insert($0).inserted }
-    }
+    static func families(from data: Data) throws -> [String] { try order(from: data).families }
 
     /// The listing in Fit order: models with evals runs on this chip first, in
     /// the site's order; the rest after, in darkmux's order.
-    static func ordered(_ listed: [DarkmuxClient.ProfileInfo], by fit: [String]) -> [DarkmuxClient.ProfileInfo] {
+    static func ordered(_ listed: [DarkmuxClient.ProfileInfo], by fit: Order) -> [DarkmuxClient.ProfileInfo] {
         guard !fit.isEmpty else { return listed }
-        let place = Dictionary(fit.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         return listed.enumerated().sorted { a, b in
-            let pa = a.element.model.flatMap { place[family($0)] } ?? Int.max
-            let pb = b.element.model.flatMap { place[family($0)] } ?? Int.max
+            let pa = a.element.model.flatMap { fit.place($0) } ?? Int.max
+            let pb = b.element.model.flatMap { fit.place($0) } ?? Int.max
             return pa != pb ? pa < pb : a.offset < b.offset
         }.map(\.element)
     }
+
+    /// The order last read, for display names wherever a model is shown
+    /// (`ModelLabel.name`); empty until read.
+    static let current = Mutex(Order())
 
     /// This Mac's chip ("Apple M5 Max"); nil where it can't tell (iPhone,
     /// whose darkmux is on a Mac).
