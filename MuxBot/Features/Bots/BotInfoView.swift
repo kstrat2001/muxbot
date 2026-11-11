@@ -69,13 +69,14 @@ struct BotInfoView: View {
                     Text("Same as Settings").tag(String?.none)
                     Text("Auto").tag(Optional(ModelMode.auto.stored))
                     Text("Always ask").tag(Optional(ModelMode.ask.stored))
-                    ForEach(brain.runs.lastListed.map(\.name), id: \.self) { name in
-                        Text("Always \(name)").tag(Optional(ModelMode.model(name).stored))
+                    ForEach(ModelLabel.distinct(brain.runs.lastListed), id: \.name) { p in
+                        Text("Always \(ModelLabel.line(p))").tag(Optional(ModelMode.model(p.name).stored))
                     }
                     // A saved model this Mac doesn't list keeps a row, so the picker shows it.
-                    if let name = ModelMode.unlistedModel(ModelMode(stored: botMode), listed: brain.runs.lastListed.map(\.name)) {
-                        if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(Optional(ModelMode.model(name).stored)) }
-                        else { Text("Always \(name)").tag(Optional(ModelMode.model(name).stored)) }
+                    if let name = ModelMode.unlistedModel(ModelMode(stored: botMode), listed: ModelLabel.distinct(brain.runs.lastListed).map(\.name)) {
+                        if let line = ModelLabel.line(name, in: brain.runs.lastListed) { Text("Always \(line)").tag(Optional(ModelMode.model(name).stored)) }
+                        else if brain.runs.listing == .listed { Text("Always a model this Mac doesn't list").tag(Optional(ModelMode.model(name).stored)) }
+                        else { Text("Always the model you chose").tag(Optional(ModelMode.model(name).stored)) }
                     }
                 }
                 .disabled(brain.runs.knownMachine == nil)

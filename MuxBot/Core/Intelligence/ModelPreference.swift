@@ -45,10 +45,10 @@ enum ModelMode: Equatable, Hashable, Sendable {
 struct ModelSettings: Equatable, Sendable {
     var mode: ModelMode = .auto
     /// Coder's models by profile name, fastest first, then the stronger one
-    /// a run moves to when its done-when isn't met.
-    var order: [String] = ModelSettings.defaultOrder
-
-    static let defaultOrder = ["flint-rec", "q38-27b-tensorfold"]
+    /// a run moves to when its done-when isn't met. Empty until you add
+    /// one: never names the app guesses (profile names differ per Mac), so
+    /// Auto starts on darkmux's default for the role.
+    var order: [String] = []
 
     /// A bot's own mode when it has one, else the app's.
     func mode(forBot botMode: ModelMode?) -> ModelMode { botMode ?? mode }
@@ -130,7 +130,7 @@ final class ModelSettingsStore: @unchecked Sendable {
 
     func settings(machine: String) -> ModelSettings {
         ModelSettings(mode: ModelMode(stored: backing.string(forKey: modeKey(machine))) ?? .auto,
-                      order: (backing.array(forKey: Self.orderKey) as? [String]) ?? ModelSettings.defaultOrder)
+                      order: (backing.array(forKey: Self.orderKey) as? [String]) ?? [])
     }
 
     func save(_ settings: ModelSettings, machine: String) {
@@ -192,9 +192,9 @@ struct ModelChoice: Equatable, Sendable {
             let entry = listed.first { $0.name == name }
             var c = ModelChoice(profile: name, reason: "your default model", stays: true)
             if entry == nil {
-                c.unavailable = "\(name) isn't available to Mux Bot on this Mac."
+                c.unavailable = String(localized: "Your default model isn't available to Mux Bot on this Mac.")
             } else if entry?.reachable == false {
-                c.unavailable = "\(name) isn't running on this Mac."
+                c.unavailable = String(localized: "Your default model isn't running on this Mac.")
             }
             if c.unavailable != nil { c.suggestion = auto(order: order, listed: listed, crew: crew).profile.flatMap { $0 == name ? nil : $0 } }
             if rerunAfterNotMet {
@@ -229,7 +229,7 @@ enum ModelPreference {
     /// The first in `order` that answers now, else darkmux's default (listed
     /// first) when it answers; nil leaves the choice to darkmux. A run never
     /// wanders to some other local model.
-    static func first(in listed: [DarkmuxClient.ProfileInfo], order: [String] = ModelSettings.defaultOrder) -> String? {
+    static func first(in listed: [DarkmuxClient.ProfileInfo], order: [String] = []) -> String? {
         let up = listed.filter(\.reachable).map(\.name)
         return order.first(where: up.contains) ?? up.first.flatMap { listed.first?.name == $0 ? $0 : nil }
     }
@@ -238,7 +238,7 @@ enum ModelPreference {
     /// When `current` itself doesn't answer, never `current`: the next one
     /// after its place in the order that does, else the strongest before it
     /// that does, else darkmux's default (nil when nothing answers).
-    static func next(after current: String?, in listed: [DarkmuxClient.ProfileInfo], order: [String] = ModelSettings.defaultOrder) -> String? {
+    static func next(after current: String?, in listed: [DarkmuxClient.ProfileInfo], order: [String] = []) -> String? {
         let up = Set(listed.filter(\.reachable).map(\.name))
         guard let current else { return first(in: listed, order: order) }
         guard let i = order.firstIndex(of: current) else { return up.contains(current) ? current : first(in: listed, order: order) }
@@ -255,9 +255,63 @@ enum ModelListing: Equatable, Sendable {
     case failed(String)
 }
 
-/// A model in Settings › Models: its description's leading phrase as the
-/// name with the id under it (the id alone without one), and whether it's
-/// running on this machine.
+/// What people see for a model: its model id and the engine it runs on,
+/// never darkmux's profile or role names (those mean something only to
+/// whoever set darkmux up). Model ids carry the spec already
+/// (Qwen3.6-35B-A3B-4bit).
+enum ModelLabel {
+    /// The model id without darkmux's namespace or a publisher's prefix
+    /// (`darkmux:`, `mlx-community/`).
+    static func model(_ id: String?) -> String? {
+        guard var s = id?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        if s.hasPrefix("darkmux:") { s.removeFirst("darkmux:".count) }
+        if let slash = s.lastIndex(of: "/") { s = String(s[s.index(after: slash)...]) }
+        return s.isEmpty ? nil : s
+    }
+
+    /// The engine by its own name; a server darkmux only sends to is "Server".
+    static func engine(_ endpoint: String) -> String {
+        switch endpoint.lowercased() {
+        case "lmstudio": "LM Studio"
+        case "tensorfold": "Tensorfold"
+        case "flint": "rec"
+        case "url", "": String(localized: "Server")
+        default: endpoint
+        }
+    }
+
+    /// "model · engine".
+    static func line(_ p: DarkmuxClient.ProfileInfo) -> String {
+        "\(model(p.model) ?? String(localized: "Unnamed model")) · \(engine(p.endpoint))"
+    }
+
+    /// A profile's line from a listing; nil when the listing doesn't have it.
+    static func line(_ profile: String?, in listed: [DarkmuxClient.ProfileInfo]) -> String? {
+        guard let profile, let p = listed.first(where: { $0.name == profile }) else { return nil }
+        return line(p)
+    }
+
+    /// One entry per model and engine, in darkmux's order: darkmux lists a
+    /// profile per lab setup, often several on one model. The one kept is
+    /// the first that can run, else the first.
+    static func distinct(_ listed: [DarkmuxClient.ProfileInfo]) -> [DarkmuxClient.ProfileInfo] {
+        var keys: [String] = []
+        var picked: [String: DarkmuxClient.ProfileInfo] = [:]
+        for p in listed {
+            let key = "\(model(p.model) ?? p.name)|\(p.endpoint.lowercased())"
+            if let kept = picked[key] {
+                if !kept.reachable && p.reachable { picked[key] = p }
+            } else {
+                keys.append(key)
+                picked[key] = p
+            }
+        }
+        return keys.compactMap { picked[$0] }
+    }
+}
+
+/// A model in Settings › Models: the model id with its engine under it, and
+/// whether darkmux can run it on this machine now.
 struct ModelRow: Equatable {
     enum Status: Equatable {
         case running, loadsWhenUsed, notRunning, notHere, unknown
@@ -265,8 +319,8 @@ struct ModelRow: Equatable {
         var label: String? {
             switch self {
             case .running: String(localized: "Running")
-            case .loadsWhenUsed: String(localized: "Loads when used")
-            case .notRunning: String(localized: "Not running")
+            case .loadsWhenUsed: String(localized: "Starts when used")
+            case .notRunning: String(localized: "Not available")
             case .notHere: String(localized: "Not on this Mac")
             case .unknown: nil
             }
@@ -276,42 +330,37 @@ struct ModelRow: Equatable {
     var name: String
     var title: String
     var subtitle: String?
-    /// The whole description, for hover.
+    /// Why it isn't available (darkmux's reason), for hover.
     var detail: String?
     var status: Status
 
     init(name: String, listed: [DarkmuxClient.ProfileInfo], listing: ModelListing) {
         self.name = name
         let profile = listed.first { $0.name == name }
-        let description = profile?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
-        detail = description?.isEmpty == false ? description : nil
-        if let phrase = detail.map(Self.leadingPhrase), !phrase.isEmpty, phrase != name {
-            title = phrase
-            subtitle = name
+        if let profile {
+            title = ModelLabel.model(profile.model) ?? String(localized: "Unnamed model")
+            subtitle = ModelLabel.engine(profile.endpoint)
+            detail = profile.availability?.reason
         } else {
-            title = name
+            title = String(localized: "A model this Mac doesn't list")
             subtitle = nil
+            detail = nil
         }
         guard listing == .listed else { status = .unknown; return }
         guard let profile else { status = .notHere; return }
-        if !profile.reachable { status = .notRunning }
-        else if profile.loaded == false { status = .loadsWhenUsed }
-        else { status = .running }
+        switch profile.availability?.state {
+        case "resident"?: status = .running
+        case "startable"?: status = .loadsWhenUsed
+        case "unavailable"?: status = .notRunning
+        case "unknown"?: status = .unknown
+        default:
+            // "external" or an older darkmux: whether its server answers.
+            if !profile.reachable { status = .notRunning }
+            else if profile.loaded == false { status = .loadsWhenUsed }
+            else { status = .running }
+        }
     }
 
-    /// Up to the first ": ", ". ", " — " or line break, at most about 50
-    /// characters (cut at a word).
-    static func leadingPhrase(_ text: String) -> String {
-        var phrase = text.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? text
-        for stop in [": ", ". ", " — "] {
-            if let r = phrase.range(of: stop) { phrase = String(phrase[..<r.lowerBound]) }
-        }
-        phrase = phrase.trimmingCharacters(in: .whitespaces)
-        if phrase.hasSuffix(".") { phrase.removeLast() }
-        let cap = 50
-        guard phrase.count > cap else { return phrase }
-        let head = phrase.prefix(cap)
-        let cut = head.lastIndex(of: " ").map { head[..<$0] } ?? head
-        return cut.trimmingCharacters(in: .whitespaces) + "…"
-    }
+    /// "model · engine" on one line, for menus.
+    var line: String { subtitle.map { "\(title) · \($0)" } ?? title }
 }

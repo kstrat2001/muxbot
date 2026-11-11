@@ -1013,6 +1013,7 @@ final class RunCoordinator {
 
     /// The thread's line when a run starts, with the crew's name (never
     /// darkmux's role, "analyst" or "code-reviewer").
+    /// `profile` is the model as people see it ("model · engine").
     nonisolated static func runningLine(crew: CrewRole, profile: String?) -> String {
         if let profile { return String(localized: "Running on darkmux: \(crew.name), on \(profile).") }
         return String(localized: "Running on darkmux: \(crew.name).")
@@ -1664,7 +1665,7 @@ final class RunCoordinator {
                 recordWork(workId, for: run)
                 if let pairing = connection.pairingId { recordPairing(pairing, for: run) }
                 starting.remove(run.id)
-                store.append(.system, Self.runningLine(crew: run.crew, profile: profile), to: thread)
+                store.append(.system, Self.runningLine(crew: run.crew, profile: profile.map { modelLine($0, for: run) }), to: thread)
                 await follow(run, workId: workId, store: store)
             } catch let error as DarkmuxClient.ClientError where error.status == 429 {
                 // darkmux is running two of this app's runs: wait for a slot.
@@ -1826,6 +1827,23 @@ final class RunCoordinator {
     }
 
     func profile(for run: BotRun) -> String? { runProfiles[run.id] }
+
+    /// The run's model as people see it ("model · engine"), never the
+    /// profile name; nil when darkmux picks.
+    func modelLine(for run: BotRun) -> String? {
+        guard let profile = runProfiles[run.id] else { return nil }
+        return modelLine(profile, for: run)
+    }
+
+    func modelLine(_ profile: String, for run: BotRun) -> String {
+        ModelLabel.line(profile, in: listed(for: run) + lastListed) ?? String(localized: "a model this Mac no longer lists")
+    }
+
+    /// The models a run can switch to: one per model and engine, ready or
+    /// startable.
+    func choices(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
+        ModelLabel.distinct(listed(for: run)).filter(\.reachable)
+    }
 
     // MARK: Checking the done-when
 

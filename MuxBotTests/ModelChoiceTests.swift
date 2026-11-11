@@ -15,29 +15,29 @@ struct ModelPreferenceTests {
     let big = DarkmuxClient.ProfileInfo(name: "bakeoff-a10b", description: nil, model: "qwen3.5-122b", endpoint: "lmstudio", reachable: true, loaded: false)
 
     @Test func thePreferredModelThatAnswersGoesFirst() {
-        #expect(ModelPreference.first(in: listing(fold, [big, flint])) == "flint-rec", "fast coder first, wherever darkmux lists it")
+        #expect(ModelPreference.first(in: listing(fold, [big, flint]), order: testOrder) == "flint-rec", "fast coder first, wherever darkmux lists it")
         var down = flint; down.reachable = false
-        #expect(ModelPreference.first(in: listing(fold, [big, down])) == "q38-27b-tensorfold")
+        #expect(ModelPreference.first(in: listing(fold, [big, down]), order: testOrder) == "q38-27b-tensorfold")
         #expect(ModelPreference.first(in: []) == nil, "none listed: darkmux's own default")
     }
 
     @Test func withoutPreferredNamesItsDarkmuxsDefault() {
         let own = DarkmuxClient.ProfileInfo(name: "their-coder", description: nil, model: "m", endpoint: "lmstudio", reachable: true, loaded: true)
-        #expect(ModelPreference.first(in: listing(own, [big])) == "their-coder", "the role's own, listed first")
-        #expect(ModelPreference.next(after: "their-coder", in: listing(own, [big])) == "their-coder", "never wanders to another local model")
+        #expect(ModelPreference.first(in: listing(own, [big]), order: testOrder) == "their-coder", "the role's own, listed first")
+        #expect(ModelPreference.next(after: "their-coder", in: listing(own, [big]), order: testOrder) == "their-coder", "never wanders to another local model")
     }
 
     @Test func notMetMovesToTheNextPreferred() {
-        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, flint])) == "q38-27b-tensorfold")
-        #expect(ModelPreference.next(after: "q38-27b-tensorfold", in: listing(fold, [big, flint])) == "q38-27b-tensorfold", "the last stays")
-        #expect(ModelPreference.next(after: nil, in: listing(fold, [big, flint])) == "flint-rec")
+        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, flint]), order: testOrder) == "q38-27b-tensorfold")
+        #expect(ModelPreference.next(after: "q38-27b-tensorfold", in: listing(fold, [big, flint]), order: testOrder) == "q38-27b-tensorfold", "the last stays")
+        #expect(ModelPreference.next(after: nil, in: listing(fold, [big, flint]), order: testOrder) == "flint-rec")
     }
 
     /// The run's model went down: the next one after it in the order that
     /// answers, never the one that's down.
     @Test func notMetWhenTheCurrentModelIsDownMovesOnFromItsPlace() {
         var down = flint; down.reachable = false
-        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, down])) == "q38-27b-tensorfold")
+        #expect(ModelPreference.next(after: "flint-rec", in: listing(fold, [big, down]), order: testOrder) == "q38-27b-tensorfold")
         let deep = DarkmuxClient.ProfileInfo(name: "deep", description: nil, model: "d", endpoint: "url", reachable: true, loaded: true)
         let order = ["flint-rec", "q38-27b-tensorfold", "deep"]
         var foldDown = fold; foldDown.reachable = false
@@ -49,7 +49,7 @@ struct ModelPreferenceTests {
 
     @Test func aDefaultModelThatsDownOffersOneThatAnswers() {
         var down = flint; down.reachable = false
-        let c = ModelChoice.resolve(mode: .model("flint-rec"), order: ModelSettings.defaultOrder, listed: [down, fold],
+        let c = ModelChoice.resolve(mode: .model("flint-rec"), order: testOrder, listed: [down, fold],
                                     previous: "flint-rec", rerunAfterNotMet: true)
         #expect(c.offerNext == "q38-27b-tensorfold")
     }
@@ -87,6 +87,9 @@ struct ModelChoiceFlowTests {
         brain.layoutProbe = MockProbe([820: heroAt(820), 768: heroAt(768), 1440: heroAt(1440)])
         let listed = self.listed
         brain.runs.profileSource = { listed }
+        // The app ships no Auto order; these runs use the test one.
+        brain.runs.settingsStore = ModelSettingsStore(backing: MemoryBacking())
+        brain.runs.settingsStore.save(ModelSettings(order: testOrder), machine: brain.runs.machineKey)
         return (store, bot, brain)
     }
 
