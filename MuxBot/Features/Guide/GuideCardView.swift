@@ -31,6 +31,17 @@ struct GuideCardView: View {
 
 /// The live checklist: looks again every few seconds while it's on screen
 /// and ticks off each step once it works.
+/// A link to a page, drawn in SwiftUI (the accent color, dimmed while
+/// pressed), so it looks like a Link and renders in screenshots too.
+struct PageLinkStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Color.accentText)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .contentShape(Rectangle())
+    }
+}
+
 struct SetupChecklistView: View {
     @Environment(FleetConnection.self) private var connection
     @Environment(BotBrain.self) private var brain
@@ -39,8 +50,19 @@ struct SetupChecklistView: View {
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
+    @Environment(\.openURL) private var openURL
     var isLive = true
     @State private var facts: SetupFacts?
+    /// Shown as given, never probed (screenshots of each state).
+    private var fixed = false
+
+    init(isLive: Bool = true) { self.isLive = isLive }
+
+    init(facts: SetupFacts) {
+        isLive = false
+        fixed = true
+        _facts = State(initialValue: facts)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -58,6 +80,7 @@ struct SetupChecklistView: View {
             #endif
         }
         .task(id: isLive) {
+            guard !fixed else { return }
             await SetupProbe.watch(isLive: isLive, every: .seconds(4),
                                    probe: { await SetupProbe.facts(connection: connection, runs: brain.runs, githubSignedIn: github.token != nil) },
                                    show: { facts = $0 })
@@ -75,7 +98,11 @@ struct SetupChecklistView: View {
                 Text(step.detail).font(AppFont.footnote()).foregroundStyle(Color.secondaryText).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: Spacing.md) {
                     if let action = step.action { button(action) }
-                    if let link = step.link { Link(destination: link) { Label(step.linkTitle ?? link.host() ?? "Open", systemImage: "safari") }.font(AppFont.footnote()) }
+                    if let link = step.link {
+                        // A button that opens the page (same look as a Link; it also renders in screenshots).
+                        Button { openURL(link) } label: { Label(step.linkTitle ?? link.host() ?? "Open", systemImage: "safari") }
+                            .buttonStyle(PageLinkStyle()).font(AppFont.footnote())
+                    }
                 }
             }
         }
@@ -118,6 +145,7 @@ struct SetupChecklistView: View {
         case .manual: "hand.raised.circle"
         case .later: "circle.dotted"
         case .needsMac: "laptopcomputer"
+        case .optional: "circle.dashed"
         }
     }
 
@@ -126,7 +154,7 @@ struct SetupChecklistView: View {
         case .done: .brandGreen
         case .todo: .brandOrange
         case .unknown, .manual, .needsMac: .brandBlue
-        case .later: .secondary
+        case .later, .optional: .secondary
         }
     }
 
@@ -138,6 +166,7 @@ struct SetupChecklistView: View {
         case .manual: String(localized: "Check it yourself")
         case .later: String(localized: "After an earlier step")
         case .needsMac: String(localized: "Needs a Mac")
+        case .optional: String(localized: "Optional")
         }
     }
 }

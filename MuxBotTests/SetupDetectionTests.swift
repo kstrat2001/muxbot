@@ -48,7 +48,7 @@ struct SetupDetectionTests {
 
     @Test func lmStudioInstalledButNotServingOffersToOpenIt() {
         let step = SetupCheck.steps(facts(lmApp: .installed))[.lmStudio]
-        #expect(step?.state == .todo)
+        #expect(step?.state == .optional)
         #expect(step?.action == .openLMStudio)
         #expect(step?.detail.hasPrefix("LM Studio is installed, but its local server isn't answering.") == true)
     }

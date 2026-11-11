@@ -33,7 +33,7 @@ struct SetupFacts: Equatable, Sendable {
 }
 
 struct SetupStep: Identifiable, Equatable, Sendable {
-    enum ID: String, Sendable, CaseIterable { case mac, darkmux, endpoint, lmStudio, docker, pair, models, github }
+    enum ID: String, Sendable, CaseIterable { case mac, darkmux, lmStudio, docker, pair, models, github }
     enum State: Equatable, Sendable {
         case done
         case todo
@@ -45,6 +45,8 @@ struct SetupStep: Identifiable, Equatable, Sendable {
         case later
         /// On iPhone or iPad: runs need a Mac.
         case needsMac
+        /// An optional row not set up: never shown as a to-do.
+        case optional
     }
     enum Action: Equatable, Sendable { case pair, gitHubSignIn, confirmDocker, openDocker, openLMStudio }
 
@@ -99,45 +101,18 @@ enum SetupCheck {
 
         let up = f.endpointUp == true
         if !onMac {
-            steps.append(later(.darkmux, String(localized: "darkmux installed"), String(localized: "On your Mac.")))
-            steps.append(later(.endpoint, String(localized: "darkmux's app connection"), String(localized: "On your Mac.")))
-            steps.append(later(.lmStudio, String(localized: "LM Studio and a model"), String(localized: "On your Mac.")))
+            steps.append(later(.darkmux, String(localized: "darkmux"), String(localized: "On your Mac.")))
             steps.append(later(.docker, String(localized: "Docker"), String(localized: "On your Mac.")))
             steps.append(later(.pair, String(localized: "Pair Mux Bot"), String(localized: "On your Mac.")))
             steps.append(later(.models, String(localized: "Models Mux Bot can use"), String(localized: "On your Mac.")))
+            steps.append(later(.lmStudio, lmStudioTitle, String(localized: "On your Mac.")))
         } else {
+            // One row: the app can't tell "not installed" from "not started".
             steps.append(SetupStep(
-                id: .darkmux, title: String(localized: "darkmux installed"), state: up ? .done : .unknown,
-                detail: up ? String(localized: "darkmux is answering on this Mac.")
-                    : String(localized: "Mux Bot can't install darkmux or tell it's there until darkmux answers. darkmux's guide shows how to get it."),
-                link: up ? nil : DarkmuxLinks.install, linkTitle: up ? nil : String(localized: "Get darkmux")))
-            steps.append(SetupStep(
-                id: .endpoint, title: String(localized: "darkmux's app connection"), state: up ? .done : .todo,
-                detail: up ? String(localized: "Running on this Mac.")
-                    : String(localized: "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; this ticks off once it answers."),
+                id: .darkmux, title: String(localized: "darkmux"), state: up ? .done : .todo,
+                detail: up ? String(localized: "darkmux is running on this Mac.")
+                    : String(localized: "darkmux isn't answering on this Mac. Install it or start it; darkmux's guide shows both."),
                 link: up ? nil : DarkmuxLinks.guide, linkTitle: up ? nil : String(localized: "darkmux guide")))
-            let tier = memoryTier(gb: f.memoryGB)
-            let getLM = f.lmStudioApp == .notInstalled
-            switch f.lmStudio {
-            case let .models(n) where n > 0:
-                steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"), state: .done,
-                                       detail: String(localized: "LM Studio has \(n) models.")))
-            case .models:
-                steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"), state: .todo,
-                                       detail: String(localized: "Download a model in LM Studio. This Mac has \(f.memoryGB) GB, so pick one darkmux's \(tier) settings fit."),
-                                       action: .openLMStudio))
-            case .notAnswering, .unknown:
-                let ok = f.runningModels > 0
-                let detail: String = ok ? String(localized: "darkmux has models ready.")
-                    : [.installed, .running].contains(f.lmStudioApp)
-                        ? String(localized: "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server. This Mac has \(f.memoryGB) GB: darkmux's \(tier) settings fit it.")
-                        : String(localized: "Install LM Studio and download a model, then turn on its local server. This Mac has \(f.memoryGB) GB: darkmux's \(tier) settings fit it.")
-                steps.append(SetupStep(id: .lmStudio, title: String(localized: "LM Studio and a model"),
-                                       state: ok ? .done : f.lmStudio == .unknown && f.lmStudioApp == .unknown ? .unknown : .todo,
-                                       detail: detail,
-                                       link: ok || !getLM ? nil : lmStudioURL, linkTitle: ok || !getLM ? nil : String(localized: "Get LM Studio"),
-                                       action: ok || getLM || f.lmStudioApp == .unknown ? nil : .openLMStudio))
-            }
             steps.append(dockerStep(f))
             if f.paired {
                 steps.append(SetupStep(id: .pair, title: String(localized: "Pair Mux Bot"), state: .done,
@@ -146,32 +121,85 @@ enum SetupCheck {
                 steps.append(SetupStep(id: .pair, title: String(localized: "Pair Mux Bot"), state: .todo,
                                        detail: String(localized: "Pair once, then approve it in darkmux on this Mac."), action: .pair))
             } else {
-                steps.append(later(.pair, String(localized: "Pair Mux Bot"), String(localized: "After darkmux's app connection is running.")))
+                steps.append(later(.pair, String(localized: "Pair Mux Bot"), String(localized: "After darkmux is running.")))
             }
-            if !f.paired {
-                steps.append(later(.models, String(localized: "Models Mux Bot can use"), String(localized: "After pairing.")))
-            } else {
-                switch f.listing {
-                case .loading:
-                    steps.append(SetupStep(id: .models, title: String(localized: "Models Mux Bot can use"), state: .unknown,
-                                           detail: String(localized: "Looking at this Mac's models…")))
-                case let .failed(reason):
-                    steps.append(SetupStep(id: .models, title: String(localized: "Models Mux Bot can use"), state: .todo,
-                                           detail: String(localized: "darkmux didn't list its models: \(reason)")))
-                case .listed:
-                    steps.append(SetupStep(id: .models, title: String(localized: "Models Mux Bot can use"),
-                                           state: f.runningModels > 0 ? .done : .todo,
-                                           detail: f.runningModels > 0
-                                               ? String(localized: "\(f.listedModels) models, \(f.runningModels) ready now.")
-                                               : String(localized: "darkmux lists \(f.listedModels) models but none answer now. Open LM Studio, or start your model's server.")))
-                }
-            }
+            steps.append(modelsStep(f))
+            steps.append(lmStudioStep(f))
         }
-        steps.append(SetupStep(id: .github, title: String(localized: "GitHub (optional)"), state: f.githubSignedIn ? .done : .todo,
+        steps.append(SetupStep(id: .github, title: String(localized: "GitHub (optional)"), state: f.githubSignedIn ? .done : .optional,
                                detail: f.githubSignedIn ? String(localized: "Signed in.")
                                    : String(localized: "Sign in to read private repos and open pull requests."),
                                action: f.githubSignedIn ? nil : .gitHubSignIn))
         return steps
+    }
+
+    static var lmStudioTitle: String { String(localized: "LM Studio (optional)") }
+
+    /// What the models step says when there's no model to use yet.
+    static var needsEngineLine: String {
+        String(localized: "darkmux needs a model engine set up on this Mac (Flint, TensorFold or LM Studio). darkmux's guide shows how.")
+    }
+
+    /// Required: a model darkmux lists that answers now. Any engine darkmux
+    /// runs (Flint, TensorFold, LM Studio) counts.
+    static func modelsStep(_ f: SetupFacts) -> SetupStep {
+        let title = String(localized: "Models Mux Bot can use")
+        let needsEngine = SetupStep(id: .models, title: title, state: .todo, detail: needsEngineLine,
+                                    link: DarkmuxLinks.models, linkTitle: String(localized: "darkmux guide"))
+        guard f.paired else {
+            // LM Studio already has models: only pairing is left.
+            if case let .models(n) = f.lmStudio, n > 0 {
+                return SetupStep(id: .models, title: title, state: .later, detail: String(localized: "After pairing."))
+            }
+            // The app can't see darkmux's engines (Flint, TensorFold) until
+            // pairing: wait, and say where to look if there isn't one.
+            return SetupStep(id: .models, title: title, state: .later,
+                             detail: String(localized: "After pairing, this checks darkmux's models. No model engine yet? darkmux's guide shows how (Flint, TensorFold or LM Studio)."),
+                             link: DarkmuxLinks.models, linkTitle: String(localized: "darkmux guide"))
+        }
+        switch f.listing {
+        case .loading:
+            return SetupStep(id: .models, title: title, state: .unknown, detail: String(localized: "Looking at this Mac's models…"))
+        case let .failed(reason):
+            return SetupStep(id: .models, title: title, state: .todo, detail: String(localized: "darkmux didn't list its models: \(reason)"))
+        case .listed:
+            if f.runningModels > 0 {
+                return SetupStep(id: .models, title: title, state: .done,
+                                 detail: String(localized: "\(f.listedModels) models, \(f.runningModels) ready now."))
+            }
+            if f.listedModels == 0 { return needsEngine }
+            return SetupStep(id: .models, title: title, state: .todo,
+                             detail: String(localized: "darkmux lists \(f.listedModels) models, but none answer now. Start the engine they run on (Flint, TensorFold or LM Studio); darkmux's guide shows how."),
+                             link: DarkmuxLinks.models, linkTitle: String(localized: "darkmux guide"))
+        }
+    }
+
+    /// Optional: one engine darkmux can run models with, still detected.
+    static func lmStudioStep(_ f: SetupFacts) -> SetupStep {
+        let title = lmStudioTitle
+        let tier = memoryTier(gb: f.memoryGB)
+        switch f.lmStudio {
+        case let .models(n) where n > 0:
+            return SetupStep(id: .lmStudio, title: title, state: .done, detail: String(localized: "LM Studio has \(n) models."))
+        case .models:
+            return SetupStep(id: .lmStudio, title: title, state: .optional,
+                             detail: String(localized: "Download a model in LM Studio. This Mac has \(f.memoryGB) GB, so pick one darkmux's \(tier) settings fit."),
+                             action: .openLMStudio)
+        case .notAnswering, .unknown:
+            switch f.lmStudioApp {
+            case .installed, .running:
+                return SetupStep(id: .lmStudio, title: title, state: .optional,
+                                 detail: String(localized: "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server."),
+                                 action: .openLMStudio)
+            case .notInstalled:
+                return SetupStep(id: .lmStudio, title: title, state: .optional,
+                                 detail: String(localized: "One engine darkmux can run models with. You don't need it if you use Flint or TensorFold."),
+                                 link: lmStudioURL, linkTitle: String(localized: "Get LM Studio"))
+            case .unknown:
+                return SetupStep(id: .lmStudio, title: title, state: .optional,
+                                 detail: String(localized: "One engine darkmux can run models with."))
+            }
+        }
     }
 
     /// Docker as the Mac reports it: running is done; installed gets Open
@@ -198,9 +226,14 @@ enum SetupCheck {
         }
     }
 
+    /// Optional steps (LM Studio, GitHub) stay a row of their own, never in the count:
+    /// a working setup without them is "All set".
+    static let optional: Set<SetupStep.ID> = [.lmStudio, .github]
+
     static func summary(_ steps: [SetupStep]) -> String {
-        let done = steps.filter { $0.state == .done }.count
-        return done == steps.count ? String(localized: "All set") : String(localized: "\(done) of \(steps.count) done")
+        let required = steps.filter { !optional.contains($0.id) }
+        let done = required.filter { $0.state == .done }.count
+        return done == required.count ? String(localized: "All set") : String(localized: "\(done) of \(required.count) done")
     }
 
     /// The steps as text, to send to the Mac from a phone: no commands,
@@ -209,7 +242,7 @@ enum SetupCheck {
         """
         Set up Mux Bot on a Mac with Apple silicon:
         1. Get darkmux: \(DarkmuxLinks.install.absoluteString)
-        2. Get LM Studio (\(lmStudioURL.absoluteString)) and download a model, and Docker Desktop (\(dockerURL.absoluteString)).
+        2. Get Docker Desktop (\(dockerURL.absoluteString)), and set up a model engine for darkmux: Flint, TensorFold or LM Studio. darkmux's guide shows how.
         3. Open Mux Bot on the Mac and ask it to check your setup: it walks you through the rest, and pairing.
         Guide: \(DarkmuxLinks.guide.absoluteString)
         """
@@ -223,4 +256,7 @@ enum DarkmuxLinks {
     static let guide = URL(string: "https://darkmux.com/guide/")!
     /// Where to get darkmux (its guide, until it has an install page).
     static let install = URL(string: "https://darkmux.com/guide/")!
+    /// Setting up a model engine (Flint, TensorFold, LM Studio): the guide's
+    /// front page until darkmux's guide has a page for it.
+    static let models = URL(string: "https://darkmux.com/guide/")!
 }

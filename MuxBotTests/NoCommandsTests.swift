@@ -35,10 +35,8 @@ struct NoCommandsTests {
     /// Item 1: darkmux itself comes from its own guide page.
     @Test func darkmuxNotAnsweringLinksItsGuide() {
         let steps = SetupCheck.steps(SetupFacts(platform: .mac, appleSilicon: true, memoryGB: 64, endpointUp: false))
-        #expect(steps[.darkmux]?.link == DarkmuxLinks.install)
-        #expect(steps[.darkmux]?.linkTitle == "Get darkmux")
-        #expect(steps[.endpoint]?.link == DarkmuxLinks.guide)
-        #expect(steps[.endpoint]?.detail == "darkmux's app connection isn't running on this Mac. darkmux's guide shows how to start it; this ticks off once it answers.")
+        #expect(steps[.darkmux]?.link == DarkmuxLinks.guide)
+        #expect(steps[.darkmux]?.linkTitle == "darkmux guide")
     }
 
     @Test func pairingIsApprovedOnTheMac() {

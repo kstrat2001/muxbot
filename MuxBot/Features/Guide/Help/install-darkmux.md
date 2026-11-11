@@ -10,9 +10,11 @@ In Mux Bot's setup check, Get darkmux opens darkmux's guide. Once darkmux answer
 
 Mux Bot talks to darkmux through its app connection on this Mac. When it isn't running, the setup check and the preview say so and link darkmux's guide, which shows how to start it; then Try again.
 
-## LM Studio and Docker
+## Model engines and Docker
 
-darkmux runs local models in LM Studio; download at least one model there and turn on its local server. Mux Bot sees whether LM Studio is installed: Get LM Studio opens its site, and Open LM Studio opens it when it's installed but not answering.
+darkmux runs local models through a model engine on this Mac: Flint, TensorFold or LM Studio. You need one; darkmux's guide shows how to set it up. The setup check's "Models Mux Bot can use" step ticks off once darkmux lists a model that answers, whichever engine runs it.
+
+LM Studio is optional. Mux Bot still sees whether it's installed: Get LM Studio opens its site, and Open LM Studio opens it when it's installed but not answering.
 
 darkmux runs each piece of work in Docker Desktop, which pulls darkmux's image the first time. Mux Bot sees whether Docker Desktop is installed and open: Get Docker Desktop opens Docker's own install page, and Open Docker opens it when it's installed but closed.
 
