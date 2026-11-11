@@ -69,7 +69,7 @@ struct BotInfoView: View {
                     Text("Same as Settings").tag(String?.none)
                     Text("Auto").tag(Optional(ModelMode.auto.stored))
                     Text("Always ask").tag(Optional(ModelMode.ask.stored))
-                    ForEach(ModelLabel.distinct(brain.runs.lastListed), id: \.name) { p in
+                    ForEach(brain.runs.modelChoices(brain.runs.lastListed), id: \.name) { p in
                         Text("Always \(ModelLabel.line(p))").tag(Optional(ModelMode.model(p.name).stored))
                     }
                     // A saved model this Mac doesn't list keeps a row, so the picker shows it.
@@ -177,6 +177,7 @@ struct BotInfoView: View {
             loadBotMode()
             if brain.runs.lastListed.isEmpty { brain.runs.lastListed = await brain.runs.listedProfiles() }
             loadBotMode()   // the listing may have named the machine
+            await brain.runs.loadFitOrder()
         }
         .task {
             for repo in bot.repoSlugs { await brain.runs.recipes.load(for: repo, workspace: bot.workspaceName, connection: brain.connection, github: brain.github, useCaseId: bot.useCaseId) }

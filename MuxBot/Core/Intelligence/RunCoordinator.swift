@@ -1808,6 +1808,8 @@ final class RunCoordinator {
     func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
         // Each crew's own models: darkmux lists a role's (`?role=`).
         let role = run.crew.darkmuxRole ?? "coder"
+        // The card's Change menu lists by fit; never waits on the site.
+        Task { await loadFitOrder() }
         let listed = await listedProfiles(role: role)
         listedByRole[role] = listed
         if role == "coder" { lastListed = listed }
@@ -1840,9 +1842,42 @@ final class RunCoordinator {
     }
 
     /// The models a run can switch to: one per model and engine, ready or
-    /// startable.
+    /// startable, in Fit order.
     func choices(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
-        ModelLabel.distinct(listed(for: run)).filter(\.reachable)
+        EvalsFit.ordered(ModelLabel.distinct(listed(for: run)), by: fitOrder).filter(\.reachable)
+    }
+
+    /// One per model and engine, in Fit order: what every model list shows.
+    func modelChoices(_ listed: [DarkmuxClient.ProfileInfo]) -> [DarkmuxClient.ProfileInfo] {
+        EvalsFit.ordered(ModelLabel.distinct(listed), by: fitOrder)
+    }
+
+    /// The evals site's model families for this Mac's chip, in its order
+    /// (`EvalsFit`); empty until read, or when it can't be.
+    var fitOrder: [String] = []
+    private var fitLoaded = false
+    /// Reads the Fit order (tests); else evals.darkmux.com for this Mac's chip.
+    var fitSource: (() async throws -> Data)?
+
+    /// Reads the Fit order once per launch. Never in tests unless stubbed,
+    /// and a failure leaves darkmux's order.
+    func loadFitOrder() async {
+        guard !fitLoaded else { return }
+        let source: (() async throws -> Data)?
+        if let fitSource {
+            source = fitSource
+        } else if !TestIsolation.isTesting, let chip = EvalsFit.thisMacChip {
+            source = { try await URLSession.shared.data(for: URLRequest(url: EvalsFit.url(chip: chip), timeoutInterval: 8)).0 }
+        } else {
+            source = nil
+        }
+        guard let source else { return }
+        fitLoaded = true
+        if let data = try? await source(), let families = try? EvalsFit.families(from: data) {
+            fitOrder = families
+        } else {
+            fitLoaded = false
+        }
     }
 
     // MARK: Checking the done-when
