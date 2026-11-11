@@ -290,7 +290,7 @@ struct ChatSweep2Tests {
         keychain.items[GitHubAuth.tokenKey] = "ghu"
         let github = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain, sleep: { _ in })
         await brain.runs.openPR(for: bot, store: store, github: github)
-        #expect(said(store, bot).contains { $0.contains("Opened PR #5") }, "\(said(store, bot))")
+        #expect(said(store, bot).contains { $0.contains("pull request #5") }, "\(said(store, bot))")
         #expect(LocalBotState.shared[bot.id]?.shippedThrough != nil)
     }
 }
