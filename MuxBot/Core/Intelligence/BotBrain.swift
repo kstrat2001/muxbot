@@ -584,15 +584,20 @@ final class BotBrain {
             store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
             return
         }
-        let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        var intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        // Mux Bot's thread: a change you only said ("update the pricing on
+        // hcr") is handed to the bot it names, or answered as chat; only a
+        // prefix makes it crew work, which needs the bot's own thread.
+        // Anywhere, "add https://…" keeps a link rather than starting work.
+        if explicit == nil, intent == .fix, element == nil, Intent.issueNumber(in: text) == nil,
+           speaker == nil || FallbackBrain.resourceValue(in: text) != nil { intent = nil }
         message.intentRaw = intent?.rawValue
         store.save()
 
         // Mux Bot's thread: the guide answers setup, first-bot, settings and
         // help questions (`Guide.isEnabled` cuts it).
         if speaker == nil, Guide.isEnabled, element == nil, explicit == nil || explicit == .ask,
-           // An inferred change ("change the theme to dark") may be a setting.
-           intent == nil || intent == .ask || (explicit == nil && intent == .fix), let route = GuideRoute.route(text),
+           intent == nil || intent == .ask, let route = GuideRoute.route(text),
            // A question about one of your bots is the lead bot's, not the help's.
            route != .help || !bots.contains(where: { text.lowercased().contains($0.name.lowercased()) }) {
             beginThinking(context)
