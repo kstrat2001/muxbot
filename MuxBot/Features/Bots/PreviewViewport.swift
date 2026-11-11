@@ -83,6 +83,18 @@ enum PreviewViewport: String, CaseIterable, Sendable {
         return Layout(width: width, height: size.height / scale, scale: scale)
     }
 
+    /// How wide the panel should be to show the whole page with no empty
+    /// sides, for a panel `panelHeight` tall (double-click on the divider).
+    /// A device fills it at the largest scale its height allows (never above
+    /// 1), with its frame's padding; Desktop is its own width; Fit is the
+    /// panel already, so nil.
+    func fittedPanelWidth(panelHeight: CGFloat) -> CGFloat? {
+        guard let width else { return nil }
+        guard let height else { return width }
+        let room = max(1, panelHeight - 2 * Self.devicePadding)
+        return (width * min(1, room / height)).rounded(.up) + 2 * Self.devicePadding
+    }
+
     /// What the panel draws for a panel of `size`. A device or Fit is
     /// always the panel's current fit: a device's page keeps its own CSS
     /// width, so a resize only changes the scale and never re-lays out the

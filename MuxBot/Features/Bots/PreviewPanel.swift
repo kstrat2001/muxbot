@@ -99,6 +99,10 @@ struct PreviewPanel: View {
                     .onChange(of: geometry.size) { settle(for: geometry.size) }
                     .onChange(of: currentViewport) { settled = currentViewport.layout(in: geometry.size) }
                     .onAppear { settled = currentViewport.layout(in: geometry.size) }
+                    #if os(macOS)
+                    // Double-click the divider beside the panel: it fits the page.
+                    .background(SplitDividerDoubleClick(paneWidth: currentViewport.fittedPanelWidth(panelHeight: geometry.size.height)))
+                    #endif
             }
                 .overlay(alignment: .top) {
                     if let copiedNote {
