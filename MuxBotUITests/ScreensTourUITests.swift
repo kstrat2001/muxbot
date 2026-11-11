@@ -86,13 +86,16 @@ final class ScreensTourUITests: XCTestCase {
         keep(app, "settings-cards")
     }
 
-    func testPairing() {
+    func testSettingsComputers() {
         let app = launch(["-uiTesting"])
-        let darkmux = element(app, "darkmux")
-        XCTAssertTrue(darkmux.waitForExistence(timeout: 10))
-        darkmux.tap()
-        XCTAssertTrue(element(app, "pair").waitForExistence(timeout: 10))
-        keep(app, "pairing")
+        let settings = app.buttons["Settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        let computers = element(app, "Computers")
+        XCTAssertTrue(computers.waitForExistence(timeout: 10))
+        computers.tap()
+        XCTAssertTrue(element(app, "Runs start from the Mac app").waitForExistence(timeout: 10))
+        keep(app, "settings-computers")
     }
 
     func testExistingProject() {

@@ -21,10 +21,8 @@ struct HomeView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(iOS)
-                // Runs start from the Mac app for now; this says where.
-                Button("darkmux", systemImage: "laptopcomputer") { router.showPairing = true }
-                    .labelStyle(.titleAndIcon)
-                    .accessibilityHint("How this app reaches darkmux")
+                // Computers says where runs start (the Mac app, for now).
+                Button("Settings", systemImage: "gearshape") { router.showSettings = true }
                 #else
                 Button(connection.isPaired ? "darkmux: paired" : "Pair with darkmux",
                        systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
