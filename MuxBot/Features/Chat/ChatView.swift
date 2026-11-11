@@ -76,6 +76,8 @@ struct ChatView: View {
             .defaultScrollAnchor(.bottom)
             .onChange(of: messages.count) {
                 if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                // A message asked for before it arrived (a card just posted).
+                focusMessage(proxy)
             }
             .onAppear {
                 if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }

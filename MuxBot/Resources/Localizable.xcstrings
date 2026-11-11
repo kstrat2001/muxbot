@@ -1151,6 +1151,9 @@
     "Mux Bot quit before darkmux started it." : {
 
     },
+    "Mux Bot works out the preview from your own checkout of the project, and this bot doesn't have one on this Mac. Add its folder, then Set up preview again." : {
+
+    },
     "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off." : {
 
     },
