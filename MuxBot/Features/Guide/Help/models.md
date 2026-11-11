@@ -1,6 +1,6 @@
 # Models
 
-darkmux describes each way it can run a model as a profile: the model, its context size, and where it's served (LM Studio, or a model server on this Mac). Mux Bot picks a profile for each run.
+darkmux describes each way it can run a model as a profile: the model, its context size, and where it's served (LM Studio, or a model server on this Mac). Mux Bot picks one for each run and shows it by its model and engine, like "Qwen3.8-27B-4bit · LM Studio". When several of darkmux's setups use the same model on the same engine, Mux Bot lists that model once.
 
 ## Which models Mux Bot can use
 
@@ -8,7 +8,7 @@ By default, darkmux lets a paired app use any profile that runs on this Mac. A p
 
 ## What the badges mean
 
-In Settings › Models, each model in the Auto order shows whether it's ready here. Running means it answers now. Loads when used means LM Studio has it and darkmux loads it for the run. Not running means its server didn't answer. Not on this Mac means this Mac doesn't have that profile.
+In Settings › Models, each model in the Auto order shows whether it's ready here. Running means it's loaded now. Starts when used means darkmux loads the model or starts its server for the run. Not available means darkmux can't run it here; hover to see why. Not on this Mac means this Mac doesn't have that model.
 
 ## Choosing the model
 
@@ -16,7 +16,11 @@ Settings › Models has three choices. Auto, the default, takes the first model 
 
 ## The Auto order
 
-Put your fastest model first and a stronger one after it. Drag or use the arrows to reorder, and Add a model to add one this Mac has.
+The Auto order starts empty, so until you add a model, Auto uses darkmux's own choice. Put your fastest model first and a stronger one after it. Drag or use the arrows to reorder, and Add a model to add one this Mac has.
+
+## Before you approve
+
+Each dispatch card says which model and engine the run will use, and why. Change switches it for that run only. The result's Details say which model it ran on.
 
 ## Per machine, and per bot
 

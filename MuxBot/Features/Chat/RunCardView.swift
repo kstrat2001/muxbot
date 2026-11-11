@@ -61,21 +61,6 @@ struct RunCardView: View {
             }
             modelRow(run)
             DisclosureGroup("What \(run.crew.name) gets") {
-                if let model = brain.runs.profile(for: run) {
-                    HStack {
-                        Text("Model: \(model)\(brain.runs.runChoices[run.id].map { " (\($0.reason))" } ?? "")")
-                            .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-                        Spacer()
-                        if run.phase == .proposed, !brain.runs.listed(for: run).isEmpty {
-                            Menu("Change") {
-                                ForEach(brain.runs.listed(for: run).filter(\.reachable).map(\.name), id: \.self) { name in
-                                    Button(name) { brain.runs.override(run, with: name) }
-                                }
-                            }
-                            .fixedSize()
-                        }
-                    }
-                }
                 Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -204,7 +189,7 @@ struct RunCardView: View {
             }
             DisclosureGroup("Details") {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    if let model = brain.runs.profile(for: run) {
+                    if let model = brain.runs.modelLine(for: run) {
                         Text("Ran on \(model)").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                     }
                     if let branch = run.keptBranch, let commit = run.keptCommit {
@@ -307,18 +292,44 @@ struct RunCardView: View {
                     Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
                     Spacer()
                     if let other = choice.suggestion {
-                        Button("Use \(other) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
+                        Button("Use \(brain.runs.modelLine(other, for: run)) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
                     }
                 }
             } else if choice.ask {
-                let names = brain.runs.listed(for: run).filter(\.reachable).map(\.name)
+                let options = brain.runs.choices(for: run)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Picker("Model", selection: Binding(get: { brain.runs.profile(for: run) ?? "" },
                                                        set: { brain.runs.override(run, with: $0) })) {
-                        ForEach(names, id: \.self) { Text($0).tag($0) }
+                        ForEach(options, id: \.name) { Text(ModelLabel.line($0)).tag($0.name) }
+                        // The pick is kept even when it's a duplicate the list folded away.
+                        if let current = brain.runs.profile(for: run), !options.contains(where: { $0.name == current }) {
+                            Text(brain.runs.modelLine(current, for: run)).tag(current)
+                        }
                     }
                     Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
+            } else if let model = brain.runs.modelLine(for: run) {
+                // The model and engine this run will use, before you approve,
+                // with Change for this run only.
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(model, systemImage: "cpu").font(AppFont.footnote(.semibold))
+                        Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                    }
+                    Spacer()
+                    let options = brain.runs.choices(for: run)
+                    if !options.isEmpty {
+                        Menu("Change") {
+                            ForEach(options, id: \.name) { p in
+                                Button(ModelLabel.line(p)) { brain.runs.override(run, with: p.name) }
+                            }
+                        }
+                        .fixedSize()
+                    }
+                }
+            } else {
+                Label(String(choice.reason.prefix(1).uppercased() + choice.reason.dropFirst()), systemImage: "cpu")
+                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         }
     }

@@ -17,11 +17,12 @@ struct ModelSettingsView: View {
                 Picker("Choosing the model", selection: modeBinding) {
                     Text("Auto").tag(ModelMode.auto)
                     Text("Always ask").tag(ModelMode.ask)
-                    ForEach(names, id: \.self) { name in Text("Always \(row(name).title)").tag(ModelMode.model(name)) }
+                    ForEach(names, id: \.self) { name in Text("Always \(row(name).line)").tag(ModelMode.model(name)) }
                     // A saved model this Mac doesn't list keeps a row, so the picker shows it.
                     if let name = ModelMode.unlistedModel(settings.mode, listed: names) {
-                        if brain.runs.listing == .listed { Text("Always \(name) (not on this Mac)").tag(ModelMode.model(name)) }
-                        else { Text("Always \(name)").tag(ModelMode.model(name)) }
+                        if let line = ModelLabel.line(name, in: listed) { Text("Always \(line)").tag(ModelMode.model(name)) }
+                        else if brain.runs.listing == .listed { Text("Always a model this Mac doesn't list").tag(ModelMode.model(name)) }
+                        else { Text("Always the model you chose").tag(ModelMode.model(name)) }
                     }
                 }
                 .disabled(brain.runs.knownMachine == nil)
@@ -42,12 +43,11 @@ struct ModelSettingsView: View {
                 }
                 .onMove { settings.order.move(fromOffsets: $0, toOffset: $1); save() }
                 .onDelete { settings.order.remove(atOffsets: $0); save() }
-                let more = names.filter { !settings.order.contains($0) }
+                let more = names.filter { name in !settings.order.contains(name) && !orderHasModel(of: name) }
                 if !more.isEmpty {
                     Menu("Add a model", systemImage: "plus") {
                         ForEach(more, id: \.self) { name in
-                            let r = row(name)
-                            Button(r.subtitle.map { "\(r.title) (\($0))" } ?? r.title) { settings.order.append(name); save() }
+                            Button(row(name).line) { settings.order.append(name); save() }
                         }
                     }
                 }
@@ -94,11 +94,11 @@ struct ModelSettingsView: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.title).lineLimit(1)
-                if let id = r.subtitle {
-                    Text(id).font(AppFont.caption().monospaced()).foregroundStyle(Color.secondaryText).lineLimit(1)
+                if let engine = r.subtitle {
+                    Text(engine).font(AppFont.caption()).foregroundStyle(Color.secondaryText).lineLimit(1)
                 }
             }
-            .help(r.detail ?? r.name)
+            .help(r.detail ?? r.line)
             Spacer()
             if let label = r.status.label { badge(label, r.status) }
             #if os(macOS)
@@ -133,9 +133,16 @@ struct ModelSettingsView: View {
         }
     }
 
+    /// The order already has this model and engine under another profile.
+    private func orderHasModel(of name: String) -> Bool {
+        let line = row(name).line
+        return settings.order.contains { saved in row(saved).line == line && listed.contains { $0.name == saved } }
+    }
+
     private func row(_ name: String) -> ModelRow { ModelRow(name: name, listed: listed, listing: brain.runs.listing) }
 
-    private var names: [String] { listed.map(\.name) }
+    /// One per model and engine (darkmux lists a profile per lab setup).
+    private var names: [String] { ModelLabel.distinct(listed).map(\.name) }
 
     private func load() async {
         brain.runs.listing = .loading
@@ -165,7 +172,7 @@ struct ModelSettingsView: View {
         switch settings.mode {
         case .auto: String(localized: "Mux Bot picks: the first in the Auto order that's running.")
         case .ask: String(localized: "Each dispatch card asks, with Auto's pick ready.")
-        case let .model(name): String(localized: "Every run uses \(row(name).title). If it isn't running, the card says so.")
+        case let .model(name): String(localized: "Every run uses \(row(name).line). If it isn't running, the card says so.")
         }
     }
 }

@@ -357,6 +357,15 @@ struct DarkmuxClient: Sendable {
         var reachable: Bool
         var loaded: Bool?
         var error: String? = nil
+        /// (darkmux #3466) Whether darkmux can make it resident: `resident`,
+        /// `startable`, `unavailable`, `external` or `unknown`, with a reason
+        /// for the last ones. nil from an older darkmux.
+        var availability: Availability? = nil
+    }
+
+    struct Availability: Decodable, Sendable, Equatable {
+        var state: String
+        var reason: String?
     }
 
     /// The darkmux machine: a stable id (the same from every device that

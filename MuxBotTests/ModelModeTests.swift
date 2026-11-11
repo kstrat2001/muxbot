@@ -5,6 +5,9 @@ import Testing
 /// How a run's model is chosen: Auto (the app's order), a Default model, or
 /// Always ask; app-wide in Settings, overridable per bot. A chosen model
 /// that isn't running is said, never swapped silently.
+/// The Auto order the tests use (the app ships none).
+let testOrder = ["flint-rec", "q38-27b-tensorfold"]
+
 struct ModelResolutionTests {
     let flint = DarkmuxClient.ProfileInfo(name: "flint-rec", description: "Flint", model: "flint", endpoint: "url", reachable: true, loaded: true)
     let fold = DarkmuxClient.ProfileInfo(name: "q38-27b-tensorfold", description: nil, model: "qwen", endpoint: "url", reachable: true, loaded: true)
@@ -66,14 +69,14 @@ struct ModelResolutionTests {
         var down = fold; down.reachable = false
         let c = resolve(.model("q38-27b-tensorfold"), listed: [down, big, flint])
         #expect(c.profile == "q38-27b-tensorfold", "never swapped silently")
-        #expect(c.unavailable == "q38-27b-tensorfold isn't running on this Mac.")
+        #expect(c.unavailable == "Your default model isn't running on this Mac.")
         #expect(c.suggestion == "flint-rec", "Auto's pick, offered")
     }
 
     @Test func aDefaultModelThisMacDoesntListIsSaid() {
         let c = resolve(.model("gone"))
         #expect(c.profile == "gone")
-        #expect(c.unavailable == "gone isn't available to Mux Bot on this Mac.")
+        #expect(c.unavailable == "Your default model isn't available to Mux Bot on this Mac.")
         #expect(c.suggestion == "flint-rec")
     }
 }
@@ -88,7 +91,7 @@ struct ModelModeStorageTests {
         let store = ModelSettingsStore(backing: MemoryBacking())
         var here = store.settings(machine: "m-aaaa")
         #expect(here.mode == .auto)
-        #expect(here.order == ModelSettings.defaultOrder)
+        #expect(here.order.isEmpty, "no guessed names: Auto starts on darkmux's default")
         here.mode = .model("q38-27b-tensorfold")
         here.order = ["q38-27b-tensorfold", "flint-rec"]
         store.save(here, machine: "m-aaaa")
@@ -105,7 +108,7 @@ struct ModelModeStorageTests {
         #expect(store.botMode(bot: bot, machine: "m-aaaa") == .ask)
         #expect(store.botMode(bot: bot, machine: "m-bbbb") == nil)
         #expect(store.botMode(bot: UUID(), machine: "m-aaaa") == nil)
-        let app = ModelSettings(mode: .auto, order: ModelSettings.defaultOrder)
+        let app = ModelSettings(mode: .auto, order: testOrder)
         #expect(app.mode(forBot: store.botMode(bot: bot, machine: "m-aaaa")) == .ask)
         #expect(app.mode(forBot: nil) == .auto)
         store.setBotMode(nil, bot: bot, machine: "m-aaaa")
@@ -148,7 +151,7 @@ struct ModelModeFlowTests {
     }
 
     @Test func aDefaultModelIsUsedAndStaysOnRunAgain() async throws {
-        let (store, bot, brain) = setUp(ModelSettings(mode: .model("q38-27b-tensorfold"), order: ModelSettings.defaultOrder))
+        let (store, bot, brain) = setUp(ModelSettings(mode: .model("q38-27b-tensorfold"), order: testOrder))
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         #expect(brain.runs.profile(for: run) == "q38-27b-tensorfold")
@@ -161,7 +164,7 @@ struct ModelModeFlowTests {
     }
 
     @Test func aBotsOverrideAppliesToItsRuns() async throws {
-        let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: ModelSettings.defaultOrder))
+        let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: testOrder))
         brain.runs.settingsStore.setBotMode(.ask, bot: bot.id, machine: brain.runs.machineKey)
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
@@ -170,7 +173,7 @@ struct ModelModeFlowTests {
     }
 
     @Test func aDefaultModelNotMetOffersTheNextOnItsResultCard() async throws {
-        let (store, bot, brain) = setUp(ModelSettings(mode: .model("flint-rec"), order: ModelSettings.defaultOrder))
+        let (store, bot, brain) = setUp(ModelSettings(mode: .model("flint-rec"), order: testOrder))
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         run.changedFiles = ["inertia/css/app.css +1 −1"]
@@ -182,7 +185,7 @@ struct ModelModeFlowTests {
     }
 
     @Test func choosingAnotherModelForOneRun() async throws {
-        let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: ModelSettings.defaultOrder))
+        let (store, bot, brain) = setUp(ModelSettings(mode: .auto, order: testOrder))
         await brain.send("fix #10", in: .bot(bot.id), store: store)
         let run = try #require(bot.runs?.first)
         brain.runs.override(run, with: "q38-27b-tensorfold")
