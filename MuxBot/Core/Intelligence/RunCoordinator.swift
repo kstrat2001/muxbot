@@ -1589,7 +1589,9 @@ final class RunCoordinator {
             return "\(url.lastPathComponent) isn't a git repository. Pick the top folder of a project you cloned with git."
         }
         #if os(macOS)
-        let bookmark = try? url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
+        // Read-write, asked once here: a setup card's Approve then writes
+        // into the checkout with no picker (`CheckoutWrite`).
+        let bookmark = try? url.bookmarkData(options: CheckoutWrite.bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
         #else
         let bookmark = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
         #endif

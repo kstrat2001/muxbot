@@ -257,6 +257,9 @@
     "All set" : {
 
     },
+    "Allow" : {
+
+    },
     "Allow notifications" : {
 
     },
@@ -425,6 +428,9 @@
 
     },
     "Checking the done-when in the preview…" : {
+
+    },
+    "Choose %@ once so Mux Bot can write into it from now on." : {
 
     },
     "Choose %@ to let Mux Bot write %@ into it." : {
@@ -1134,6 +1140,9 @@
 
     },
     "Mux Bot is paired with darkmux on this Mac." : {
+
+    },
+    "Mux Bot isn't allowed to write into that folder." : {
 
     },
     "Mux Bot isn't paired with darkmux" : {
@@ -1868,6 +1877,16 @@
     },
     "That text is in more than one place in the project, so Coder can make the change where you picked it." : {
 
+    },
+    "That's a different folder from the one %@ uses. Pick %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "That's a different folder from the one %1$@ uses. Pick %2$@."
+          }
+        }
+      }
     },
     "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
 

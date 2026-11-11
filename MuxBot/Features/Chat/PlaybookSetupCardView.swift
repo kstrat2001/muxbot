@@ -86,7 +86,7 @@ struct PlaybookSetupCardView: View {
     #if os(macOS)
     private func approve() {
         guard let bot = message.conversation?.roleId.flatMap({ BotStore(context: context).bot(id: $0) }), setup.parsed != nil else { return }
-        if let why = CheckoutWrite.approve(setup.data, at: PlaybookSetup.path, bot: bot, folderName: setup.folderName) {
+        if let why = CheckoutWrite.approve(setup.data, at: PlaybookSetup.path, bot: bot) {
             problem = why
             return
         }
