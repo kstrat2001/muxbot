@@ -15,6 +15,8 @@ struct PreviewStatusView: View {
     @State private var pickingFolder = false
     @State private var folderProblem: String?
     @State private var addingFolder = false
+    /// Set up preview found no checkout of yours to read: say so, with Add folder.
+    @State private var setupNeedsCheckout = false
 
     var body: some View {
         VStack(spacing: Spacing.md) {
@@ -113,9 +115,15 @@ struct PreviewStatusView: View {
             if let folderProblem { Label(folderProblem, systemImage: "exclamationmark.triangle").labelStyle(.tintedIcon(Color.brandOrange)).multilineTextAlignment(.center) }
         case .noRecipe:
             HStack {
-                Button("Set up preview", systemImage: "play.rectangle") { brain.offerPreviewSetup(for: bot, store: BotStore(context: context)) }
+                Button("Set up preview", systemImage: "play.rectangle") { setUpPreview() }
                     .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            }
+            if setupNeedsCheckout {
+                Text(Self.needsCheckoutText)
+                    .foregroundStyle(Color.secondaryText).multilineTextAlignment(.center).frame(maxWidth: 440)
+                Button("Add folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
+                if let folderProblem { Label(folderProblem, systemImage: "exclamationmark.triangle").labelStyle(.tintedIcon(Color.brandOrange)).multilineTextAlignment(.center) }
             }
         case .newProject:
             EmptyView()
@@ -141,6 +149,23 @@ struct PreviewStatusView: View {
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
+        }
+    }
+
+    static var needsCheckoutText: String {
+        String(localized: "Mux Bot works out the preview from your own checkout of the project, and this bot doesn't have one on this Mac. Add its folder, then Set up preview again.")
+    }
+
+    /// Set up preview always shows something: the setup card in the thread
+    /// (out of full window, scrolled to), or why it can't yet.
+    private func setUpPreview() {
+        switch brain.offerPreviewSetup(for: bot, store: BotStore(context: context), again: true) {
+        case let .card(id)?:
+            setupNeedsCheckout = false
+            router.previewFullScreen = false
+            router.focusMessageId = id
+        case .needsCheckout?, nil:
+            setupNeedsCheckout = true
         }
     }
 
