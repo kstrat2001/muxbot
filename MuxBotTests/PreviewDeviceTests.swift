@@ -66,6 +66,27 @@ struct PreviewDeviceLayoutTests {
         }
     }
 
+    /// Double-click on the divider: the panel the page needs, so a device
+    /// fills it edge to edge (no empty sides, nothing cut off).
+    @Test(arguments: [PreviewViewport.phone, .smallTablet, .tablet])
+    func aFittedPanelShowsTheDeviceWithNoEmptySides(_ device: PreviewViewport) throws {
+        for height in [500.0, 900, 1400] as [CGFloat] {
+            let width = try #require(device.fittedPanelWidth(panelHeight: height))
+            let size = CGSize(width: width, height: height)
+            let l = device.layout(in: size)
+            let sides = width - l.width * l.scale
+            #expect(sides >= 2 * PreviewViewport.devicePadding - 0.001 && sides <= 2 * PreviewViewport.devicePadding + 1,
+                    "\(device.rawValue) at \(height): \(sides) of side room")
+            #expect(abs(l.scale - min(1, (height - 2 * PreviewViewport.devicePadding) / l.height)) < 0.01, "as large as the height allows")
+        }
+    }
+
+    @Test func aFittedPanelIsDesktopsOwnWidthAndFitHasNone() {
+        #expect(PreviewViewport.desktop.fittedPanelWidth(panelHeight: 900) == 1440)
+        #expect(PreviewViewport.desktop.layout(in: CGSize(width: 1440, height: 900)).scale == 1)
+        #expect(PreviewViewport.fit.fittedPanelWidth(panelHeight: 900) == nil)
+    }
+
     @Test func fitIsThePanelAsIs() {
         let l = PreviewViewport.fit.layout(in: CGSize(width: 683, height: 900))
         #expect(l == .init(width: 683, height: 900, scale: 1))
