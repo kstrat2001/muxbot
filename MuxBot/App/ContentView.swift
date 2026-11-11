@@ -89,6 +89,15 @@ struct ContentView: View {
         .sheet(isPresented: $router.showPairing) {
             NavigationStack { FleetPairingView() }
         }
+        #if os(iOS)
+        .sheet(isPresented: $router.showSettings) {
+            NavigationStack {
+                SettingsView().toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { router.showSettings = false } }
+                }
+            }
+        }
+        #endif
         .sheet(isPresented: $router.showSearch) { SearchView() }
         // "open card" links in chat (muxbot://run/<id>) jump to that run's card.
         .environment(\.openURL, OpenURLAction { url in

@@ -107,8 +107,12 @@ struct BotSidebar: View {
                     .help("New (⌘N)")
             }
             ToolbarItem {
+                #if os(iOS)
+                Button("Settings", systemImage: "gearshape") { router.showSettings = true }
+                #else
                 Button("darkmux", systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }
                     .help(connection.isPaired ? "Paired with darkmux" : "Pair with darkmux")
+                #endif
             }
         }
         .onChange(of: router.sidebar) { router.path = [] }

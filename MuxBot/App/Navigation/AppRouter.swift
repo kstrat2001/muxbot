@@ -35,6 +35,8 @@ final class AppRouter {
     /// A template to open straight to when Start opens ("write a book").
     var startTemplateId: String?
     var showPairing = false
+    /// Settings on iPhone and iPad (the Mac has its Settings window).
+    var showSettings = false
     /// Search across bots and threads (⌘F).
     var showSearch = false
     /// Bumped to put the cursor in the chat bar (⌘L).
