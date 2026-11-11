@@ -173,6 +173,9 @@
     "A Mac with Apple silicon" : {
 
     },
+    "A bot is a project you name. Paste its GitHub link here, or choose New, then Work on a project I already have, to add a folder from this Mac." : {
+
+    },
     "A bot is a project you name. Paste its GitHub link here, or use New bot to add a folder from this Mac." : {
 
     },
@@ -720,6 +723,9 @@
     "Folders are added with Add folder in the bot's info, so Mux Bot can open them." : {
 
     },
+    "For a folder on this Mac, choose New, then Work on a project I already have, and pick the folder, so Mux Bot can open it." : {
+
+    },
     "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it." : {
 
     },
@@ -981,6 +987,9 @@
     "Its running work and preview stop, and its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
+    "Just a bot, no project" : {
+
+    },
     "Keep improving %@." : {
 
     },
@@ -1169,6 +1178,12 @@
     "Needs you" : {
 
     },
+    "New" : {
+
+    },
+    "New (⌘N)" : {
+
+    },
     "New Bot…" : {
 
     },
@@ -1191,6 +1206,9 @@
 
     },
     "New work copy on its own branch. The earlier commits stay on the old branch in darkmux." : {
+
+    },
+    "New…" : {
 
     },
     "Next" : {

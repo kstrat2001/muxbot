@@ -5,7 +5,7 @@ import Testing
 
 /// The sidebar shows Mux Bot, the guide, as a featured tile on top (a large
 /// face with its name under it); the Bots list below holds only your bots,
-/// then New bot, then Activity.
+/// then New, then Activity.
 struct SidebarSectionTests {
     @Test func muxBotIsFeaturedAndNotInTheList() {
         let ids = [UUID(), UUID()]

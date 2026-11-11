@@ -32,11 +32,9 @@ struct HomeView: View {
                     .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
                 #endif
                 if !roles.isEmpty {
-                    Button("Start a project", systemImage: "plus") { router.showStartProject = true }
-                }
-                Menu("More", systemImage: "ellipsis.circle") {
-                    Button("New bot", systemImage: "plus") { router.showNewBot = true }
-                    if roles.isEmpty {
+                    Button(NewEntry.rowTitle, systemImage: "plus") { router.showStartProject = true }
+                } else {
+                    Menu("More", systemImage: "ellipsis.circle") {
                         Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
                     }
                 }

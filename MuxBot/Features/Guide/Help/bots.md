@@ -4,7 +4,7 @@ A bot is a project or theme you name, like your website or an app. Each bot has 
 
 ## Making a bot
 
-Use New bot (+), give it a name and a face, then say what it's about and add its code: a project folder you already have (on the Mac) or a GitHub link. Or ask Mux Bot to make one from a repo link.
+Choose New (+): start a project from a template, or Work on a project I already have for a folder on this Mac or a repo on your GitHub. For a bot with no project, choose Just a bot, no project at the bottom, give it a name and a face, and say what it's about. Or ask Mux Bot to make one from a repo link.
 
 ## Resources
 

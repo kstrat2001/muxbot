@@ -16,7 +16,7 @@ struct MuxBotCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Project…") { router.showStartProject = true; showMain() }
+            Button(NewEntry.menuTitle) { router.showStartProject = true; showMain() }
                 .keyboardShortcut("n")
             Button("New Bot…") { router.showNewBot = true; showMain() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])

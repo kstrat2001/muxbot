@@ -241,7 +241,8 @@ struct LeadGuideFlowTests {
         let messages = store.conversation(for: .lead).messages ?? []
         #expect(!messages.contains { $0.kind == .actionCard }, "no createBot card with a path")
         #expect(lastGuideCard(store) == .firstBot)
-        #expect(messages.contains { $0.role == .assistant && $0.content.contains("Add folder") })
+        // One way in (New): the folder goes through Work on a project I already have.
+        #expect(messages.contains { $0.role == .assistant && $0.content.contains("Work on a project I already have") })
         #expect(store.allBots().isEmpty)
     }
 
