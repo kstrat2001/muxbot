@@ -49,6 +49,20 @@ final class ScreensTourUITests: XCTestCase {
         keep(app, "new-chooser")
     }
 
+    /// What a brand-new user lands on: no bots, so the chooser, and Mux
+    /// Bot's thread.
+    func testEmptyStart() {
+        let app = launch(["-uiTesting", "-uiTestingEmpty"])
+        XCTAssertTrue(element(app, "What do you want to get done?").waitForExistence(timeout: 10))
+        keep(app, "empty-start")
+        let lead = element(app, "Mux Bot")
+        if lead.waitForExistence(timeout: 5) {
+            lead.tap()
+            _ = element(app, "Message Mux Bot").waitForExistence(timeout: 10)
+            keep(app, "empty-start-mux-bot")
+        }
+    }
+
     func testBotInfo() {
         let app = launch(["-uiTesting", "-openBot", "My website"])
         let info = element(app, "info")
