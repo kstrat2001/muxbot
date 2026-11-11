@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import AppKit
+#endif
 
 /// A preview recipe Mux Bot offers to set up for a project that has none,
 /// on an Approve card: each value editable, with where it was found
@@ -80,12 +83,14 @@ struct PreviewSetup: Codable, Equatable, Sendable {
         case exists
         case notYourCheckout(String)
         case symlink
+        case noPermission
         case failed(String)
         var errorDescription: String? {
             switch self {
             case .exists: String(localized: "That file is already there; I never overwrite it.")
             case let .notYourCheckout(name): String(localized: "That isn't this bot's checkout. Choose \(name).")
             case .symlink: String(localized: "A folder on the way is a link, so I won't write through it.")
+            case .noPermission: String(localized: "Mux Bot isn't allowed to write into that folder.")
             case let .failed(why): String(localized: "Couldn't write it: \(why)")
             }
         }
@@ -116,9 +121,19 @@ struct PreviewSetup: Codable, Equatable, Sendable {
             try data.write(to: file, options: [.withoutOverwriting])
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
             throw .exists
+        } catch let error as NSError where Self.isNoPermission(error) {
+            // Read-only access (a bookmark kept before writes asked once).
+            throw .noPermission
         } catch {
             throw .failed(error.localizedDescription)
         }
+    }
+
+    static func isNoPermission(_ error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain, error.code == NSFileWriteNoPermissionError { return true }
+        if error.domain == NSPOSIXErrorDomain, [Int(EPERM), Int(EACCES)].contains(error.code) { return true }
+        if let under = error.userInfo[NSUnderlyingErrorKey] as? NSError { return isNoPermission(under) }
+        return false
     }
 
     /// The folder you chose is the bot's checkout (the panel can't be locked
@@ -128,7 +143,7 @@ struct PreviewSetup: Codable, Equatable, Sendable {
     }
 
     /// package.json's text and the names at the root of your checkout, read
-    /// through its bookmark (read-only).
+    /// through its bookmark.
     static func readCheckout(_ folder: URL) -> (packageJSON: String?, files: Set<String>) {
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
@@ -158,4 +173,79 @@ extension PreviewSetup {
         }
         return starts + String(localized: "; installs with \(manager).")
     }
+}
+
+/// Writing a new file into your checkout (a setup card's Approve). The
+/// folder's permission is asked for once, when you add it: Add folder keeps
+/// a read-write bookmark (`bookmarkOptions`), so Approve writes with no
+/// picker. A bookmark kept read-only (added before) asks once more, with the
+/// panel on that folder; only that same folder is accepted, and its bookmark
+/// is kept read-write from then on. Never over an existing file
+/// (`PreviewSetup.writeNew`).
+@MainActor
+enum CheckoutWrite {
+    struct Deps {
+        var resolve: (Data) -> URL?
+        var write: (Data, String, URL) throws(PreviewSetup.WriteError) -> Void
+        /// The Open panel, started on the given folder; nil when canceled.
+        var ask: (URL?) -> URL?
+        var bookmark: (URL) -> Data?
+    }
+
+    #if os(macOS)
+    /// Read-write: asked once, when you add the folder.
+    static let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+    #endif
+
+    static func differentFolder(bot: Bot) -> String {
+        String(localized: "That's a different folder from the one \(bot.name) uses. Pick \(bot.folderName ?? bot.name).")
+    }
+
+    static func perform(_ data: Data, at path: String, bot: Bot, deps: Deps) -> String? {
+        let checkout = bot.folderBookmark.flatMap { $0.isEmpty ? nil : deps.resolve($0) }
+        if let checkout {
+            do {
+                try deps.write(data, path, checkout)
+                return nil
+            } catch .noPermission {
+                // Kept read-only: ask once, below.
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        guard let chosen = deps.ask(checkout) else { return String(localized: "Nothing was written.") }
+        if let checkout, !PreviewSetup.sameFolder(chosen, checkout) { return differentFolder(bot: bot) }
+        do {
+            try deps.write(data, path, chosen)
+        } catch {
+            return error.localizedDescription
+        }
+        // From now on it writes without asking.
+        if checkout != nil, let upgraded = deps.bookmark(chosen) { bot.folderBookmark = upgraded }
+        return nil
+    }
+
+    #if os(macOS)
+    static func approve(_ data: Data, at path: String, bot: Bot) -> String? {
+        perform(data, at: path, bot: bot, deps: Deps(
+            resolve: RunCoordinator.resolve(bookmark:),
+            write: { data, path, folder throws(PreviewSetup.WriteError) in
+                let accessing = folder.startAccessingSecurityScopedResource()
+                defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
+                try PreviewSetup.writeNew(data, at: path, into: folder)
+            },
+            ask: { start in
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.directoryURL = start
+                let name = bot.folderName ?? start?.lastPathComponent ?? bot.name
+                panel.message = String(localized: "Choose \(name) once so Mux Bot can write into it from now on.")
+                panel.prompt = String(localized: "Allow")
+                return panel.runModal() == .OK ? panel.url : nil
+            },
+            bookmark: { try? $0.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil) }))
+    }
+    #endif
 }
