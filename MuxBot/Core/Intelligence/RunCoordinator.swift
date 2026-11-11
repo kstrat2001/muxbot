@@ -1791,8 +1791,10 @@ final class RunCoordinator {
     }
 
     /// The models a run's picker offers: its crew's own.
-    func listed(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
-        run.crew.darkmuxRole.flatMap { listedByRole[$0] } ?? lastListed
+    func listed(for run: BotRun) -> [DarkmuxClient.ProfileInfo] { listed(crew: run.crew) }
+
+    func listed(crew: CrewRole) -> [DarkmuxClient.ProfileInfo] {
+        crew.darkmuxRole.flatMap { listedByRole[$0] } ?? lastListed
     }
 
     /// Settings › Models as they apply to runs on this machine.
@@ -1806,17 +1808,42 @@ final class RunCoordinator {
     /// default model, or Always ask. With `next`, it's a run again after a
     /// done-when that wasn't met.
     func chooseProfile(for run: BotRun, next: Bool = false, after previous: String? = nil) async {
+        let choice = await modelChoice(crew: run.crew, bot: run.bot, previous: previous ?? runProfiles[run.id], next: next)
+        runChoices[run.id] = choice
+        runProfiles[run.id] = choice.profile
+    }
+
+    /// The model a run for `crew` on `bot` would get, before the run exists
+    /// (the bug card's picker beside Fix it now).
+    func modelChoice(crew: CrewRole, bot: Bot?, previous: String? = nil, next: Bool = false) async -> ModelChoice {
         // Each crew's own models: darkmux lists a role's (`?role=`).
-        let role = run.crew.darkmuxRole ?? "coder"
+        let role = crew.darkmuxRole ?? "coder"
         let listed = await listedProfiles(role: role)
         listedByRole[role] = listed
         if role == "coder" { lastListed = listed }
         let settings = currentModelSettings()
-        let mode = settings.mode(forBot: run.bot.flatMap { settingsStore.botMode(bot: $0.id, machine: machineKey) })
-        let choice = ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
-                                         previous: previous ?? runProfiles[run.id], rerunAfterNotMet: next, crew: run.crew.name)
-        runChoices[run.id] = choice
-        runProfiles[run.id] = choice.profile
+        let mode = settings.mode(forBot: bot.flatMap { settingsStore.botMode(bot: $0.id, machine: machineKey) })
+        return ModelChoice.resolve(mode: mode, order: settings.order, listed: listed,
+                                   previous: previous, rerunAfterNotMet: next, crew: crew.name)
+    }
+
+    /// Fix it now is the approval: the run takes the model picked on the bug
+    /// card (else `choice`) and starts at once. It stays a dispatch card to
+    /// decide only when something needs you there: a work copy or project to
+    /// set up, pairing, or a chosen model that isn't running with nothing
+    /// else picked. Returns whether it started.
+    @discardableResult
+    func startNow(_ run: BotRun, choice: ModelChoice?, picked: String?, store: BotStore) -> Bool {
+        if let picked, picked != choice?.profile {
+            override(run, with: picked)
+        } else if let choice {
+            runChoices[run.id] = choice
+            runProfiles[run.id] = choice.profile
+        }
+        let unresolved = picked == nil && choice?.unavailable != nil
+        guard choice != nil, !unresolved, blocker(for: run) == nil else { return false }
+        decide(.approve, on: run, store: store)
+        return true
     }
 
     /// Another model for this one run (the card's Change, or Auto's pick when
@@ -1836,13 +1863,19 @@ final class RunCoordinator {
     }
 
     func modelLine(_ profile: String, for run: BotRun) -> String {
-        ModelLabel.line(profile, in: listed(for: run) + lastListed) ?? String(localized: "a model this Mac no longer lists")
+        modelLine(profile, crew: run.crew)
+    }
+
+    func modelLine(_ profile: String, crew: CrewRole) -> String {
+        ModelLabel.line(profile, in: listed(crew: crew) + lastListed) ?? String(localized: "a model this Mac no longer lists")
     }
 
     /// The models a run can switch to: one per model and engine, ready or
     /// startable.
-    func choices(for run: BotRun) -> [DarkmuxClient.ProfileInfo] {
-        ModelLabel.distinct(listed(for: run)).filter(\.reachable)
+    func choices(for run: BotRun) -> [DarkmuxClient.ProfileInfo] { choices(crew: run.crew) }
+
+    func choices(crew: CrewRole) -> [DarkmuxClient.ProfileInfo] {
+        ModelLabel.distinct(listed(crew: crew)).filter(\.reachable)
     }
 
     // MARK: Checking the done-when

@@ -287,50 +287,8 @@ struct RunCardView: View {
                 Text("Choosing the model…").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
         } else if run.phase == .proposed, let choice = brain.runs.runChoices[run.id] {
-            if let why = choice.unavailable {
-                HStack {
-                    Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
-                    Spacer()
-                    if let other = choice.suggestion {
-                        Button("Use \(brain.runs.modelLine(other, for: run)) for this run") { brain.runs.override(run, with: other) }.buttonStyle(.bordered)
-                    }
-                }
-            } else if choice.ask {
-                let options = brain.runs.choices(for: run)
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Picker("Model", selection: Binding(get: { brain.runs.profile(for: run) ?? "" },
-                                                       set: { brain.runs.override(run, with: $0) })) {
-                        ForEach(options, id: \.name) { Text(ModelLabel.line($0)).tag($0.name) }
-                        // The pick is kept even when it's a duplicate the list folded away.
-                        if let current = brain.runs.profile(for: run), !options.contains(where: { $0.name == current }) {
-                            Text(brain.runs.modelLine(current, for: run)).tag(current)
-                        }
-                    }
-                    Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
-                }
-            } else if let model = brain.runs.modelLine(for: run) {
-                // The model and engine this run will use, before you approve,
-                // with Change for this run only.
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label(model, systemImage: "cpu").font(AppFont.footnote(.semibold))
-                        Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
-                    }
-                    Spacer()
-                    let options = brain.runs.choices(for: run)
-                    if !options.isEmpty {
-                        Menu("Change") {
-                            ForEach(options, id: \.name) { p in
-                                Button(ModelLabel.line(p)) { brain.runs.override(run, with: p.name) }
-                            }
-                        }
-                        .fixedSize()
-                    }
-                }
-            } else {
-                Label(String(choice.reason.prefix(1).uppercased() + choice.reason.dropFirst()), systemImage: "cpu")
-                    .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
-            }
+            ModelPickRow(choice: choice, current: brain.runs.profile(for: run), options: brain.runs.choices(for: run),
+                         line: { brain.runs.modelLine($0, for: run) }, pick: { brain.runs.override(run, with: $0) })
         }
     }
 
@@ -543,5 +501,63 @@ struct DiffView: View {
             out += piece
         }
         return out
+    }
+}
+
+/// The model a run will use, before it starts: the dispatch card's row and
+/// the bug card's beside Fix it now. Always ask is a picker; otherwise the
+/// model and engine with a one-run Change; a chosen model that isn't running
+/// is said, with Auto's pick offered (never swapped silently).
+struct ModelPickRow: View {
+    let choice: ModelChoice
+    /// The profile picked now (nil: darkmux picks).
+    let current: String?
+    let options: [DarkmuxClient.ProfileInfo]
+    /// A profile as people see it ("model · engine").
+    let line: (String) -> String
+    let pick: (String) -> Void
+
+    var body: some View {
+        if let why = choice.unavailable, current == choice.profile {
+            HStack {
+                Label(why, systemImage: "exclamationmark.triangle").font(AppFont.footnote()).labelStyle(.tintedIcon(Color.brandOrange))
+                Spacer()
+                if let other = choice.suggestion {
+                    Button("Use \(line(other)) for this run") { pick(other) }.buttonStyle(.bordered)
+                }
+            }
+        } else if choice.ask {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Picker("Model", selection: Binding(get: { current ?? "" }, set: { pick($0) })) {
+                    ForEach(options, id: \.name) { Text(ModelLabel.line($0)).tag($0.name) }
+                    // The pick is kept even when it's a duplicate the list folded away.
+                    if let current, !options.contains(where: { $0.name == current }) {
+                        Text(line(current)).tag(current)
+                    }
+                }
+                Text(choice.reason).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+            }
+        } else if let current {
+            // The model and engine this run will use, with Change for this run only.
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(line(current), systemImage: "cpu").font(AppFont.footnote(.semibold))
+                    Text(current == choice.profile ? choice.reason : String(localized: "chosen for this run"))
+                        .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                }
+                Spacer()
+                if !options.isEmpty {
+                    Menu("Change") {
+                        ForEach(options, id: \.name) { p in
+                            Button(ModelLabel.line(p)) { pick(p.name) }
+                        }
+                    }
+                    .fixedSize()
+                }
+            }
+        } else {
+            Label(String(choice.reason.prefix(1).uppercased() + choice.reason.dropFirst()), systemImage: "cpu")
+                .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+        }
     }
 }
