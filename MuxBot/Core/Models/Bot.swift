@@ -67,6 +67,16 @@ final class Bot {
     var skillsJSON: String = ""
     var state: BotState = BotState.ready
     var createdAt: Date = Date()
+    /// When it was archived: out of the bot lists, its thread and runs kept,
+    /// restorable from Archived bots. Synced, so every device agrees.
+    var archivedAt: Date?
+    /// When it was hidden from the sidebar and Home: still working as
+    /// usual, listed under Hidden, and shown again while something waits
+    /// on you. Synced.
+    var hiddenAt: Date?
+
+    var isArchived: Bool { archivedAt != nil }
+    var isHidden: Bool { hiddenAt != nil && archivedAt == nil }
 
     @Relationship(deleteRule: .cascade, inverse: \BotTask.bot)
     var tasks: [BotTask]? = []
