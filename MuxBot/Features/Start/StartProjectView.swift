@@ -132,11 +132,10 @@ struct StartProjectView: View {
     private func tile(_ entry: TemplateEntry) -> some View {
         CardView {
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                // Schema 3: the template's own picture, when it has one.
-                if let viewport = playbooks[entry.id]?.previews.first {
-                    PreviewPicture(url: TemplatePreview.url(template: entry.id, viewport), viewport: viewport)
-                        .frame(maxWidth: .infinity)
-                }
+                // No picture on the chooser tile (Kain, 2026-11-11): one
+                // template's screenshot is an awkward shape and says little
+                // until you can see the choices. Pictures show on the form,
+                // where the design choices are (`PlaybookChoice.previews`).
                 Image(systemName: playbooks[entry.id]?.icon ?? entry.icon)
                     .font(.title)
                     .foregroundStyle(Color.brandBlue)
