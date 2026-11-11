@@ -124,14 +124,15 @@ enum FallbackBrain {
         if let named = others.first(where: { addresses(lower, to: $0.name.lowercased(), inBotThread: speaker != nil) }) {
             return handOff(text, to: named)
         }
-        if speaker != nil, isVisualReport(lower) {
-            return visualReportTurn(text)
-        }
         // "make the header bigger", "can you remove the footer": a change for
-        // Coder, even with no crew word in it.
+        // Coder, even with no crew word in it, and even when it names a color
+        // or a border (checked before the visual-report words).
         if speaker != nil, resourceValue(in: text) == nil, Intent.isChangeRequest(lower),
            !GuideRoute.isQuestion(lower) || Intent.isPoliteChangeRequest(lower) {
             return BotTurn(reply: "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", action: .dispatch(crew: .coder, task: text))
+        }
+        if speaker != nil, isVisualReport(lower) {
+            return visualReportTurn(text)
         }
         // A request with work in it goes to the crew before any path in it
         // is taken as a link to keep.
@@ -583,7 +584,13 @@ final class BotBrain {
             store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
             return
         }
-        let intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        var intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        // Mux Bot's thread: a change you only said ("update the pricing on
+        // hcr") is handed to the bot it names, or answered as chat; only a
+        // prefix makes it crew work, which needs the bot's own thread.
+        // Anywhere, "add https://…" keeps a link rather than starting work.
+        if explicit == nil, intent == .fix, element == nil, Intent.issueNumber(in: text) == nil,
+           speaker == nil || FallbackBrain.resourceValue(in: text) != nil { intent = nil }
         message.intentRaw = intent?.rawValue
         store.save()
 

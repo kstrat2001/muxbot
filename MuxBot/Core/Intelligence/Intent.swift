@@ -141,6 +141,13 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         if hasElement { return aboutElement(lower) }
         // "Can you change the header color?" asks for a change, not an answer.
         if isPoliteChangeRequest(lower) { return .fix }
+        // "change the green color to white", "the header should be blue": a
+        // change you want, even when it names a color or a border. Checked
+        // before the visual-report words, or every design change would be
+        // measured into a bug card.
+        let trimmed = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !GuideRoute.isQuestion(trimmed), !WorkStatus.isWorkQuestion(trimmed),
+           isChangeRequest(trimmed) || isChangeWish(trimmed) { return .fix }
         if FallbackBrain.isVisualReport(lower) { return .bug }
         if lower.hasSuffix("?") { return .ask }
         return nil
@@ -158,8 +165,7 @@ enum Intent: String, Codable, CaseIterable, Sendable {
             request = String(request.dropFirst(polite.count))
         }
         if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }  // "can you please…"
-        let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
-        if changeVerbs.contains(verb) { return .fix }
+        if startsWithChangeVerb(request) { return .fix }
         if GuideRoute.isQuestion(text) { return problemWords.contains { text.contains($0) } ? .bug : .ask }
         return .bug
     }
@@ -170,8 +176,7 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         guard let polite = ["can you ", "could you ", "would you ", "will you "].first(where: text.hasPrefix) else { return false }
         var request = String(text.dropFirst(polite.count))
         if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }
-        let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
-        return changeVerbs.contains(verb)
+        return startsWithChangeVerb(request)
     }
 
     /// A message that starts with a change ("make the header bigger"),
@@ -180,8 +185,38 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         if isPoliteChangeRequest(lower) { return true }
         let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = text.hasPrefix("please ") ? String(text.dropFirst(7)) : text
+        return startsWithChangeVerb(request)
+    }
+
+    /// "the header should be blue", "I want the footer white", "let's add a
+    /// logo": a change said as a wish rather than a command.
+    static func isChangeWish(_ lower: String) -> Bool {
+        let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openers = ["i want ", "i'd like ", "id like ", "i would like ", "let's ", "lets ", "can we ", "could we "]
+        if openers.contains(where: text.hasPrefix) { return true }
+        return [" should be ", " should have ", " needs to be ", " should look "].contains { " \(text) ".contains($0) }
+    }
+
+    /// Whether the first word is a change verb, allowing one typo in a
+    /// longer verb ("chanage the color", "repalce the logo").
+    private static func startsWithChangeVerb(_ request: String) -> Bool {
         let verb = request.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
-        return changeVerbs.contains(verb)
+        if changeVerbs.contains(verb) { return true }
+        guard verb.count >= 5 else { return false }
+        return changeVerbs.contains { $0.count >= 5 && isOneEditApart(Array(verb), Array($0)) }
+    }
+
+    /// One insertion, deletion, substitution or swap of neighbors apart.
+    static func isOneEditApart(_ a: [Character], _ b: [Character]) -> Bool {
+        if a == b { return true }
+        if abs(a.count - b.count) > 1 { return false }
+        var i = 0
+        while i < min(a.count, b.count), a[i] == b[i] { i += 1 }
+        if a.count == b.count {
+            if a[(i + 1)...] == b[(i + 1)...] { return true }  // substitution
+            return i + 1 < a.count && a[i] == b[i + 1] && a[i + 1] == b[i] && a[(i + 2)...] == b[(i + 2)...]  // swap
+        }
+        return a.count > b.count ? a[(i + 1)...] == b[i...] : a[i...] == b[(i + 1)...]
     }
 
     /// A message about a picked element that starts with one of these asks
