@@ -198,9 +198,14 @@ enum SetupCheck {
         }
     }
 
+    /// Optional steps (GitHub) stay a row of their own, never in the count:
+    /// a working setup without them is "All set".
+    static let optional: Set<SetupStep.ID> = [.github]
+
     static func summary(_ steps: [SetupStep]) -> String {
-        let done = steps.filter { $0.state == .done }.count
-        return done == steps.count ? String(localized: "All set") : String(localized: "\(done) of \(steps.count) done")
+        let required = steps.filter { !optional.contains($0.id) }
+        let done = required.filter { $0.state == .done }.count
+        return done == required.count ? String(localized: "All set") : String(localized: "\(done) of \(required.count) done")
     }
 
     /// The steps as text, to send to the Mac from a phone: no commands,

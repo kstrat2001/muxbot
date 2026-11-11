@@ -144,6 +144,18 @@ struct SetupCheckTests {
         #expect(SetupCheck.summary(steps) == "All set")
     }
 
+    /// GitHub is optional: it's never in "N of M done", so a working setup
+    /// without it is "All set" (Kain saw "5 of 8" with two steps left).
+    @Test func theCountLeavesOutOptionalGitHub() {
+        var facts = fresh
+        facts.endpointUp = true; facts.lmStudio = .models(16); facts.docker = .running
+        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "5 of 7 done", "pairing and models still to go")
+        facts.paired = true; facts.listing = .listed; facts.listedModels = 4; facts.runningModels = 2
+        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "All set", "signed out of GitHub, still all set")
+        facts.githubSignedIn = true
+        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "All set")
+    }
+
     @Test func aFailedListingSaysWhy() {
         var facts = fresh
         facts.endpointUp = true; facts.paired = true; facts.listing = .failed("The request timed out.")
