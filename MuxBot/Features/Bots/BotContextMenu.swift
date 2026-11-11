@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Right-click (or long-press) actions on a bot: clear its conversation
-/// (Undo in the thread), or archive it (Restore from Archived bots, where
-/// Delete lives). Runs stay in Activity when a thread is cleared.
+/// (Undo in the thread), hide it from the sidebar (Hidden bots), or archive
+/// it (Restore from Archived bots, where Delete lives). Runs stay in Activity when a thread is cleared.
 struct BotContextMenu: ViewModifier {
     let bot: Bot?
 
@@ -24,8 +24,13 @@ struct BotContextMenu: ViewModifier {
                 }
                 #endif
                 Button("Clear Conversation…", systemImage: "eraser") { confirmClear = true }
-                if bot != nil {
+                if let bot {
                     Divider()
+                    if bot.isHidden {
+                        Button("Show in Sidebar", systemImage: "eye") { BotStore(context: context).restore(bot) }
+                    } else {
+                        Button("Hide from Sidebar", systemImage: "eye.slash") { hide() }
+                    }
                     Button("Archive \(name)", systemImage: "archivebox") { archive() }
                 }
             }
@@ -41,6 +46,16 @@ struct BotContextMenu: ViewModifier {
             } message: {
                 Text(archiveProblem ?? "")
             }
+    }
+
+    /// Out of the sidebar and Home; everything else goes on.
+    private func hide() {
+        guard let bot else { return }
+        if router.context.botId == bot.id {
+            router.sidebar = .lead
+            router.path = []
+        }
+        BotStore(context: context).hide(bot)
     }
 
     /// Out of the lists, everything kept; its preview stops. Refused while

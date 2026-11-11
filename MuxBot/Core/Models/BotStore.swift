@@ -54,9 +54,29 @@ struct BotStore {
         save()
     }
 
+    /// Back in the lists from Archived or Hidden.
     func restore(_ bot: Bot) {
         bot.archivedAt = nil
+        bot.hiddenAt = nil
         save()
+    }
+
+    /// Out of the sidebar and Home only: runs, previews and hand-offs go on
+    /// as before, and it shows again while something waits on you.
+    func hide(_ bot: Bot) {
+        bot.hiddenAt = Date()
+        save()
+    }
+
+    /// Hidden bots, most recently hidden first.
+    func hiddenBots() -> [Bot] {
+        allBots().filter(\.isHidden).sorted { ($0.hiddenAt ?? .distantPast) > ($1.hiddenAt ?? .distantPast) }
+    }
+
+    /// Whether a bot has a row in the sidebar and a tile on Home: not
+    /// archived, and not hidden unless something waits on you there.
+    static func isListed(_ bot: Bot) -> Bool {
+        !bot.isArchived && (!bot.isHidden || NeedsYou.shownState(bot) == .needsYou)
     }
 
     func bot(id: UUID) -> Bot? {

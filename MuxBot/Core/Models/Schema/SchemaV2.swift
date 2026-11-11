@@ -134,7 +134,7 @@ enum MuxBotMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self, SchemaV3.self, SchemaV4.self, SchemaV5.self] }
     static var stages: [MigrationStage] { [v1ToV2, v2ToV3, v3ToV4, v4ToV5] }
 
-    /// V5 only adds an optional field (when a bot was archived).
+    /// V5 only adds optional fields (when a bot was archived or hidden).
     static let v4ToV5 = MigrationStage.lightweight(fromVersion: SchemaV4.self, toVersion: SchemaV5.self)
 
     /// V4 only adds defaulted fields (the bot's use case and skills).

@@ -27,6 +27,20 @@ struct ArchiveTests {
         #expect(Set(store.activeBots().map(\.id)) == [bot.id, other.id])
     }
 
+    @Test func hidingKeepsTheBotWorkingAndWaitingWorkShowsItAgain() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "Site")
+        store.hide(bot)
+        #expect(bot.isHidden && !bot.isArchived)
+        #expect(!BotStore.isListed(bot))
+        #expect(store.activeBots().map(\.id) == [bot.id], "still handed work")
+        _ = store.proposeRun(task: "x", crew: .coder, on: bot)
+        store.refreshState(of: bot)
+        #expect(BotStore.isListed(bot), "back in the sidebar while something waits on you")
+        store.restore(bot)
+        #expect(!bot.isHidden)
+    }
+
     @Test func openWorkBlocksArchiving() {
         let store = TestStore.fresh()
         let bot = store.add(name: "site", instructions: "Site")

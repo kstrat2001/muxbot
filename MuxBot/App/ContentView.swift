@@ -67,8 +67,8 @@ struct ContentView: View {
                 Task { await brain.runs.stopPreview(for: archived) }
             }
         }
-        .sheet(isPresented: $router.showArchived) {
-            NavigationStack { ArchivedBotsView() }
+        .sheet(item: $router.showPutAway) { kind in
+            NavigationStack { ArchivedBotsView(kind: kind) }
                 #if os(macOS)
                 .frame(minWidth: 460, minHeight: 360)
                 #endif

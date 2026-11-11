@@ -7,9 +7,12 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
-    /// Archived bots are out of the grid (More › Archived Bots).
-    @Query(filter: #Predicate<Bot> { $0.archivedAt == nil }, sort: \Bot.createdAt) private var roles: [Bot]
-    @Query(filter: #Predicate<Bot> { $0.archivedAt != nil }) private var archived: [Bot]
+    /// Archived and hidden bots are out of the grid (More › Hidden Bots,
+    /// Archived Bots); a hidden one comes back while something waits on you.
+    @Query(sort: \Bot.createdAt) private var allBots: [Bot]
+    private var roles: [Bot] { allBots.filter(BotStore.isListed) }
+    private var archived: [Bot] { allBots.filter(\.isArchived) }
+    private var hidden: [Bot] { allBots.filter(\.isHidden) }
     @Query(filter: #Predicate<ChatConversation> { $0.roleId == nil }, sort: \ChatConversation.createdAt) private var leadThreads: [ChatConversation]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
@@ -17,7 +20,7 @@ struct HomeView: View {
     var body: some View {
         Group {
             // No bots yet: start with what you want to get done.
-            if roles.isEmpty { StartProjectView(inline: true) } else { grid }
+            if allBots.allSatisfy(\.isArchived) { StartProjectView(inline: true) } else { grid }
         }
         .safeAreaInset(edge: .bottom) { BotBar() }
         .toolbar {
@@ -38,8 +41,11 @@ struct HomeView: View {
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
                     Button("New bot", systemImage: "plus") { router.showNewBot = true }
+                    if !hidden.isEmpty {
+                        Button("Hidden Bots", systemImage: "eye.slash") { router.showPutAway = .hidden }
+                    }
                     if !archived.isEmpty {
-                        Button("Archived Bots", systemImage: "archivebox") { router.showArchived = true }
+                        Button("Archived Bots", systemImage: "archivebox") { router.showPutAway = .archived }
                     }
                     if roles.isEmpty {
                         Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
