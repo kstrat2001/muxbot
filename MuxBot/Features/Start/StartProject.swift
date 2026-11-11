@@ -97,3 +97,22 @@ enum StartProject {
         return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }
+
+/// The one way in to making something: the sidebar's "New" row, Home's +,
+/// and File › New… ⌘N all open "What do you want to get done?".
+enum NewEntry {
+    static var rowTitle: String { String(localized: "New") }
+    static var menuTitle: String { String(localized: "New…") }
+}
+
+/// What "What do you want to get done?" offers, in order: projects first
+/// (each template, then your own project), and a bot with no project last.
+enum StartChoice: Equatable {
+    case template(String), existing, justABot
+
+    static var justABotTitle: String { String(localized: "Just a bot, no project") }
+
+    static func order(templateIds: [String]) -> [StartChoice] {
+        templateIds.map { .template($0) } + [.existing, .justABot]
+    }
+}

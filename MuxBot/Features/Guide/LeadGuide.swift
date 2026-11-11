@@ -30,14 +30,14 @@ final class LeadGuide {
             guard let draft = Self.draft(for: resource) else {
                 // Folders come only from Add folder (a bookmark kept on this
                 // Mac): a typed path would be saved in synced data.
-                store.append(.assistant, String(localized: "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it."), to: thread)
+                store.append(.assistant, String(localized: "For a folder on this Mac, choose New, then Work on a project I already have, and pick the folder, so Mux Bot can open it."), to: thread)
                 store.postGuideCard(.firstBot, summary: String(localized: "Make your first bot"))
                 return
             }
             store.append(.assistant, String(localized: "I can make \(draft.name) for that. Approve to add it."), to: thread)
             store.proposeAction(.createBot(draft), in: .lead)
         case .firstBot(nil):
-            store.append(.assistant, String(localized: "A bot is a project you name. Paste its GitHub link here, or use New bot to add a folder from this Mac."), to: thread)
+            store.append(.assistant, String(localized: "A bot is a project you name. Paste its GitHub link here, or choose New, then Work on a project I already have, to add a folder from this Mac."), to: thread)
             store.postGuideCard(.firstBot, summary: String(localized: "Make your first bot"))
         case let .setting(id):
             await respondAboutSetting(id, text: text, store: store, brain: brain)
