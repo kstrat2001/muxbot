@@ -124,14 +124,15 @@ enum FallbackBrain {
         if let named = others.first(where: { addresses(lower, to: $0.name.lowercased(), inBotThread: speaker != nil) }) {
             return handOff(text, to: named)
         }
-        if speaker != nil, isVisualReport(lower) {
-            return visualReportTurn(text)
-        }
         // "make the header bigger", "can you remove the footer": a change for
-        // Coder, even with no crew word in it.
+        // Coder, even with no crew word in it, and even when it names a color
+        // or a border (checked before the visual-report words).
         if speaker != nil, resourceValue(in: text) == nil, Intent.isChangeRequest(lower),
            !GuideRoute.isQuestion(lower) || Intent.isPoliteChangeRequest(lower) {
             return BotTurn(reply: "I'll send this to the \(CrewRole.coder.name) crew. Approve to dispatch.", action: .dispatch(crew: .coder, task: text))
+        }
+        if speaker != nil, isVisualReport(lower) {
+            return visualReportTurn(text)
         }
         // A request with work in it goes to the crew before any path in it
         // is taken as a link to keep.
@@ -590,7 +591,8 @@ final class BotBrain {
         // Mux Bot's thread: the guide answers setup, first-bot, settings and
         // help questions (`Guide.isEnabled` cuts it).
         if speaker == nil, Guide.isEnabled, element == nil, explicit == nil || explicit == .ask,
-           intent == nil || intent == .ask, let route = GuideRoute.route(text),
+           // An inferred change ("change the theme to dark") may be a setting.
+           intent == nil || intent == .ask || (explicit == nil && intent == .fix), let route = GuideRoute.route(text),
            // A question about one of your bots is the lead bot's, not the help's.
            route != .help || !bots.contains(where: { text.lowercased().contains($0.name.lowercased()) }) {
             beginThinking(context)

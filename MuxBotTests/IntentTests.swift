@@ -35,6 +35,18 @@ struct IntentParsingTests {
         ("why is this cut off?", true, .bug),
         ("what font is this", true, .ask),
         ("no gutter on the sides", true, .bug),
+        // A design change names a color or a border, yet it's work, not a bug.
+        ("change the green color to a white", false, .fix),
+        ("chanage the green color to a white", false, .fix),
+        ("repalce the logo with the new one", false, .fix),
+        ("make the border thicker", false, .fix),
+        ("the header color should be white", false, .fix),
+        ("i want the footer font bigger", false, .fix),
+        // A remark about what you see is still measured into a bug.
+        ("the Start_a_Project border looks like it has no padding on left and right", false, .bug),
+        ("the cards overlap the footer on phone", false, .bug),
+        // Questions stay questions; one typo never makes a short word a verb.
+        ("should the header be white?", false, .ask),
     ])
     func inference(text: String, hasElement: Bool, intent: Intent) {
         #expect(Intent.infer(text, hasElement: hasElement) == intent)
@@ -42,6 +54,22 @@ struct IntentParsingTests {
 
     @Test func plainChatInfersNothing() {
         #expect(Intent.infer("hello there", hasElement: false) == nil)
+    }
+
+    @Test func oneTypoInAChangeVerb() {
+        #expect(Intent.isChangeRequest("chanage the color"))
+        #expect(Intent.isChangeRequest("cahnge the color"))
+        #expect(!Intent.isChangeRequest("hde the footer"))  // too short to guess
+        #expect(!Intent.isChangeRequest("the change looks good"))
+        #expect(!Intent.isOneEditApart(Array("chaaange"), Array("change")))
+    }
+
+    @Test func fallbackSendsAColorChangeToCoderNotABugCard() {
+        let site = BotSummary(id: UUID(), name: "hcr", instructions: "Website", state: .ready)
+        let turn = FallbackBrain.turn(for: "change the green color to a white", speaker: site, bots: [site])
+        guard case let .dispatch(crew, task)? = turn.action else { Issue.record("no dispatch"); return }
+        #expect(crew == .coder)
+        #expect(task == "change the green color to a white")
     }
 }
 
