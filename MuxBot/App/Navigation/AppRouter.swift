@@ -25,6 +25,11 @@ final class AppRouter {
     /// The Mac / iPad sidebar's own show-hide state (the toolbar toggle).
     var columnVisibility: NavigationSplitViewVisibility = .all
     var showNewBot = false
+    /// Archived bots, with Restore and Delete (`ArchivedBotsView`).
+    var showArchived = false
+    /// The latest Clear Conversation, until it's undone or dismissed (this
+    /// device, in memory): the thread offers Undo.
+    var cleared: ClearedConversation?
     /// "What do you want to get done?" (`StartProjectView`).
     var showStartProject = false
     /// A template to open straight to when Start opens ("write a book").

@@ -1,15 +1,16 @@
 import SwiftUI
 
-/// Right-click (or long-press) actions on a bot: clear its conversation, or
-/// delete it after confirming. Runs stay in Activity when a thread is cleared.
+/// Right-click (or long-press) actions on a bot: clear its conversation
+/// (Undo in the thread), or archive it (Restore from Archived bots, where
+/// Delete lives). Runs stay in Activity when a thread is cleared.
 struct BotContextMenu: ViewModifier {
     let bot: Bot?
 
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(BotBrain.self) private var brain
-    @State private var confirmDelete = false
     @State private var confirmClear = false
+    @State private var archiveProblem: String?
 
     private var name: String { bot?.name ?? LeadBot.name }
 
@@ -25,39 +26,34 @@ struct BotContextMenu: ViewModifier {
                 Button("Clear Conversation…", systemImage: "eraser") { confirmClear = true }
                 if bot != nil {
                     Divider()
-                    Button("Delete \(name)…", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                    Button("Archive \(name)", systemImage: "archivebox") { archive() }
                 }
             }
             .confirmationDialog("Clear \(name)'s conversation?", isPresented: $confirmClear) {
                 Button("Clear Conversation", role: .destructive) {
-                    BotStore(context: context).clearConversation(bot.map { .bot($0.id) } ?? .lead)
+                    router.cleared = BotStore(context: context).clearConversation(bot.map { .bot($0.id) } ?? .lead)
                 }
             } message: {
-                Text("The messages go; runs stay in Activity.")
+                Text("The messages go; runs stay in Activity. You can undo it until Mux Bot quits.")
             }
-            .confirmationDialog("Delete \(name)?", isPresented: $confirmDelete) {
-                Button("Delete", role: .destructive) { delete() }
+            .alert("Can't archive \(name) yet", isPresented: Binding(get: { archiveProblem != nil }, set: { if !$0 { archiveProblem = nil } })) {
+                Button("OK", role: .cancel) {}
             } message: {
-                Text("Its running work and preview stop, and its conversation, runs and links go too. darkmux's work copy and your project folder are left alone.")
+                Text(archiveProblem ?? "")
             }
     }
 
-    private func delete() {
+    /// Out of the lists, everything kept; its preview stops. Refused while
+    /// work runs or waits on you, so nothing hides in the archive.
+    private func archive() {
         guard let bot else { return }
-        Task {
-            // Its runs are stopped on darkmux and its preview too, first; if
-            // darkmux won't stop a run, the bot stays and its thread says why.
-            let store = BotStore(context: context)
-            if let problem = await brain.runs.prepareToDelete(bot, store: store) {
-                store.append(.system, problem, to: store.conversation(for: .bot(bot.id)))
-                return
-            }
-            if router.context.botId == bot.id {
-                router.sidebar = .lead
-                router.path = []
-            }
-            store.delete(bot)
+        if let problem = BotStore.archiveBlocker(bot) { archiveProblem = problem; return }
+        if router.context.botId == bot.id {
+            router.sidebar = .lead
+            router.path = []
         }
+        BotStore(context: context).archive(bot)
+        Task { await brain.runs.stopPreview(for: bot) }
     }
 }
 

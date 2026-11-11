@@ -26,6 +26,39 @@ struct BotStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    /// The bots in the lists: every bot but the archived ones.
+    func activeBots() -> [Bot] { allBots().filter { !$0.isArchived } }
+
+    /// Archived bots, most recently archived first.
+    func archivedBots() -> [Bot] {
+        allBots().filter(\.isArchived).sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
+    }
+
+    /// Why a bot can't be archived now: work running (here or on another
+    /// Mac) or waiting on you. Nil when it can.
+    static func archiveBlocker(_ bot: Bot) -> String? {
+        let runs = bot.runs ?? []
+        if runs.contains(where: { $0.phase.isActive }) {
+            return String(localized: "\(bot.name) has a run going. Stop it or let it finish, then archive.")
+        }
+        if runs.contains(where: \.needsYou) {
+            return String(localized: "\(bot.name) has something waiting for you. Decide it in its thread, then archive.")
+        }
+        return nil
+    }
+
+    /// Moves a bot out of the lists. Its thread, runs, links and work copy
+    /// stay as they are, so Restore brings it back exactly.
+    func archive(_ bot: Bot) {
+        bot.archivedAt = Date()
+        save()
+    }
+
+    func restore(_ bot: Bot) {
+        bot.archivedAt = nil
+        save()
+    }
+
     func bot(id: UUID) -> Bot? {
         (try? context.fetch(FetchDescriptor<Bot>(predicate: #Predicate { $0.id == id })))?.first
     }
@@ -226,7 +259,8 @@ struct BotStore {
     /// Empties a thread. Runs stay (they're in Activity), and an open run
     /// (waiting for Approve, running, or a result that needs you) keeps its
     /// latest card, so it can still be decided here.
-    func clearConversation(_ chat: ChatContext) {
+    @discardableResult
+    func clearConversation(_ chat: ChatContext) -> ClearedConversation {
         let messages = conversation(for: chat).messages ?? []
         // Runs already in a PR stay shipped once its card is gone.
         if let botId = chat.botId, let lastPR = messages.filter({ $0.kind == .prCard }).map(\.timestamp).max() {
@@ -239,7 +273,29 @@ struct BotStore {
                   let latest = cards.max(by: { $0.timestamp < $1.timestamp }) else { continue }
             keep.insert(latest.id)
         }
-        for message in messages where !keep.contains(message.id) { context.delete(message) }
+        let cleared = messages.filter { !keep.contains($0.id) }
+        let snapshot = ClearedConversation(context: chat, messages: cleared.map(ClearedConversation.Message.init))
+        for message in cleared { context.delete(message) }
+        save()
+        return snapshot
+    }
+
+    /// Undo for Clear Conversation: the messages come back as they were
+    /// (same ids, times and cards). Ones already back are skipped.
+    func undoClear(_ cleared: ClearedConversation) {
+        let thread = conversation(for: cleared.context)
+        let present = Set((thread.messages ?? []).map(\.id))
+        for kept in cleared.messages where !present.contains(kept.id) {
+            let message = ChatMessage(role: kept.role, content: kept.content, kind: kept.kind, runId: kept.runId)
+            message.id = kept.id
+            message.timestamp = kept.timestamp
+            message.intentRaw = kept.intentRaw
+            message.elementJSON = kept.elementJSON
+            message.actionJSON = kept.actionJSON
+            message.actionStateRaw = kept.actionStateRaw
+            context.insert(message)
+            message.conversation = thread
+        }
         save()
     }
 
@@ -366,4 +422,37 @@ extension BotStore {
         save()
         return (run, true)
     }
+}
+
+/// What Clear Conversation took away, kept in memory on this device so it
+/// can be undone until the app quits.
+struct ClearedConversation: Equatable {
+    struct Message: Equatable {
+        var id: UUID
+        var role: ChatRole
+        var content: String
+        var timestamp: Date
+        var kind: MessageKind
+        var runId: UUID?
+        var intentRaw: String?
+        var elementJSON: String?
+        var actionJSON: String?
+        var actionStateRaw: String?
+
+        init(_ message: ChatMessage) {
+            id = message.id
+            role = message.role
+            content = message.content
+            timestamp = message.timestamp
+            kind = message.kind
+            runId = message.runId
+            intentRaw = message.intentRaw
+            elementJSON = message.elementJSON
+            actionJSON = message.actionJSON
+            actionStateRaw = message.actionStateRaw
+        }
+    }
+
+    let context: ChatContext
+    let messages: [Message]
 }

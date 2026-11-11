@@ -7,7 +7,9 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Bot.createdAt) private var roles: [Bot]
+    /// Archived bots are out of the grid (More › Archived Bots).
+    @Query(filter: #Predicate<Bot> { $0.archivedAt == nil }, sort: \Bot.createdAt) private var roles: [Bot]
+    @Query(filter: #Predicate<Bot> { $0.archivedAt != nil }) private var archived: [Bot]
     @Query(filter: #Predicate<ChatConversation> { $0.roleId == nil }, sort: \ChatConversation.createdAt) private var leadThreads: [ChatConversation]
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: Spacing.md)]
@@ -36,6 +38,9 @@ struct HomeView: View {
                 }
                 Menu("More", systemImage: "ellipsis.circle") {
                     Button("New bot", systemImage: "plus") { router.showNewBot = true }
+                    if !archived.isEmpty {
+                        Button("Archived Bots", systemImage: "archivebox") { router.showArchived = true }
+                    }
                     if roles.isEmpty {
                         Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
                     }

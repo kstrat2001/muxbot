@@ -7,7 +7,9 @@ struct BotSidebar: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Bot.createdAt) private var bots: [Bot]
+    /// Archived bots are out of the list (`ArchivedBotsView`).
+    @Query(filter: #Predicate<Bot> { $0.archivedAt == nil }, sort: \Bot.createdAt) private var bots: [Bot]
+    @Query(filter: #Predicate<Bot> { $0.archivedAt != nil }) private var archived: [Bot]
     @Query(sort: \ChatConversation.createdAt) private var threads: [ChatConversation]
 
     var body: some View {
@@ -59,6 +61,14 @@ struct BotSidebar: View {
             }
             Section {
                 plainRow("Activity", systemImage: "waveform.path.ecg").tag(SidebarItem.activity)
+                if !archived.isEmpty {
+                    Button { router.showArchived = true } label: {
+                        plainRow("Archived", systemImage: "archivebox")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.secondaryText)
+                    .accessibilityValue("\(archived.count)")
+                }
             }
         }
         .toolbar {
