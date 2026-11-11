@@ -6,7 +6,7 @@ Pairing lets Mux Bot send work to darkmux on this Mac. You approve it once in da
 
 1. Make sure darkmux's app connection is running on this Mac (the setup check says so).
 2. In Mux Bot, choose Pair with darkmux. It shows a code.
-3. Approve Mux Bot in darkmux on this Mac and check the code matches. darkmux's guide (darkmux.com/guide) shows how.
+3. Approve it in darkmux and check the code matches. darkmux has no window to click: it approves new apps from its own setup on this Mac, and its guide (darkmux.com/guide) shows how.
 
 Mux Bot keeps the pairing in this device's Keychain. It's never synced. If you have no bots yet, Mux Bot goes on to "What do you want to get done?" once it's paired.
 

@@ -49,8 +49,8 @@ struct FleetPairingView: View {
                 #endif
             case let .waiting(code, expires):
                 Section {
-                    step(1, "Approve Mux Bot in darkmux on this Mac.") {
-                        Link(destination: DarkmuxLinks.guide) { Label("How", systemImage: "safari") }.font(AppFont.footnote())
+                    step(1, Self.approveStep) {
+                        Link(destination: DarkmuxLinks.guide) { Label("darkmux guide", systemImage: "safari") }.font(AppFont.footnote())
                     }
                     step(2, "Check that darkmux shows this code.") { EmptyView() }
                     Text(code)
@@ -170,5 +170,13 @@ extension FleetPairingView {
     /// your Mac and GitHub.
     static func title(onPhone: Bool) -> String {
         onPhone ? String(localized: "Your Mac and GitHub") : String(localized: "Pair with darkmux")
+    }
+}
+
+extension FleetPairingView {
+    /// Step 1 of approving, on its own: darkmux has no window, so the
+    /// approval is part of darkmux's own setup, which its guide covers.
+    static var approveStep: String {
+        String(localized: "darkmux has no window to click: it approves new apps from its own setup on this Mac. Its guide shows how.")
     }
 }

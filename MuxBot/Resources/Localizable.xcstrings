@@ -200,6 +200,9 @@
     "A repo on my GitHub" : {
 
     },
+    "A run is changing this project right now. Edit the text once it finishes." : {
+
+    },
     "About" : {
 
     },
@@ -396,6 +399,16 @@
     "Changed in darkmux on your Mac, not here." : {
 
     },
+    "Changed “%@” to “%@” in %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Changed “%1$@” to “%2$@” in %3$@."
+          }
+        }
+      }
+    },
     "Chat" : {
 
     },
@@ -537,6 +550,9 @@
         }
       }
     },
+    "Couldn't make that edit: %@" : {
+
+    },
     "Couldn't open the PR: %@" : {
 
     },
@@ -572,6 +588,9 @@
 
     },
     "Delete %@…" : {
+
+    },
+    "Desktop" : {
 
     },
     "Details" : {
@@ -640,6 +659,25 @@
 
     },
     "Each machine has its own models, so this is set per machine and shared with your other devices." : {
+
+    },
+    "Edit text" : {
+
+    },
+    "Edit “%@” to “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Edit “%1$@” to “%2$@”"
+          }
+        }
+      }
+    },
+    "Edits are made from the Mac app, with this bot's project set up on that Mac." : {
+
+    },
+    "Enlarge" : {
 
     },
     "Enter this code at %@%@:" : {
@@ -824,6 +862,9 @@
 
     },
     "I can show this once darkmux on your Mac has answered, so the setting goes to the right machine." : {
+
+    },
+    "I couldn't find that text in the project's files as written (it may be built by code, or split by formatting), so Coder can make the change." : {
 
     },
     "I couldn't find where this project starts on GitHub (its “Start from …” commit), so I didn't make it here. Try again in a moment." : {
@@ -1143,6 +1184,9 @@
     "New bot…" : {
 
     },
+    "New text" : {
+
+    },
     "New work copy" : {
 
     },
@@ -1368,10 +1412,16 @@
     "Persona" : {
 
     },
+    "Phone" : {
+
+    },
     "Pick" : {
 
     },
     "Pick the project folder you already have. darkmux works on its own copy on a new branch, so your files and changes are never touched." : {
+
+    },
+    "Pick this one" : {
 
     },
     "Point Mux Bot at your code, on this Mac or on GitHub, and keep improving it." : {
@@ -1529,6 +1579,12 @@
     "Same as Settings" : {
 
     },
+    "Save" : {
+
+    },
+    "Saves the change to this bot's project. You can undo it from the thread." : {
+
+    },
     "Search" : {
 
     },
@@ -1633,6 +1689,9 @@
 
     },
     "Shortcuts" : {
+
+    },
+    "Show" : {
 
     },
     "Show Preview" : {
@@ -1786,6 +1845,9 @@
     "That reads as a question, so I didn't start anything. Say what to change and I'll send it to the crew." : {
 
     },
+    "That text is in more than one place in the project, so Coder can make the change where you picked it." : {
+
+    },
     "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
 
     },
@@ -1841,6 +1903,9 @@
 
     },
     "The model's server isn't running." : {
+
+    },
+    "The part of the page you picked" : {
 
     },
     "The persona and conventions are drafted on this device from your README. Check them." : {
@@ -1963,6 +2028,9 @@
     "This project's PLAYBOOK.md doesn't say which schema it follows." : {
 
     },
+    "This project's PLAYBOOK.md has a choice it can't read: “%@”." : {
+
+    },
     "This project's PLAYBOOK.md has an unknown key “%@” (did you mean “%@”?)." : {
       "localizations" : {
         "en" : {
@@ -2064,6 +2132,9 @@
       }
     },
     "This template's PLAYBOOK.md doesn't say which schema it follows." : {
+
+    },
+    "This template's PLAYBOOK.md has a choice it can't read: “%@”." : {
 
     },
     "This template's PLAYBOOK.md has an unknown key “%@” (did you mean “%@”?)." : {
@@ -2347,6 +2418,9 @@
 
     },
     "darkmux has no free work copy name left for this project. Remove an old work copy of it in darkmux, then try again." : {
+
+    },
+    "darkmux has no window to click: it approves new apps from its own setup on this Mac. Its guide shows how." : {
 
     },
     "darkmux installed" : {
