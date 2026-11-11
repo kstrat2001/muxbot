@@ -20,7 +20,8 @@ struct EvalsFitTests {
         ("qwen/qwen3.8-27b", "qwen3.8-27b"),
         ("darkmux:qwen3.6-35b-a3b-turboquant-mlx", "qwen3.6-35b-a3b"),
         ("unsloth/Devstral-Small-q4_k_m", "devstral-small"),
-        ("flint-int4", "flint-int4"),
+        ("flint-int4", "flint"),
+        ("RecursiveSI/flint-int4", "flint"),
         ("qwen3-coder-next-mlx", "qwen3-coder-next"),
     ])
     func theSameWeightsAreOneFamily(model: String, family: String) {
@@ -34,6 +35,15 @@ struct EvalsFitTests {
         let listed = [p("phi", "phi-4"), p("big", "gpt-oss-120b"), p("fold", "mlx-community/Qwen3.8-27B-4bit", "tensorfold"), p("other", "devstral")]
         #expect(EvalsFit.ordered(listed, by: fit).map(\.name) == ["fold", "big", "phi", "other"])
         #expect(EvalsFit.ordered(listed, by: []).map(\.name) == listed.map(\.name), "no data: darkmux's order")
+    }
+
+    @Test func recsFlintMatchesItsEvalsRuns() throws {
+        // Evals runs name rec's model `flint` (quant int4); darkmux lists it as `flint-int4`.
+        for site in ["flint", "flint-int4"] {
+            let fit = try EvalsFit.families(from: Data(#"{"data":{"points":[{"family":"\#(site)"}]}}"#.utf8))
+            let listed = [p("qwen", "qwen3.8-27b"), p("flint", "flint-int4", "flint")]
+            #expect(EvalsFit.ordered(listed, by: fit).map(\.name) == ["flint", "qwen"])
+        }
     }
 }
 

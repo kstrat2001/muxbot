@@ -42,7 +42,7 @@ enum EvalsFit {
         return s
     }
 
-    /// Where a quantization suffix (`-4bit`, `-mlx`, `-gguf`,
+    /// Where a quantization suffix (`-4bit`, `-int4`, `-mlx`, `-gguf`,
     /// `-turboquant-mlx`, `-q4_k_m`) starts, if the id ends in one.
     private static func quantSuffix(_ s: String) -> String.Index? {
         guard let dash = s.lastIndex(of: "-") else { return nil }
@@ -55,6 +55,8 @@ enum EvalsFit {
         }
         if tail == "gguf" { return dash }
         if tail.hasSuffix("bit"), tail.count > 3, tail.dropLast(3).allSatisfy(\.isNumber) { return dash }
+        // rec's Flint is `flint-int4` in darkmux and `flint` (quant int4) in evals runs.
+        if tail.hasPrefix("int"), tail.count > 3, tail.dropFirst(3).allSatisfy(\.isNumber) { return dash }
         // q4, q4_k, q4_k_m, q4_k_s
         let parts = tail.split(separator: "_", omittingEmptySubsequences: false)
         if let q = parts.first, q.count == 2, q.first == "q", q.last!.isNumber {
@@ -70,11 +72,12 @@ enum EvalsFit {
         var data: Body
     }
 
-    /// The families in the site's order, each once.
+    /// The families in the site's order, each once, matched the way the app
+    /// matches its own models (`family`), so both sides strip the same suffixes.
     static func families(from data: Data) throws -> [String] {
         var seen = Set<String>()
         return try JSONDecoder().decode(Reply.self, from: data).data.points
-            .map { $0.family.lowercased() }
+            .map { family($0.family) }
             .filter { seen.insert($0).inserted }
     }
 
