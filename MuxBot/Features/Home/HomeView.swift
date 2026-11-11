@@ -7,8 +7,7 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(FleetConnection.self) private var connection
     @Environment(\.modelContext) private var modelContext
-    /// Archived and hidden bots are out of the grid (More › Hidden Bots,
-    /// Archived Bots); a hidden one comes back while something waits on you.
+    /// Archived and hidden bots are out of the grid (their toolbar menu); a hidden one comes back while something waits on you.
     @Query(sort: \Bot.createdAt) private var allBots: [Bot]
     private var roles: [Bot] { allBots.filter(BotStore.isListed) }
     private var archived: [Bot] { allBots.filter(\.isArchived) }
@@ -37,18 +36,20 @@ struct HomeView: View {
                     .help(connection.isPaired ? "Paired with darkmux on this Mac" : "Pair with darkmux")
                 #endif
                 if !roles.isEmpty {
-                    Button("Start a project", systemImage: "plus") { router.showStartProject = true }
-                }
-                Menu("More", systemImage: "ellipsis.circle") {
-                    Button("New bot", systemImage: "plus") { router.showNewBot = true }
-                    if !hidden.isEmpty {
-                        Button("Hidden Bots", systemImage: "eye.slash") { router.showPutAway = .hidden }
-                    }
-                    if !archived.isEmpty {
-                        Button("Archived Bots", systemImage: "archivebox") { router.showPutAway = .archived }
-                    }
-                    if roles.isEmpty {
+                    Button(NewEntry.rowTitle, systemImage: "plus") { router.showStartProject = true }
+                } else {
+                    Menu("More", systemImage: "ellipsis.circle") {
                         Button("Add an example bot", systemImage: "wand.and.stars") { BotStore(context: modelContext).addExample() }
+                    }
+                }
+                if !hidden.isEmpty || !archived.isEmpty {
+                    Menu("Hidden and Archived", systemImage: "archivebox") {
+                        if !hidden.isEmpty {
+                            Button("Hidden Bots", systemImage: "eye.slash") { router.showPutAway = .hidden }
+                        }
+                        if !archived.isEmpty {
+                            Button("Archived Bots", systemImage: "archivebox") { router.showPutAway = .archived }
+                        }
                     }
                 }
             }

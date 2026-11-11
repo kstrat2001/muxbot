@@ -29,10 +29,17 @@ struct StartProjectView: View {
     @State private var starting = false
     /// "Work on a project I already have" is open.
     @State private var existing = false
+    /// "Just a bot, no project" is open (the New bot form, in this sheet).
+    @State private var justABot = false
 
     var body: some View {
         if existing {
             ExistingProjectView(inline: inline) { existing = false }
+        } else if justABot {
+            NewBotView()
+                #if os(macOS)
+                .frame(minWidth: 560, idealWidth: 600, minHeight: 640, idealHeight: 720)
+                #endif
         } else {
             templates
         }
@@ -46,7 +53,7 @@ struct StartProjectView: View {
                 chooser
             }
         }
-        .navigationTitle(picked.map(\.title) ?? String(localized: "Start a project"))
+        .navigationTitle(picked.map(\.title) ?? NewEntry.rowTitle)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 if picked != nil { Button("Back") { picked = nil } } else if !inline { Button("Cancel") { dismiss() } }
@@ -87,6 +94,14 @@ struct StartProjectView: View {
                     Button { existing = true } label: { existingTile }
                         .buttonStyle(.plain)
                 }
+                // Last (StartChoice.order): a bot with no project. Inline (no
+                // sheet to fill), it opens the New bot sheet.
+                Button {
+                    if inline { router.showNewBot = true } else { justABot = true }
+                } label: {
+                    Label(StartChoice.justABotTitle, systemImage: "bubble.left")
+                }
+                .buttonStyle(.borderless)
                 if inline {
                     // Mux Bot, the guide, helps with setup first.
                     Button { router.navigate(to: .lead) } label: {

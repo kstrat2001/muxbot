@@ -102,7 +102,7 @@ struct PreviewSetupCardView: View {
     private func approve() {
         guard let bot = message.conversation?.roleId.flatMap({ BotStore(context: context).bot(id: $0) }),
               let data = setup.recipeData else { return }
-        if let why = CheckoutWrite.approve(data, at: PreviewSetup.path, bot: bot, folderName: setup.folderName) {
+        if let why = CheckoutWrite.approve(data, at: PreviewSetup.path, bot: bot) {
             problem = why
             return
         }
@@ -112,34 +112,3 @@ struct PreviewSetupCardView: View {
     }
     #endif
 }
-
-#if os(macOS)
-/// Writing an approved file into your checkout: you choose its folder (the
-/// bookmark Mux Bot keeps is read-only), it must be the bot's checkout, and
-/// the file is written only as a new file. Returns why it wasn't written.
-@MainActor
-enum CheckoutWrite {
-    static func approve(_ data: Data, at path: String, bot: Bot, folderName: String) -> String? {
-        let checkout = bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = checkout?.deletingLastPathComponent()
-        panel.message = String(localized: "Choose \(folderName) to let Mux Bot write \(path) into it.")
-        panel.prompt = String(localized: "Write here")
-        guard panel.runModal() == .OK, let chosen = panel.url else { return String(localized: "Nothing was written.") }
-        if let checkout, !PreviewSetup.sameFolder(chosen, checkout) {
-            return PreviewSetup.WriteError.notYourCheckout(folderName).localizedDescription
-        }
-        let accessing = chosen.startAccessingSecurityScopedResource()
-        defer { if accessing { chosen.stopAccessingSecurityScopedResource() } }
-        do {
-            try PreviewSetup.writeNew(data, at: path, into: chosen)
-            return nil
-        } catch {
-            return error.localizedDescription
-        }
-    }
-}
-#endif

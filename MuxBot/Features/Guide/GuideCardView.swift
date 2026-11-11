@@ -153,8 +153,7 @@ struct FirstBotCardView: View {
             Text("Start something new from a template, paste a GitHub link in the bar below, or make one for code you have.")
                 .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             HStack {
-                Button("Start a project…", systemImage: "sparkles") { router.showStartProject = true }.buttonStyle(.borderedProminent).tint(Color.brandGreen)
-                Button("New bot…", systemImage: "plus") { router.showNewBot = true }.buttonStyle(.bordered)
+                Button(NewEntry.menuTitle, systemImage: "plus") { router.showStartProject = true }.buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
         }
     }

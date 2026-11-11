@@ -34,6 +34,21 @@ final class ScreensTourUITests: XCTestCase {
         keep(app, "activity")
     }
 
+    /// One way in: "New" (the sidebar row on iPad, Home's + on iPhone) opens
+    /// the chooser, with "Just a bot, no project" last.
+    func testNew() {
+        let app = launch(["-uiTesting"])
+        let new = app.buttons.matching(NSPredicate(format: "label == %@", "New")).firstMatch
+        XCTAssertTrue(new.waitForExistence(timeout: 10))
+        keep(app, "new-entry")
+        new.tap()
+        XCTAssertTrue(element(app, "What do you want to get done?").waitForExistence(timeout: 10))
+        let justABot = element(app, "Just a bot, no project")
+        if !justABot.isHittable { app.swipeUp() }
+        XCTAssertTrue(justABot.waitForExistence(timeout: 10))
+        keep(app, "new-chooser")
+    }
+
     func testBotInfo() {
         let app = launch(["-uiTesting", "-openBot", "My website"])
         let info = element(app, "info")

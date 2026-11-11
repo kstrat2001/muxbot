@@ -50,8 +50,9 @@ struct BotSidebar: View {
                         .accessibilityValue(Self.waitingText(bot) ?? "")
                         .botContextMenu(bot)
                 }
-                Button { router.showNewBot = true } label: {
-                    plainRow("New bot", systemImage: "plus")
+                // One way in: projects first, a bot with no project last.
+                Button { router.showStartProject = true } label: {
+                    plainRow(NewEntry.rowTitle, systemImage: "plus")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.secondaryText)
@@ -100,10 +101,10 @@ struct BotSidebar: View {
             }
         }
         .toolbar {
-            // Starting a project is always one tap away (also File › New Project… ⌘N).
+            // New is always one tap away (also File › New… ⌘N).
             ToolbarItem {
-                Button("Start a project", systemImage: "plus") { router.showStartProject = true }
-                    .help("Start a project (⌘N)")
+                Button(NewEntry.rowTitle, systemImage: "plus") { router.showStartProject = true }
+                    .help("New (⌘N)")
             }
             ToolbarItem {
                 Button("darkmux", systemImage: connection.isPaired ? "link.circle.fill" : "link.circle") { router.showPairing = true }

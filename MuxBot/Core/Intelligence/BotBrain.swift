@@ -1299,15 +1299,27 @@ final class BotBrain {
     /// The project has no preview recipe: offer one worked out from its own
     /// files (an Approve card), or say a clone needs your checkout. Once per
     /// thread.
-    func offerPreviewSetup(for bot: Bot, store: BotStore) {
+    /// What "Set up preview" showed: the card (new, or the one still
+    /// waiting), or that the preview needs your own checkout first.
+    enum PreviewSetupOffer: Equatable { case card(UUID), needsCheckout }
+
+    /// Offered by itself (darkmux found no recipe) it comes once. Asked for
+    /// (`again`, the Set up preview button) it always shows something: the
+    /// card still waiting, a fresh one when the last was used or canceled,
+    /// or `.needsCheckout`.
+    @discardableResult
+    func offerPreviewSetup(for bot: Bot, store: BotStore, again: Bool = false) -> PreviewSetupOffer? {
         let thread = store.conversation(for: .bot(bot.id))
         let messages = thread.messages ?? []
-        if messages.contains(where: { if case .setUpPreview? = $0.action { true } else { false } }) { return }
+        let offered = messages.filter { if case .setUpPreview? = $0.action { true } else { false } }
+            .sorted { $0.timestamp < $1.timestamp }
+        if let waiting = offered.last(where: { $0.actionState == .waiting }) { return .card(waiting.id) }
+        if !again, let last = offered.last { return .card(last.id) }
         let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
         guard let folder else {
             let note = String(localized: "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info.")
             if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
-            return
+            return .needsCheckout
         }
         let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
         let draft = ProjectSetupDetector.detect(packageJSON: files.packageJSON, files: files.files)
@@ -1316,7 +1328,8 @@ final class BotBrain {
         store.append(.assistant, draft.isEmpty
             ? String(localized: "This project has no preview recipe yet, and I couldn't work out from its files how it starts. Fill in how it starts on this card, then Approve to write it into your checkout.")
             : String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
-        store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
+        let card = store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
+        return .card(card.id)
     }
 
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],

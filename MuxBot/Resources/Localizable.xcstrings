@@ -173,6 +173,9 @@
     "A Mac with Apple silicon" : {
 
     },
+    "A bot is a project you name. Paste its GitHub link here, or choose New, then Work on a project I already have, to add a folder from this Mac." : {
+
+    },
     "A bot is a project you name. Paste its GitHub link here, or use New bot to add a folder from this Mac." : {
 
     },
@@ -252,6 +255,9 @@
 
     },
     "All set" : {
+
+    },
+    "Allow" : {
 
     },
     "Allow notifications" : {
@@ -422,6 +428,9 @@
 
     },
     "Checking the done-when in the preview…" : {
+
+    },
+    "Choose %@ once so Mux Bot can write into it from now on." : {
 
     },
     "Choose %@ to let Mux Bot write %@ into it." : {
@@ -720,6 +729,9 @@
     "Folders are added with Add folder in the bot's info, so Mux Bot can open them." : {
 
     },
+    "For a folder on this Mac, choose New, then Work on a project I already have, and pick the folder, so Mux Bot can open it." : {
+
+    },
     "For a folder on this Mac, use New bot and pick it with Add folder, so Mux Bot can open it." : {
 
     },
@@ -981,6 +993,9 @@
     "Its running work and preview stop, and its conversation, runs and links go too. darkmux's work copy and your project folder are left alone." : {
 
     },
+    "Just a bot, no project" : {
+
+    },
     "Keep improving %@." : {
 
     },
@@ -1127,6 +1142,9 @@
     "Mux Bot is paired with darkmux on this Mac." : {
 
     },
+    "Mux Bot isn't allowed to write into that folder." : {
+
+    },
     "Mux Bot isn't paired with darkmux" : {
 
     },
@@ -1140,6 +1158,9 @@
 
     },
     "Mux Bot quit before darkmux started it." : {
+
+    },
+    "Mux Bot works out the preview from your own checkout of the project, and this bot doesn't have one on this Mac. Add its folder, then Set up preview again." : {
 
     },
     "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off." : {
@@ -1169,6 +1190,12 @@
     "Needs you" : {
 
     },
+    "New" : {
+
+    },
+    "New (⌘N)" : {
+
+    },
     "New Bot…" : {
 
     },
@@ -1191,6 +1218,9 @@
 
     },
     "New work copy on its own branch. The earlier commits stay on the old branch in darkmux." : {
+
+    },
+    "New…" : {
 
     },
     "Next" : {
@@ -1847,6 +1877,16 @@
     },
     "That text is in more than one place in the project, so Coder can make the change where you picked it." : {
 
+    },
+    "That's a different folder from the one %@ uses. Pick %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "That's a different folder from the one %1$@ uses. Pick %2$@."
+          }
+        }
+      }
     },
     "That's set in darkmux on your Mac. Pair Mux Bot first and I can show its value here." : {
 
