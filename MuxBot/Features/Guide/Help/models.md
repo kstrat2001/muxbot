@@ -8,7 +8,7 @@ By default, darkmux lets a paired app use any profile that runs on this Mac. A p
 
 ## The order models are listed in
 
-On a Mac, the model lists are ordered by fit: models that did well in the public evals at evals.darkmux.com on Macs with the same chip come first, and models without runs there follow in darkmux's order. It's only an order; no scores are shown.
+On a Mac, the model lists are ordered by fit: models that did well in the public evals at evals.darkmux.com on Macs with the same chip come first, and models without runs there follow in darkmux's order. It's only an order; no scores are shown. A model that has runs there goes by the name the evals site gives it.
 
 ## What the badges mean
 

@@ -269,6 +269,13 @@ enum ModelLabel {
         return s.isEmpty ? nil : s
     }
 
+    /// The model as people know it: the evals site's display name when it has
+    /// runs there (the owner's aliases), else its id (`model(_:)`).
+    static func name(_ id: String?) -> String? {
+        guard let id, let short = model(id) else { return nil }
+        return EvalsFit.current.withLock { $0.name(id) } ?? short
+    }
+
     /// The engine by its own name; a server darkmux only sends to is "Server".
     static func engine(_ endpoint: String) -> String {
         switch endpoint.lowercased() {
@@ -282,7 +289,7 @@ enum ModelLabel {
 
     /// "model · engine".
     static func line(_ p: DarkmuxClient.ProfileInfo) -> String {
-        "\(model(p.model) ?? String(localized: "Unnamed model")) · \(engine(p.endpoint))"
+        "\(name(p.model) ?? String(localized: "Unnamed model")) · \(engine(p.endpoint))"
     }
 
     /// A profile's line from a listing; nil when the listing doesn't have it.
@@ -338,7 +345,7 @@ struct ModelRow: Equatable {
         self.name = name
         let profile = listed.first { $0.name == name }
         if let profile {
-            title = ModelLabel.model(profile.model) ?? String(localized: "Unnamed model")
+            title = ModelLabel.name(profile.model) ?? String(localized: "Unnamed model")
             subtitle = ModelLabel.engine(profile.endpoint)
             detail = profile.availability?.reason
         } else {
