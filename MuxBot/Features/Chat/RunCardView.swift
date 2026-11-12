@@ -132,8 +132,8 @@ struct RunCardView: View {
             } else {
                 resultCard(run)
             }
-        case .prCard where message.content.hasPrefix("Opened PR"):
-            Label("Pull request opened", systemImage: "arrow.triangle.pull").font(AppFont.headline())
+        case .prCard where message.content.hasPrefix("Opened PR") || message.content.hasPrefix("In review"):
+            Label("In review", systemImage: "checkmark.bubble").font(AppFont.headline())
             Text(Linkify.attributed(message.content, repo: repo(run))).font(AppFont.body())
         case .prCard:
             Label("Pull request", systemImage: "arrow.triangle.pull").font(AppFont.headline())
@@ -142,7 +142,7 @@ struct RunCardView: View {
             case .kept:
                 // Earlier builds' Keep: moved to a committed result at launch
                 // (BotStore.migrateKeptRuns), so Open PR includes it.
-                Text("Committed. Open a pull request from the thread's Open PR.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Text("Saved. Start a review from the thread's Start review.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
                 Text("Not opened.")

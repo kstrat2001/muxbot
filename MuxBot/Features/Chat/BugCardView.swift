@@ -2,8 +2,9 @@ import SwiftUI
 import SwiftData
 
 /// A drafted bug: what you described, measured page facts, and two ways
-/// forward: file it on GitHub (prefilled, screenshot on the clipboard) or
-/// send it straight to the Coder crew.
+/// forward: change it now in the bot's task (the Coder crew), or File issue
+/// to save it on GitHub for later (prefilled, screenshot on the clipboard).
+/// No type: pointing at something means "change it here".
 struct BugCardView: View {
     let message: ChatMessage
 
@@ -25,14 +26,14 @@ struct BugCardView: View {
         if let draft {
             CardView {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Label("Bug: \(draft.title)", systemImage: "ladybug").font(AppFont.headline())
+                    Label(draft.title, systemImage: "exclamationmark.triangle").font(AppFont.headline())
                     Text("\(draft.page)\(draft.viewport.map { " · \($0)px wide" } ?? "")")
                         .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     Text(draft.headline).font(AppFont.body())
                     if !draft.facts.isEmpty { TechnicalDetails(text: draft.details) }
                     if store.sentRun(for: message) == nil { modelRow }
                     HStack {
-                        Button("File on GitHub", systemImage: "arrow.up.forward.square") { file(draft) }
+                        Button("File issue", systemImage: "arrow.up.forward.square") { file(draft) }
                             .buttonStyle(.bordered)
                             .disabled(draft.issueURL == nil)
                         Spacer()
@@ -45,7 +46,8 @@ struct BugCardView: View {
                                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                         }
                     }
-                    Text(connection.isPaired ? "Fix it now starts the fix on darkmux." : "Pair with darkmux to run fixes.")
+                    Text(connection.isPaired ? "Fix it now changes it in this task. File issue saves it on GitHub for later and changes nothing."
+                                             : "Pair with darkmux to run fixes. File issue saves it on GitHub for later.")
                         .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
