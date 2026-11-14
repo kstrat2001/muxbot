@@ -465,7 +465,7 @@ final class BotBrain {
             You cannot see the website. Never say how something looks. \
             Never mention tools. Never claim whether issues exist without checking. \
             If an issue already has an open PR, say so with its number (PR #9) instead of offering to fix it. Write issue and PR numbers as #N. \
-            \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew. When the user asks the app to show or open something (the preview, a phone or tablet size, pointing at something, your info, a review of the changes), use appAction, never the crew.")
+            \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew.")
             """
         guard !compact else { return identity + "\n" + rules }
         let others = bots.filter { $0.id != speaker?.id }.prefix(12)
@@ -473,6 +473,7 @@ final class BotBrain {
         let wantsFleet = ["machine", "fleet", "memory", "loaded", "running", "free", "where should"].contains { lower.contains($0) }
         return [identity, rules,
                 "Hand work to another bot only when the user asks or it clearly belongs to that bot.",
+                speaker == nil ? "" : "To show or open something in the app (the preview, a device size, your info, a review), use appAction, never the crew.",
                 "Other bots:\n" + (roster.isEmpty ? "(none yet)" : roster),
                 wantsFleet ? "You can't see the darkmux fleet yet (its machines, models or load). If asked, say so plainly; never guess." : ""]
             .filter { !$0.isEmpty }.joined(separator: "\n")
