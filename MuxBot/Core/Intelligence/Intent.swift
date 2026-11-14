@@ -176,7 +176,7 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     /// show: "no gutter on the sides", "the cards overlap the footer".
     static func isLayoutComplaint(_ lower: String) -> Bool {
         let text = " \(lower.trimmingCharacters(in: .whitespacesAndNewlines)) "
-        return (problemWords + layoutWords).contains { text.contains($0) }
+        return (geometryProblems + layoutWords).contains { text.contains($0) }
     }
 
     /// A change to the project ("change X to a different security issue",
@@ -258,6 +258,14 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         "move", "put", "rename", "rewrite", "reword", "update", "edit", "fix", "turn", "increase", "decrease",
         "shrink", "grow", "enlarge", "center", "align", "bold", "italicize", "underline", "shorten",
         "lengthen", "translate", "link", "unlink", "insert", "wrap", "space", "pad", "tighten", "loosen", "say",
+    ]
+
+    /// The problem words measuring can actually show. "wrong", "missing",
+    /// "broken" or "hidden" alone say nothing about layout ("the price is
+    /// wrong" is a change to the words), so a remark needs one of these.
+    private static let geometryProblems = [
+        "cut off", "clipped", "overlap", "misaligned", "not aligned", "off-center", "off center", "cramped",
+        "squished", "overflow", "too big", "too small", "too wide", "too narrow", "doesn't fit", "does not fit", "pushed",
     ]
 
     /// Words about where things sit, padded with spaces where a short word

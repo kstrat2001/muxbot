@@ -168,10 +168,11 @@ enum FallbackBrain {
 
     /// "The border has no padding", "the cards overlap the footer": the
     /// user describing something they see in the preview.
+    /// Only where things sit (padding, overlap, cut off) is measured: a
+    /// remark about a color, a font or the words ("the font looks corporate")
+    /// is left to the conversation, never a layout bug.
     static func isVisualReport(_ lower: String) -> Bool {
-        let words = ["looks", "border", "padding", "margin", "overlap", "misaligned", "aligned", "cut off",
-                     "too big", "too small", "spacing", "font", "color", "colour", "wraps", "cramped", "broken", "off-center", "contrast"]
-        return words.contains { lower.contains($0) } && !lower.hasSuffix("?")
+        Intent.isLayoutComplaint(lower) && !lower.hasSuffix("?")
     }
 
     /// The bot can't see the preview: it takes the user's word and offers
@@ -1525,7 +1526,9 @@ final class BotBrain {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
         let lower = request.lowercased()
-        let wantsIssues = FallbackBrain.isIssueQuestion(lower) || lower.contains("issue")
+        // The issues tool only for a question about issues: offered on any
+        // "issue", the model answered "No open issues" to a change.
+        let wantsIssues = FallbackBrain.isIssueQuestion(lower)
         let issueTool = OpenIssuesTool(repos: repos, client: github)
         let tools: [any Tool] = compact || repos.isEmpty || !wantsIssues ? [] : [issueTool]
         let session = LanguageModelSession(tools: tools, instructions: Self.instructions(
