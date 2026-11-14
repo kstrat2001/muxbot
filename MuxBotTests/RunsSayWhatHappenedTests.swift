@@ -40,24 +40,41 @@ struct RunsSayWhatHappenedTests {
         #expect(status(#"{"status":"done","result":{"result":"stop","final_assistant":"ok"}}"#).status == "done")
     }
 
-    /// Kain, 2026-11-14: "the app isn't checking at all?" A model on LM
-    /// Studio with its local server off can't run: the card says so before
-    /// Approve and nothing is sent; turning the server on clears it.
+    /// Kain, 2026-11-14: "the app isn't checking at all?" and "shouldn't
+    /// the darkmux command be used to see what's loaded?" darkmux says when
+    /// LM Studio's local server is off (darkmux #3578): the card says so
+    /// before Approve and nothing is sent; darkmux listing it again as able
+    /// to run clears it. The app never probes the engine itself.
     @Test func aModelWhoseServerIsOffIsCaughtBeforeApprove() async {
         let (store, bot, runs) = setUp()
         let run = store.proposeRun(task: "remove this text", crew: .coder, on: bot)
-        runs.lastListed = [DarkmuxClient.ProfileInfo(name: "qwen", model: "qwen3.6", endpoint: "lmstudio", reachable: true)]
+        let off = DarkmuxClient.ProfileInfo(name: "qwen", model: "qwen3.6", endpoint: "lmstudio", reachable: false,
+                                            availability: .init(state: "unavailable", reason: "LM Studio's local server is off, so a dispatch can't reach the model"))
+        runs.lastListed = [off]
         runs.override(run, with: "qwen")
-        var up = false
-        runs.lmStudioServerProbe = { up }
-        await runs.checkModelServer(for: run)
         #expect(runs.blocker(for: run) == .modelServerOff("LM Studio"))
         #expect(runs.whyRunCannotStart(run)?.contains("local server is off") == true)
+        #expect(ModelLabel.whyNot(off)?.contains("local server is off") == true)
         runs.decide(.approve, on: run, store: store)
         #expect(run.phase == .proposed, "nothing is sent")
-        up = true
-        await runs.checkModelServer(for: run)
+        var on = off
+        on.reachable = true
+        on.availability = .init(state: "resident", reason: nil)
+        runs.profileSourceByRole = { _ in [on] }
+        await runs.recheckModels(for: run)
         #expect(runs.blocker(for: run) == nil)
+    }
+
+    /// The setup check's LM Studio row comes from darkmux once paired.
+    @Test func setupReadsLMStudioFromDarkmux() {
+        let off = DarkmuxClient.ProfileInfo(name: "q", model: "q", endpoint: "lmstudio", reachable: false,
+                                            availability: .init(state: "unavailable", reason: "LM Studio's local server is off"))
+        let up = DarkmuxClient.ProfileInfo(name: "q", model: "q", endpoint: "lmstudio", reachable: true,
+                                           availability: .init(state: "resident", reason: nil))
+        let flint = DarkmuxClient.ProfileInfo(name: "f", model: "f", endpoint: "flint", reachable: true)
+        #expect(SetupProbe.lmStudio(in: [off, flint]) == .notAnswering)
+        #expect(SetupProbe.lmStudio(in: [up, flint]) == .models(1))
+        #expect(SetupProbe.lmStudio(in: [flint]) == nil)
     }
 
     @Test func nothingChangedAndNothingSaidSaysWhatToTry() {

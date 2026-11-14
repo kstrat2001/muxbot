@@ -632,41 +632,31 @@ final class RunCoordinator {
         guard let bot = run.bot else { return .noCode }
         if let blocked = RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot,
                                           deviceRuns: deviceRuns, excluding: run.id) { return blocked }
-        if let endpoint = modelEndpoint(for: run), modelServersOff.contains(endpoint) {
-            return .modelServerOff(ModelLabel.engine(endpoint))
+        if let chosen = chosenProfile(for: run), ModelLabel.serverOff(chosen) {
+            return .modelServerOff(ModelLabel.engine(chosen.endpoint))
         }
         return nil
     }
 
     // MARK: Model server preflight
 
-    /// Engines whose own server didn't answer when last checked (`lmstudio`).
-    /// darkmux lists LM Studio's models from LM Studio itself, so a model
-    /// shows as ready while LM Studio's local server is off and every run
-    /// fails at once (Kain, 2026-11-14): the app checks before it sends.
-    private(set) var modelServersOff: Set<String> = []
-    /// Tests answer whether LM Studio's server answers here.
-    var lmStudioServerProbe: (() async -> Bool)?
-
-    /// The engine of the run's chosen model, as darkmux lists it.
-    func modelEndpoint(for run: BotRun) -> String? {
+    /// The run's chosen model as darkmux last listed it. darkmux is the one
+    /// source for whether a model can answer (Kain, 2026-11-14): it checks
+    /// the engine's own server too (darkmux #3578), so the app never probes
+    /// an engine itself.
+    func chosenProfile(for run: BotRun) -> DarkmuxClient.ProfileInfo? {
         guard let profile = runProfiles[run.id] else { return nil }
-        return (listed(crew: run.crew) + lastListed).first { $0.name == profile }?.endpoint
+        return (listed(crew: run.crew) + lastListed).first { $0.name == profile }
     }
 
-    /// Asks the chosen model's own server whether it answers; only LM
-    /// Studio's is known to the app (127.0.0.1:1234).
-    func checkModelServer(for run: BotRun) async {
-        guard modelEndpoint(for: run) == "lmstudio" else { return }
-        let up: Bool
-        if let lmStudioServerProbe {
-            up = await lmStudioServerProbe()
-        } else {
-            var request = URLRequest(url: URL(string: "http://127.0.0.1:1234/v1/models")!)
-            request.timeoutInterval = 2
-            up = ((try? await URLSession.shared.data(for: request))?.1 as? HTTPURLResponse) != nil
-        }
-        if up { modelServersOff.remove("lmstudio") } else { modelServersOff.insert("lmstudio") }
+    /// Asks darkmux again for the run's crew's models, so a server turned on
+    /// meanwhile clears the card.
+    func recheckModels(for run: BotRun) async {
+        let role = run.crew.darkmuxRole ?? "coder"
+        let listed = await listedProfiles(role: role)
+        guard !listed.isEmpty else { return }
+        listedByRole[role] = listed
+        if role == "coder" { lastListed = listed }
     }
 
     /// Why a run can't go to darkmux right now, or nil when it can.
