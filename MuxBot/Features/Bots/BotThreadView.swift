@@ -154,6 +154,22 @@ struct BotThreadView: View {
             case .hidePreview: router.showPreview = false
             case .reloadPreview:
                 if router.showPreview { preview.goHome() } else { router.showPreview = true }
+            case .stopPreview:
+                router.showPreview = false
+                Task { await brain.runs.stopPreview(for: bot) }
+            case .fullWindowPreview:
+                router.showPreview = true
+                router.previewFullScreen = true
+            case .phoneView, .tabletView, .desktopView:
+                if let size = request.action.viewport {
+                    LocalBotState.shared.update(bot.id) { $0.previewViewport = size.rawValue; $0.previewPaneWidth = nil }
+                }
+                router.showPreview = true
+            case .pickMode:
+                router.showPreview = true
+                preview.startPicking(for: bot.id)
+            case .botInfo: showInfo = true
+            case .pairing: router.showPairing = true
             }
         }
         .onDisappear {
