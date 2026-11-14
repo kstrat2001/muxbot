@@ -59,6 +59,9 @@ enum BotAction: Sendable, Equatable, Codable {
     case setUpPreview(PreviewSetup)
     /// Write a PLAYBOOK.md into your own checkout and the next PR.
     case setUpPlaybook(PlaybookSetup)
+    /// Something the app does itself that changes things ("undo that",
+    /// "archive this bot"), asked in chat; `runId` is the run it's about.
+    case app(AppAction, runId: UUID?, detail: String)
 }
 
 extension BotAction {
@@ -602,13 +605,27 @@ final class BotBrain {
         }
         // "start the preview", "hide the preview": the app does it (or says
         // why it can't); asking for the app is never crew work.
+        // "yes" never approves a card: only a tap on Approve starts work.
+        if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, Self.isTypedApproval(text),
+           Self.hasWaitingCard(bot, in: conversation) {
+            message.intentRaw = Intent.ask.rawValue
+            store.append(.assistant, String(localized: "Tap Approve on the card to start it. I only start work when you tap it."), to: conversation)
+            store.save()
+            return
+        }
         if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, let action = AppAction.match(text) {
             message.intentRaw = Intent.ask.rawValue
-            if let why = action.unavailable(for: bot, runs: runs) {
+            if let why = action.unavailable(for: bot, runs: runs, store: store) {
                 store.append(.assistant, why, to: conversation)
             } else {
                 store.append(.assistant, action.doingText, to: conversation)
-                appActionRequested = AppActionRequest(bot: bot.id, action: action)
+                switch action.handling {
+                case .direct: appActionRequested = AppActionRequest(bot: bot.id, action: action)
+                case .card:
+                    let run = action.target(for: bot)
+                    store.proposeAction(.app(action, runId: run?.id, detail: action.cardDetail(bot: bot.name, task: run?.task)), in: context)
+                case .reply: break
+                }
             }
             store.save()
             return
@@ -1050,6 +1067,20 @@ final class BotBrain {
     /// How long the bot's one question waits for its answer.
     static let pendingAnswerLifetime: TimeInterval = 10 * 60
 
+    /// "yes", "go ahead", "do it": an answer to a card, which only a tap decides.
+    static func isTypedApproval(_ text: String) -> Bool {
+        let said = text.lowercased().replacingOccurrences(of: "’", with: "'")
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return ["yes", "yep", "yeah", "ok", "okay", "sure", "go", "go ahead", "do it", "approve", "approved", "run it",
+                "start it", "yes please", "sounds good", "lgtm", "yes do it", "ok go", "go for it"].contains(said)
+    }
+
+    /// A dispatch or action card in the thread still waiting on Approve.
+    static func hasWaitingCard(_ bot: Bot, in thread: ChatConversation) -> Bool {
+        (bot.runs ?? []).contains { $0.phase == .proposed }
+            || (thread.messages ?? []).contains { $0.kind == .actionCard && $0.actionState == .waiting }
+    }
+
     nonisolated static func isDismissal(_ text: String) -> Bool {
         let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         return ["thanks", "thank you", "ok", "okay", "never mind", "nevermind", "cancel", "no", "nope", "forget it"].contains(lower)
@@ -1257,6 +1288,21 @@ final class BotBrain {
             bot.skills = playbook.skills
             bot.instructions = StartProject.instructions(playbook, answers: .init(name: bot.name, purpose: setup.purpose), name: bot.name)
             note = String(localized: "Wrote \(PlaybookSetup.path) into \(setup.folderName), uncommitted, and I now use its skills. It goes into this bot's next pull request too.")
+        case let .app(action, runId, _):
+            guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
+            // Things moved on since the card was made: say so, change nothing.
+            let run = runId.flatMap(store.run(id:))
+            let stale = action.unavailable(for: bot, runs: runs, store: store) ?? (action.target(for: bot)?.id != run?.id ? String(localized: "That changed since I asked, so nothing was done.") : nil)
+            if let stale {
+                store.append(.system, stale, to: store.conversation(for: chat))
+                return
+            }
+            switch action {
+            case .undoLast: if let run { runs.decide(.discard, on: run, store: store) }
+            case .stopRun: if let run { Task { await runs.stop(run, store: store) } }
+            default: appActionRequested = AppActionRequest(bot: bot.id, action: action)
+            }
+            return
         case let .tweak(runId, change):
             guard let run = store.run(id: runId) else { return }
             // A finished run continues as a Tweak; one that was stopped or

@@ -152,6 +152,7 @@ struct BotStore {
         case let .createBot(draft): "New bot: \(draft.name)"
         case .setUpPreview: "Set up the preview"
         case .setUpPlaybook: "Add a PLAYBOOK.md"
+        case let .app(action, _, _): action.cardTitle(bot: "")
         case let .dispatch(crew, task): "Dispatch to \(crew.name): \(task)"
         case let .addResource(kind, value): "Add \(kind.label.lowercased()): \(value)"
         case let .tweak(_, change): "Tweak: \(change)"

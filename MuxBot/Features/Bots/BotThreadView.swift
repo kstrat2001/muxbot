@@ -170,6 +170,16 @@ struct BotThreadView: View {
                 preview.startPicking(for: bot.id)
             case .botInfo: showInfo = true
             case .pairing: router.showPairing = true
+            case .startReview: startingReview = true
+            case .clearConversation: router.cleared = BotStore(context: modelContext).clearConversation(context)
+            case .archiveBot:
+                guard BotStore.archiveBlocker(bot) == nil else { return }
+                router.sidebar = .lead
+                router.path = []
+                BotStore(context: modelContext).archive(bot)
+                Task { await brain.runs.stopPreview(for: bot) }
+            // Done by the brain itself (a card's Approve, or a plain answer).
+            case .undoLast, .stopRun, .deleteBot, .publish: break
             }
         }
         .onDisappear {
