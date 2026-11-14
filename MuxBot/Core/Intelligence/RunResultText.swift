@@ -82,7 +82,7 @@ enum RunResultText {
     static func failure(code: String?, error: String, reason: String?) -> String {
         // The model's server not answering (LM Studio's server off): say so,
         // with what to do.
-        if code == nil, isUnreachableModel(error) {
+        if isUnreachableModel(error) || isUnreachableModel(reason ?? "") {
             return String(localized: "The model's server isn't answering, so nothing ran. Turn on the model's server (in LM Studio, its local server) and run it again.")
         }
         return switch code {
@@ -97,7 +97,7 @@ enum RunResultText {
             // darkmux's own lines are in the run's details (Show details),
             // never the headline.
             switch classify(error: error, reason: reason) {
-            case .failed: String(localized: "darkmux ran into a problem running it. Show details has what it reported.")
+            case .failed: String(localized: "darkmux couldn't finish it and didn't say why. Run it again, or pick another model with Change.")
             case .stopped: String(localized: "darkmux stopped it.")
             }
         }
