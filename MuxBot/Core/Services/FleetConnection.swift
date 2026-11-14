@@ -62,9 +62,19 @@ final class FleetConnection {
         pairing = Task {
             do {
                 let id = try await client.requestPairing(deviceName: device, code: code, secret: secret)
+                var misses = 0
                 while !Task.isCancelled {
                     try await Task.sleep(for: .seconds(2))
-                    let status = try await client.pairStatus(requestId: id, secret: secret)
+                    let status: DarkmuxClient.PairStatus
+                    do {
+                        status = try await client.pairStatus(requestId: id, secret: secret)
+                        misses = 0
+                    } catch let error as URLError where error.code != .cancelled && misses < Self.pairStatusMisses {
+                        // One slow answer while you approve on the Mac isn't
+                        // a failed pairing: ask again; only several in a row count.
+                        misses += 1
+                        continue
+                    }
                     switch status.status {
                     case "approved":
                         guard let token = status.token, let name = status.clientName else { throw DarkmuxClient.ClientError(message: "darkmux approved without a token") }
@@ -83,6 +93,9 @@ final class FleetConnection {
             }
         }
     }
+
+    /// How many unanswered checks in a row a waiting pairing rides out.
+    static let pairStatusMisses = 3
 
     /// Called when pairing completes (the app starts what waited for it).
     var onPaired: (() -> Void)?

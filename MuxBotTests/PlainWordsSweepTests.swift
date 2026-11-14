@@ -87,7 +87,7 @@ struct PlainWordsSweepTests {
         let raw = DarkmuxClient.ClientError(message: "fatal: could not read Username for 'https://github.com'", status: 500)
         #expect(DarkmuxPlain.sentence(raw) == "darkmux ran into a problem. Try again in a moment.")
         #expect(DarkmuxPlain.details(raw)?.contains("fatal") == true)
-        #expect(DarkmuxPlain.sentence(URLError(.cannotConnectToHost)) == "darkmux isn't answering on this Mac.")
+        #expect(DarkmuxPlain.sentence(URLError(.cannotConnectToHost)) == "darkmux isn't answering on this Mac. Make sure darkmux is running, then try again.")
         #expect(DarkmuxPlain.sentence(DarkmuxClient.ClientError(message: "x", status: 429)).contains("two"))
     }
 

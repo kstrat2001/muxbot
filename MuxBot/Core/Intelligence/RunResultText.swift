@@ -88,11 +88,11 @@ enum RunResultText {
         return switch code {
         case "busy": String(localized: "The model was busy with another run. Run it again in a moment.")
         case "wont_fit": String(localized: "The model doesn't fit on this Mac. Pick a smaller one in Settings › Models.")
-        case "model_start_failed": String(localized: "The model wouldn't start.")
-        case "model_stop_failed": String(localized: "darkmux couldn't free the model for this run.")
-        case "port_in_use": String(localized: "Another program is using the model's port.")
-        case "engine_unavailable": String(localized: "The model's server isn't running.")
-        case "engine_in_use": String(localized: "The model's server is busy with something else.")
+        case "model_start_failed": String(localized: "The model wouldn't start. Run it again, or pick another model when you do.")
+        case "model_stop_failed": String(localized: "darkmux couldn't free the model for this run. Run it again in a moment.")
+        case "port_in_use": String(localized: "Another program is using the model's port. Quit that program, or pick another model, and run it again.")
+        case "engine_unavailable": String(localized: "The model's server isn't running. Turn it on, or pick another model, and run it again.")
+        case "engine_in_use": String(localized: "The model's server is busy with something else. Run it again once it's free, or pick another model.")
         default:
             // darkmux's own lines are in the run's details (Show details),
             // never the headline.
@@ -163,10 +163,20 @@ enum RunResultText {
 /// its own words are the details, behind Show details.
 enum DarkmuxPlain {
     static func sentence(_ error: any Error) -> String {
+        if let unreachable = error as? DarkmuxClient.Unreachable { return sentence(unreachable.underlying) }
+        if error is DarkmuxClient.EngineNotFreed {
+            return String(localized: "darkmux couldn't stop the model's own server, so the run didn't start. Run it again, or pick another model.")
+        }
         if let url = error as? URLError {
-            return [.cannotConnectToHost, .networkConnectionLost, .timedOut, .cannotFindHost, .notConnectedToInternet].contains(url.code)
-                ? String(localized: "darkmux isn't answering on this Mac.")
-                : String(localized: "Mux Bot couldn't reach darkmux.")
+            if url.code == .timedOut { return String(localized: "darkmux took too long to answer. Try again in a moment.") }
+            return [.cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .notConnectedToInternet].contains(url.code)
+                ? String(localized: "darkmux isn't answering on this Mac. Make sure darkmux is running, then try again.")
+                : String(localized: "Mux Bot couldn't reach darkmux. Try again in a moment.")
+        }
+        // darkmux's answer had a shape this app doesn't read (a newer or
+        // older darkmux): never Foundation's "data couldn't be read".
+        if error is DecodingError {
+            return String(localized: "darkmux answered in a way this version of Mux Bot doesn't understand. Updating Mux Bot or darkmux should fix it.")
         }
         // Not darkmux's answer (the app's own error): its own words.
         guard let client = error as? DarkmuxClient.ClientError else { return error.localizedDescription }
@@ -198,6 +208,7 @@ enum DarkmuxPlain {
 
     /// A refusal whose sentence says what happened (not just "couldn't start").
     static func saysWhy(_ error: any Error) -> Bool {
+        if error is URLError || error is DecodingError || error is DarkmuxClient.Unreachable || error is DarkmuxClient.EngineNotFreed { return true }
         guard let client = error as? DarkmuxClient.ClientError else { return false }
         return isEarlierPairing(error) || client.code == "branch_failed"
     }
@@ -213,6 +224,9 @@ enum DarkmuxPlain {
         if let client = error as? DarkmuxClient.ClientError {
             return [client.status > 0 ? "darkmux answered \(client.status)" : nil, client.code, client.message].compactMap { $0 }.joined(separator: ": ")
         }
+        if let unreachable = error as? DarkmuxClient.Unreachable { return details(unreachable.underlying) }
+        if let notFreed = error as? DarkmuxClient.EngineNotFreed { return details(notFreed.underlying) }
+        if error is DecodingError { return String(describing: error) }
         return error.localizedDescription
     }
 }
