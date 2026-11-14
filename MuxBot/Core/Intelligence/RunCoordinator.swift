@@ -860,6 +860,19 @@ final class RunCoordinator {
     var previewDeadline: TimeInterval = 15 * 60
     /// Tests answer preview start (true) and status (false) here.
     var previewFetcher: ((Bool) async throws -> LivePreview)?
+    /// Tests take an approved recipe here; nil hands it to darkmux.
+    var recipeSetter: ((Data, String) async throws -> Void)?
+
+    /// Hands darkmux the recipe you approved for its clone of the bot's repo
+    /// (darkmux #3571), kept beside the clone, never in it.
+    func setRecipe(_ data: Data, for bot: Bot) async throws {
+        guard let workspace = bot.workspaceName else { throw DarkmuxClient.ClientError(message: "no work copy on this Mac", status: 404) }
+        if let recipeSetter { return try await recipeSetter(data, workspace) }
+        guard let connection, let token = connection.token else {
+            throw DarkmuxClient.ClientError(message: "this app isn't paired with darkmux", status: 401)
+        }
+        try await connection.client.setRecipe(token: token, workspace: workspace, recipe: data)
+    }
     /// Previews asked for before the connection was there.
     private var waitingPreviews: [UUID: Bot] = [:]
     /// Tests watch retries here; nil starts them for real.

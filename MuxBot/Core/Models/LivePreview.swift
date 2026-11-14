@@ -121,7 +121,7 @@ struct LivePreview: Equatable, Sendable {
             case .noWorkCopy:
                 return String(localized: "darkmux makes its own copy of \(repo) on this Mac to show the preview and to work in, and that didn't work. Try again; Show details has what darkmux said.")
             case .noRecipe:
-                let folder = folder ?? String(localized: "your checkout")
+                let folder = folder ?? repo
                 return String(localized: "darkmux needs to know how \(folder) starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it.")
             }
         }

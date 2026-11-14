@@ -28,10 +28,15 @@ struct PreviewSetup: Codable, Equatable, Sendable {
     /// Whether edits show up live; darkmux's recipe has no switch for it.
     var hotReload: Field
     var envFromSource: [String]
-    /// Your checkout's folder name, for the card.
+    /// Your checkout's folder name, for the card (the repo's name for a clone).
     var folderName: String
+    /// darkmux's clone of the repo, with no checkout of yours (darkmux
+    /// #3571): Approve hands darkmux the recipe instead of writing a file.
+    var clone: Bool?
 
-    init(_ draft: ProjectSetupDetector.Draft, folderName: String) {
+    var isClone: Bool { clone == true }
+
+    init(_ draft: ProjectSetupDetector.Draft, folderName: String, clone: Bool = false) {
         framework = draft.framework?.value
         command = Field(value: draft.command?.value ?? "", source: draft.command?.source)
         install = Field(value: draft.install?.value ?? "", source: draft.install?.source)
@@ -43,8 +48,10 @@ struct PreviewSetup: Codable, Equatable, Sendable {
         ready = Field(value: draft.ready?.value ?? "", source: draft.ready?.source)
         hotReload = Field(value: draft.hotReload.map { $0.value ? String(localized: "yes") : String(localized: "no") } ?? "",
                           source: draft.hotReload?.source)
-        envFromSource = draft.envFromSource?.value ?? []
+        // A clone has no checkout of yours to copy files from.
+        envFromSource = clone ? [] : draft.envFromSource?.value ?? []
         self.folderName = folderName
+        self.clone = clone ? true : nil
     }
 
     static func text(_ pairs: [String: String]) -> String {
@@ -144,6 +151,29 @@ struct PreviewSetup: Codable, Equatable, Sendable {
 
     /// package.json's text and the names at the root of your checkout, read
     /// through its bookmark.
+    /// The files the rules look at, read from the repo on GitHub (a clone
+    /// has no checkout on this Mac): package.json, then the first lockfile
+    /// found, then the two config files the rules check.
+    static func readRepo(_ repo: String, github: any GitHubClient) async -> (packageJSON: String?, files: Set<String>) {
+        var files: Set<String> = []
+        var packageJSON: String?
+        if let data = try? await github.file(repo: repo, path: "package.json"), data.count <= 512 * 1024 {
+            files.insert("package.json")
+            packageJSON = String(data: data, encoding: .utf8)
+        }
+        guard packageJSON != nil else { return (nil, files) }
+        for lockfile in ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"] {
+            if (try? await github.file(repo: repo, path: lockfile)) != nil {
+                files.insert(lockfile)
+                break
+            }
+        }
+        for name in [".yarnrc.yml", ".env.example"] where (try? await github.file(repo: repo, path: name)) != nil {
+            files.insert(name)
+        }
+        return (packageJSON, files)
+    }
+
     static func readCheckout(_ folder: URL) -> (packageJSON: String?, files: Set<String>) {
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }

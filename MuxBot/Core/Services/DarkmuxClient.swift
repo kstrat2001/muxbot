@@ -224,6 +224,36 @@ struct DarkmuxClient: Sendable {
         return try JSONDecoder().decode(Preview.self, from: data)
     }
 
+    /// Keeps the recipe you approved for darkmux's clone of a repo with none
+    /// (darkmux #3571), beside the clone, never in it.
+    func setRecipe(token: String, workspace: String, recipe: Data) async throws {
+        struct Body: Encodable { var recipe: ApprovedRecipe }
+        let parsed = try JSONDecoder().decode(ApprovedRecipe.self, from: recipe)
+        _ = try await send("PUT", "/client/workspaces/\(workspace)/recipe", body: Body(recipe: parsed),
+                           headers: ["Authorization": "Bearer \(token)"])
+    }
+
+    /// The recipe a setup card writes (`PreviewSetup.recipeData`), in
+    /// darkmux's shape; absent keys stay absent.
+    struct ApprovedRecipe: Codable, Equatable, Sendable {
+        struct Ready: Codable, Equatable, Sendable { var http: String }
+        struct Install: Codable, Equatable, Sendable {
+            var command: String
+            var unlessExists: String?
+            enum CodingKeys: String, CodingKey { case command; case unlessExists = "unless_exists" }
+        }
+        var schemaVersion: String
+        var command: String
+        var env: [String: String]?
+        var ready: Ready?
+        var install: Install?
+        var envFromSource: [String]?
+        enum CodingKeys: String, CodingKey {
+            case schemaVersion = "schema_version", command, env, ready, install
+            case envFromSource = "env_from_source"
+        }
+    }
+
     /// A workspace name no darkmux has, for the probe.
     static let probeWorkspace = "muxbot-capability-probe"
 

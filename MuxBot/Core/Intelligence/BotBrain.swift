@@ -392,6 +392,10 @@ final class BotBrain {
     @ObservationIgnored var playbookDrafter: ((String, String, String?) async -> (persona: String, conventions: String)?)?
     /// Reads a checkout's package.json and root names (tests); else the disk.
     @ObservationIgnored var checkoutReader: ((URL) -> (packageJSON: String?, files: Set<String>))?
+    /// Reads a repo's package.json and root names from GitHub (tests); else GitHub.
+    @ObservationIgnored var repoReader: ((String) async -> (packageJSON: String?, files: Set<String>))?
+    /// Clones whose setup card is being worked out from GitHub now.
+    private var cloneSetups: Set<UUID> = []
     /// Mux Bot as a guide, in its own thread.
     let guide = LeadGuide()
     /// Opens the Start chooser, or a template's form (set by the app).
@@ -1234,6 +1238,12 @@ final class BotBrain {
             // (it needed your OK on the folder); here it's kept for the PR
             // and the preview starts from it once, to check it.
             guard let bot = chat.botId.flatMap(store.bot(id:)), let data = setup.recipeData else { return }
+            if setup.isClone {
+                // darkmux keeps it beside its clone (never in it); the
+                // preview starts from it once, to check it.
+                Task { await setCloneRecipe(data, bot: bot, store: store) }
+                return
+            }
             LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PreviewSetup.path: data]) { $1 } }
             store.append(.system, String(localized: "Wrote \(PreviewSetup.path) into \(setup.folderName), uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…"),
                          to: store.conversation(for: chat))
@@ -1259,6 +1269,21 @@ final class BotBrain {
     }
 
     /// After a recipe is written: start the preview once and say how it went.
+    /// Hands darkmux the recipe you approved for its clone, then starts the
+    /// preview from it.
+    func setCloneRecipe(_ data: Data, bot: Bot, store: BotStore) async {
+        let thread = store.conversation(for: .bot(bot.id))
+        do {
+            try await runs.setRecipe(data, for: bot)
+        } catch {
+            let line = store.append(.system, String(localized: "darkmux didn't take the preview recipe: \(DarkmuxPlain.sentence(error))"), to: thread)
+            runs.messageDetails[line.id] = DarkmuxPlain.details(error)
+            return
+        }
+        store.append(.system, String(localized: "darkmux has the preview recipe now. Starting the preview to check it…"), to: thread)
+        await checkPreview(bot, store: store)
+    }
+
     func checkPreview(_ bot: Bot, store: BotStore) async {
         runs.livePreviews[bot.id] = nil
         runs.noRecipe.remove(bot.id)
@@ -1333,7 +1358,7 @@ final class BotBrain {
     /// thread.
     /// What "Set up preview" showed: the card (new, or the one still
     /// waiting), or that the preview needs your own checkout first.
-    enum PreviewSetupOffer: Equatable { case card(UUID), needsCheckout }
+    enum PreviewSetupOffer: Equatable { case card(UUID), needsCheckout, preparing }
 
     /// Offered by itself (darkmux found no recipe) it comes once. Asked for
     /// (`again`, the Set up preview button) it always shows something: the
@@ -1348,6 +1373,13 @@ final class BotBrain {
         if let waiting = offered.last(where: { $0.actionState == .waiting }) { return .card(waiting.id) }
         if !again, let last = offered.last { return .card(last.id) }
         let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
+        // darkmux's clone, with no checkout of yours (darkmux #3571): the card
+        // is worked out from the repo on GitHub, and Approve hands darkmux
+        // the recipe.
+        if folder == nil, bot.workspaceName != nil, let repo = bot.repoSlugs.first {
+            offerCloneSetup(for: bot, repo: repo, store: store)
+            return .preparing
+        }
         guard let folder else {
             let note = String(localized: "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info.")
             if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
@@ -1362,6 +1394,23 @@ final class BotBrain {
             : String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to write it into your checkout."), to: thread)
         let card = store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: bot.folderName ?? folder.lastPathComponent)), in: .bot(bot.id))
         return .card(card.id)
+    }
+
+    private func offerCloneSetup(for bot: Bot, repo: String, store: BotStore) {
+        guard !cloneSetups.contains(bot.id) else { return }
+        cloneSetups.insert(bot.id)
+        let github = github
+        Task {
+            defer { cloneSetups.remove(bot.id) }
+            let files = await (repoReader ?? { await PreviewSetup.readRepo($0, github: github) })(repo)
+            let draft = ProjectSetupDetector.detect(packageJSON: files.packageJSON, files: files.files)
+            let thread = store.conversation(for: .bot(bot.id))
+            store.append(.assistant, draft.isEmpty
+                ? String(localized: "This project has no preview recipe yet, and I couldn't work out from its files how it starts. Fill in how it starts on this card, then Approve to hand it to darkmux.")
+                : String(localized: "This project has no preview recipe yet. Here's one worked out from its own files: check each value, then Approve to hand it to darkmux."), to: thread)
+            let name = repo.split(separator: "/").last.map(String.init) ?? repo
+            _ = store.proposeAction(.setUpPreview(PreviewSetup(draft, folderName: name, clone: true)), in: .bot(bot.id))
+        }
     }
 
     private func onDeviceTurn(for request: String, speaker: BotSummary?, bots: [BotSummary], repos: [BotRepo],
