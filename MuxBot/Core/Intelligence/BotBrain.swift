@@ -307,8 +307,10 @@ enum FallbackBrain {
 struct GeneratedTurn {
     @Guide(description: "Your reply to the user, one to three short sentences")
     var reply: String
-    @Guide(description: "none to just reply; dispatch to send work to a crew role for this bot; handOff to pass work to another bot; createBot to set up a new bot; addResource to keep a repo, folder or link for this bot")
+    @Guide(description: "none to just reply; dispatch to send work to a crew role for this bot; handOff to pass work to another bot; createBot to set up a new bot; addResource to keep a repo, folder or link for this bot; appAction when the user asks the app itself to show or open something")
     var action: GeneratedAction
+    @Guide(description: "For appAction: what the app shows or opens")
+    var appAction: GeneratedAppAction
     @Guide(description: "For dispatch: which crew role does the work")
     var crew: GeneratedCrew
     @Guide(description: "For handOff: the exact name of the bot to send the work to")
@@ -334,6 +336,27 @@ enum GeneratedAction {
     case handOff
     case createBot
     case addResource
+    case appAction
+}
+
+/// What the model may ask the app to show (`AppAction.modelOffered`).
+@Generable
+enum GeneratedAppAction {
+    case openPreview, reloadPreview, fullWindowPreview, phoneSize, tabletSize, desktopSize, pointAtSomething, botInfo, startReview
+
+    var action: AppAction {
+        switch self {
+        case .openPreview: .openPreview
+        case .reloadPreview: .reloadPreview
+        case .fullWindowPreview: .fullWindowPreview
+        case .phoneSize: .phoneView
+        case .tabletSize: .tabletView
+        case .desktopSize: .desktopView
+        case .pointAtSomething: .pickMode
+        case .botInfo: .botInfo
+        case .startReview: .startReview
+        }
+    }
 }
 
 @Generable
@@ -442,7 +465,7 @@ final class BotBrain {
             You cannot see the website. Never say how something looks. \
             Never mention tools. Never claim whether issues exist without checking. \
             If an issue already has an open PR, say so with its number (PR #9) instead of offering to fix it. Write issue and PR numbers as #N. \
-            \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew.")
+            \(speaker == nil ? "To fix an issue, hand it off to the bot that owns that repo." : "To fix an issue, dispatch it to the Coder crew. When the user asks the app to show or open something (the preview, a phone or tablet size, pointing at something, your info, a review of the changes), use appAction, never the crew.")
             """
         guard !compact else { return identity + "\n" + rules }
         let others = bots.filter { $0.id != speaker?.id }.prefix(12)
@@ -881,7 +904,18 @@ final class BotBrain {
             result.action = nil
             result.reply = "Which one? Say “fix #N” and I'll read the issue on GitHub first."
         }
+        result = checkedAppAction(result, bot: context.botId.flatMap(store.bot(id:)), store: store)
         apply(result, context: context, store: store, conversation: conversation)
+    }
+
+    /// An app action the model picked: only one it may offer, only in a
+    /// bot's thread, and only when it can happen now (else the sentence
+    /// that says why). It stays a card: nothing happens before Approve.
+    func checkedAppAction(_ turn: BotTurn, bot: Bot?, store: BotStore) -> BotTurn {
+        guard case let .app(action, _, _)? = turn.action else { return turn }
+        guard let bot, AppAction.modelOffered.contains(action) else { return BotTurn(reply: turn.reply, action: nil) }
+        if let why = action.unavailable(for: bot, runs: runs, store: store) { return BotTurn(reply: why, action: nil) }
+        return turn
     }
 
     enum IssuePlan {
@@ -1506,6 +1540,9 @@ final class BotBrain {
                 let value = g.detail.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard speaker != nil, !value.isEmpty else { return BotTurn(reply: g.reply, action: nil) }
                 return BotTurn(reply: g.reply, action: .addResource(kind: ResourceKind.guess(for: value), value: value))
+            case .appAction:
+                guard speaker != nil else { return BotTurn(reply: g.reply, action: nil) }
+                return BotTurn(reply: g.reply, action: .app(g.appAction.action, runId: nil, detail: ""))
             }
         } catch {
             throw error
