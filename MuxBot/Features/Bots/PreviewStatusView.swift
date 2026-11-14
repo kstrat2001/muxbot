@@ -173,6 +173,10 @@ struct PreviewStatusView: View {
             setupNeedsCheckout = false
             router.previewFullScreen = false
             router.focusMessageId = id
+        case .preparing?:
+            // A clone's card is being worked out from the repo; it comes in the thread.
+            setupNeedsCheckout = false
+            router.previewFullScreen = false
         case .needsCheckout?, nil:
             setupNeedsCheckout = true
         }

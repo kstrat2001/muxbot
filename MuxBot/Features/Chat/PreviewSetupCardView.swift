@@ -62,8 +62,14 @@ struct PreviewSetupCardView: View {
                 if !setup.envFromSource.isEmpty {
                     note(String(localized: "Copies \(setup.envFromSource.joined(separator: ", ")) from your checkout into darkmux's copy (never committed)."))
                 }
-                Text("Approve writes \(PreviewSetup.path) into your folder \(setup.folderName), uncommitted, and adds it to this bot's next pull request. It never replaces a file that's already there.")
-                    .font(AppFont.footnote()).fixedSize(horizontal: false, vertical: true)
+                Group {
+                    if setup.isClone {
+                        Text("Approve hands this to darkmux, which keeps it with its copy of \(setup.folderName) on this Mac and starts the preview from it. Nothing in the project changes.")
+                    } else {
+                        Text("Approve writes \(PreviewSetup.path) into your folder \(setup.folderName), uncommitted, and adds it to this bot's next pull request. It never replaces a file that's already there.")
+                    }
+                }
+                .font(AppFont.footnote()).fixedSize(horizontal: false, vertical: true)
                 if let problem { Label(problem, systemImage: "exclamationmark.triangle").font(AppFont.footnote()) }
                 HStack {
                     Button("Cancel", role: .cancel) { brain.resolve(message, approve: false, store: BotStore(context: context)) }
@@ -78,7 +84,7 @@ struct PreviewSetupCardView: View {
                     #endif
                 }
             } else {
-                Label(message.actionState == .approved ? "Written into \(setup.folderName)" : "Canceled",
+                Label(message.actionState == .approved ? (setup.isClone ? "Handed to darkmux" : "Written into \(setup.folderName)") : "Canceled",
                       systemImage: message.actionState == .approved ? "checkmark.circle" : "xmark.circle")
                     .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             }
@@ -102,7 +108,7 @@ struct PreviewSetupCardView: View {
     private func approve() {
         guard let bot = message.conversation?.roleId.flatMap({ BotStore(context: context).bot(id: $0) }),
               let data = setup.recipeData else { return }
-        if let why = CheckoutWrite.approve(data, at: PreviewSetup.path, bot: bot) {
+        if !setup.isClone, let why = CheckoutWrite.approve(data, at: PreviewSetup.path, bot: bot) {
             problem = why
             return
         }
