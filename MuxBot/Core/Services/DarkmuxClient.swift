@@ -377,6 +377,13 @@ struct DarkmuxClient: Sendable {
         _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
     }
 
+    /// (darkmux #3574) Stops an engine's own server (one darkmux didn't
+    /// start, such as rec's) so darkmux can start the model it manages.
+    /// Sent only for a run you approved. 409: it wasn't running.
+    func stopOwnServer(token: String, engine: String) async throws {
+        _ = try await send("POST", "/client/engines/\(engine)/stop-own-server", headers: ["Authorization": "Bearer \(token)"])
+    }
+
     /// A profile this app may run work on here (`GET /client/profiles`):
     /// what it is and whether its server answers now.
     struct ProfileInfo: Decodable, Sendable, Equatable {
@@ -396,6 +403,9 @@ struct DarkmuxClient: Sendable {
     struct Availability: Decodable, Sendable, Equatable {
         var state: String
         var reason: String?
+        /// (darkmux #3574) A code to branch on, never the wording:
+        /// `engine_in_use` while the engine's own server runs.
+        var code: String? = nil
     }
 
     /// The darkmux machine: a stable id (the same from every device that

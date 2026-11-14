@@ -1177,6 +1177,8 @@ final class RunCoordinator {
     /// Tests stand in for darkmux's work API here; nil uses the client.
     var workSubmitter: ((_ role: String, _ message: String, _ profile: String?, _ workspace: String, _ continues: String?) async throws -> (String, String?))?
     var workCanceller: ((String) async throws -> Void)?
+    /// Stops an engine's own server before an approved run on it (tests).
+    var engineFreer: ((String) async throws -> Void)?
     /// Runs being followed now (each by exactly one loop).
     private var following: Set<UUID> = []
     /// Tests answer a run's status here.
@@ -1705,6 +1707,16 @@ final class RunCoordinator {
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 // Stopped while the model was chosen: it never reaches darkmux.
                 guard run.phase == .running else { return }
+                // A model held back by its engine's own server: your Approve
+                // stops that server first (darkmux #3574); gone already is fine.
+                if let picked = runProfiles[run.id],
+                   let info = listed(for: run).first(where: { $0.name == picked }), ModelLabel.needsEngineFreed(info) {
+                    do {
+                        if let engineFreer { try await engineFreer(info.endpoint) }
+                        else { try await connection.client.stopOwnServer(token: token, engine: info.endpoint) }
+                    } catch let error as DarkmuxClient.ClientError where error.status == 409 {}
+                    guard run.phase == .running else { return }
+                }
                 let brief = Self.workBrief(message, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
                 let workId: String, profile: String?
                 do {
