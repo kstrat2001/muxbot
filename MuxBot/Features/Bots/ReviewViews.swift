@@ -119,6 +119,7 @@ struct ReviewCardView: View {
                 }
                 if expanded {
                     Text(state.title).font(AppFont.footnote()).foregroundStyle(Color.secondaryText).lineLimit(2)
+                    stepRow(state)
                     reviewer(state)
                     if let sentence = standing?.sentence {
                         Text(sentence).font(AppFont.footnote())
@@ -129,11 +130,31 @@ struct ReviewCardView: View {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
             .background(.bar)
-            .task(id: state.number) { await brain.runs.refreshReview(bot, store: store, github: github) }
+            // Again when the Reviewer finishes: GitHub may have settled by then.
+            .task(id: "\(state.number)-\(reviewerFinished(state))") { await brain.runs.followReview(bot, store: store, github: github) }
         }
     }
 
     private var standing: TaskReview.Standing? { brain.runs.reviewStandings[bot.id] }
+
+    private func reviewerFinished(_ state: TaskReview.State) -> Bool {
+        guard let phase = reviewerRun(state)?.phase else { return false }
+        return [.result, .failed, .canceled, .discarded].contains(phase)
+    }
+
+    /// Opened → checked → merge, so you can see where the review is.
+    private func stepRow(_ state: TaskReview.State) -> some View {
+        let steps = TaskReview.steps(state, reviewerFinished: reviewerFinished(state), standing: standing)
+        return HStack(spacing: Spacing.sm) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                if index > 0 { Image(systemName: "chevron.right").font(AppFont.caption()).foregroundStyle(Color.secondaryText) }
+                Label(step.title, systemImage: step.state == .done ? "checkmark.circle.fill" : step.state == .now ? "circle.inset.filled" : "circle")
+                    .font(AppFont.caption(step.state == .now ? .semibold : .regular))
+                    .foregroundStyle(step.state == .later ? Color.secondaryText : Color.primary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
 
     private func reviewerRun(_ state: TaskReview.State) -> BotRun? {
         state.reviewerRun.flatMap(UUID.init(uuidString:)).flatMap(store.run(id:))

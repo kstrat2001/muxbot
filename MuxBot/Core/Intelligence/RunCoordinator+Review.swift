@@ -85,6 +85,20 @@ extension RunCoordinator {
         }
     }
 
+    /// Asks GitHub again while it's still working out whether the pull
+    /// request can merge (right after it's opened, or after a push), so
+    /// Merge shows without a trip to GitHub.
+    func followReview(_ bot: Bot, store: BotStore, github: GitHubAuth,
+                      sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) async {
+        await refreshReview(bot, store: store, github: github)
+        var tries = 1
+        while tries < TaskReview.settleTries, review(for: bot) != nil, reviewStandings[bot.id] == .checking {
+            do { try await sleep(TaskReview.settleInterval) } catch { return }
+            await refreshReview(bot, store: store, github: github)
+            tries += 1
+        }
+    }
+
     /// Merge, in the app. GitHub's refusal is said plainly, and the card
     /// checks again.
     func mergeReview(_ bot: Bot, store: BotStore, github: GitHubAuth) async {

@@ -40,6 +40,19 @@ struct TaskReviewTests {
         #expect(brief.contains("Do not change any files."))
     }
 
+    /// Opened → checked → merge: where the review is, without GitHub.
+    @Test func theCardSaysWhichStepItsOn() {
+        let url = URL(string: "https://github.com/o/r/pull/12")!
+        var state = TaskReview.State(number: 12, url: url, title: "hcr: 2 changes")
+        let checking = TaskReview.steps(state, reviewerFinished: false, standing: .ready)
+        #expect(checking.map(\.state) == [.done, .now, .later], "Merge waits for the Reviewer")
+        state.items = []
+        #expect(TaskReview.steps(state, reviewerFinished: true, standing: .ready).map(\.state) == [.done, .done, .now])
+        #expect(TaskReview.steps(state, reviewerFinished: true, standing: .checking).map(\.state) == [.done, .done, .later])
+        let mine = TaskReview.State(number: 12, url: url, title: "t", mine: true)
+        #expect(TaskReview.steps(mine, reviewerFinished: false, standing: .ready).map(\.state) == [.done, .now, .now])
+    }
+
     @Test func mergeStateReadsAsOneOutcome() {
         func s(_ state: String = "open", merged: Bool = false, mergeable: Bool? = true, ms: String?, can: Bool = true) -> TaskReview.Standing {
             TaskReview.standing(state: state, merged: merged, mergeable: mergeable, mergeableState: ms, mergeSHA: "abc", canMerge: can)

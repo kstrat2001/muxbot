@@ -21,6 +21,35 @@ enum TaskReview {
         var raw: String?
     }
 
+    // MARK: Where the review is
+
+    /// The review's three steps, each done, now or to come.
+    enum StepState: Equatable, Sendable { case done, now, later }
+
+    struct Step: Equatable, Sendable {
+        var title: String
+        var state: StepState
+    }
+
+    /// Opened → checked (by the Reviewer or by you) → merge. The check is
+    /// done once the Reviewer answered, didn't finish, or you review it
+    /// yourself; merge is "now" only when GitHub says it can go in.
+    static func steps(_ review: State, reviewerFinished: Bool, standing: Standing?) -> [Step] {
+        let checked = review.mine || review.items != nil || review.raw != nil || reviewerFinished
+        let mergeNow = checked && standing == .ready
+        return [
+            Step(title: String(localized: "Opened"), state: .done),
+            Step(title: review.mine ? String(localized: "You check it") : String(localized: "Reviewer checks"),
+                 state: review.mine ? .now : checked ? .done : .now),
+            Step(title: String(localized: "Merge"), state: mergeNow ? .now : .later),
+        ]
+    }
+
+    /// GitHub works out whether a new pull request can merge after it's
+    /// opened: the card asks again this many times, this far apart.
+    static let settleTries = 10
+    static let settleInterval: Duration = .seconds(3)
+
     // MARK: The Reviewer's brief and answer
 
     /// What the Reviewer is told to answer when it finds nothing.
