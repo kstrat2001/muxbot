@@ -15,6 +15,8 @@ struct SetupFacts: Equatable, Sendable {
     var platform: Platform
     var appleSilicon: Bool
     var memoryGB: Int
+    /// Free space on this Mac's disk, in GB; nil where the app can't look.
+    var freeDiskGB: Int? = nil
     /// nil until looked at.
     var endpointUp: Bool? = nil
     var lmStudio: LMStudio = .unknown
@@ -135,16 +137,18 @@ enum SetupCheck {
 
     static var lmStudioTitle: String { String(localized: "LM Studio (optional)") }
 
-    /// What the models step says when there's no model to use yet.
-    static var needsEngineLine: String {
-        String(localized: "darkmux needs a model engine set up on this Mac (Flint, TensorFold or LM Studio). darkmux's guide shows how.")
+    /// What the models step says when there's no model to use yet: the
+    /// engine Mux Bot suggests for this Mac (`EngineRecommendation`), a
+    /// suggestion you can skip, never a requirement.
+    static func needsEngineLine(_ f: SetupFacts) -> String {
+        EngineRecommendation.for(f).line
     }
 
     /// Required: a model darkmux lists that answers now. Any engine darkmux
     /// runs (Flint, TensorFold, LM Studio) counts.
     static func modelsStep(_ f: SetupFacts) -> SetupStep {
         let title = String(localized: "Models Mux Bot can use")
-        let needsEngine = SetupStep(id: .models, title: title, state: .todo, detail: needsEngineLine,
+        let needsEngine = SetupStep(id: .models, title: title, state: .todo, detail: needsEngineLine(f),
                                     link: DarkmuxLinks.models, linkTitle: String(localized: "darkmux guide"))
         guard f.paired else {
             // LM Studio already has models: only pairing is left.
@@ -252,6 +256,47 @@ enum SetupCheck {
 /// darkmux's official pages, the app's one place for them. Until darkmux
 /// can start, approve and turn on previews by itself, the app points here
 /// instead of at a command.
+/// The model engine Mux Bot suggests when darkmux has none usable
+/// (muxbot#103). The opinion is the app's; darkmux stays engine-agnostic.
+/// Local: Recursive's Flint on rec, when the Mac meets rec's stated needs
+/// (Apple silicon, 48 GB of memory or more, about 30 GB free). Otherwise a
+/// hosted model, said plainly that prompts and code leave the Mac.
+enum EngineRecommendation: Equatable, Sendable {
+    case flint
+    case hosted(Reason)
+
+    enum Reason: Equatable, Sendable { case notAppleSilicon, memory, disk }
+
+    /// rec's README: 48 GB of unified memory, about 30 GB free disk.
+    static let flintMemoryGB = 48
+    static let flintDiskGB = 30
+    /// Flint's download, about 21 GB.
+    static let flintDownloadGB = 21
+
+    static func `for`(_ f: SetupFacts) -> EngineRecommendation {
+        if !f.appleSilicon { return .hosted(.notAppleSilicon) }
+        if f.memoryGB < flintMemoryGB { return .hosted(.memory) }
+        if let free = f.freeDiskGB, free < flintDiskGB { return .hosted(.disk) }
+        return .flint
+    }
+
+    /// One plain sentence or two: what we suggest and why, never a command.
+    var line: String {
+        switch self {
+        case .flint:
+            return String(localized: "darkmux has no model engine yet. We suggest Flint: it runs privately on this Mac with no per-token cost. It's a download of about \(Self.flintDownloadGB) GB. Or use LM Studio or TensorFold; darkmux's guide shows how.")
+        case let .hosted(reason):
+            let why: String
+            switch reason {
+            case .notAppleSilicon: why = String(localized: "Local models need a Mac with Apple silicon.")
+            case .memory: why = String(localized: "Flint, the local model we suggest, needs \(Self.flintMemoryGB) GB of memory or more.")
+            case .disk: why = String(localized: "Flint, the local model we suggest, needs about \(Self.flintDiskGB) GB of free disk space.")
+            }
+            return String(localized: "darkmux has no model engine yet. \(why) We suggest a hosted model instead: your prompts and code are sent to its provider. darkmux's guide shows how.")
+        }
+    }
+}
+
 enum DarkmuxLinks {
     static let guide = URL(string: "https://darkmux.com/guide/")!
     /// Where to get darkmux (its guide, until it has an install page).
