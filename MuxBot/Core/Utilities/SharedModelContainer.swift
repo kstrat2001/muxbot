@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import SwiftData
 
@@ -53,6 +54,24 @@ enum SharedModelContainer {
         let config = ModelConfiguration(schema: schema, url: storeURL,
                                         cloudKitDatabase: cloudSync ? .private(cloudContainer) : .none)
         return try ModelContainer(for: schema, migrationPlan: MuxBotMigrationPlan.self, configurations: [config])
+    }
+
+    /// Whether the store on disk was saved by a newer Mux Bot: none of the
+    /// schema versions this build knows can read it (an older build opened
+    /// by a notification or the Dock can't open a store a newer build
+    /// migrated). Read-only: only the store's metadata is read. A missing or
+    /// unreadable file is not "newer", so a broken store still gets the
+    /// ordinary recovery screen.
+    static func isFromNewerApp(storeURL: URL,
+                               schemas: [any VersionedSchema.Type] = MuxBotMigrationPlan.schemas) -> Bool {
+        guard FileManager.default.fileExists(atPath: storeURL.path),
+              let metadata = try? NSPersistentStoreCoordinator.metadataForPersistentStore(
+                ofType: NSSQLiteStoreType, at: storeURL, options: nil) else { return false }
+        for version in schemas {
+            guard let model = NSManagedObjectModel.makeManagedObjectModel(for: version.models) else { continue }
+            if model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) { return false }
+        }
+        return true
     }
 
     /// Moves a store that won't open aside (never deletes it), so the app can
