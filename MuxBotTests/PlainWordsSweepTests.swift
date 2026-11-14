@@ -12,7 +12,9 @@ struct PlainWordsSweepTests {
         let raw = "Traceback (most recent call last):\n  File x\nerror: llama_decode returned -3"
         let why = RunResultText.failure(code: nil, error: raw, reason: nil)
         #expect(!why.contains("llama_decode") && !why.lowercased().contains("error:"), "\(why)")
-        #expect(why.contains("details"), "it points at Show details: \(why)")
+        // Kain, 2026-11-14: the card says what to do next, never only
+        // "see Show details".
+        #expect(why.contains("Run it again") && !why.contains("Show details"), "\(why)")
         #expect(RunResultText.failure(code: "busy", error: raw, reason: nil).hasPrefix("The model was busy"))
         #expect(RunResultText.failure(code: nil, error: "cancelled", reason: "cancelled") == "darkmux stopped it.")
     }

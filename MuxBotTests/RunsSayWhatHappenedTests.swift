@@ -38,6 +38,10 @@ struct RunsSayWhatHappenedTests {
         let why = RunResultText.failure(code: s.code, error: s.error ?? "", reason: s.reason)
         #expect(why.contains("isn't answering"), "\(why)")
         #expect(status(#"{"status":"done","result":{"result":"stop","final_assistant":"ok"}}"#).status == "done")
+        // With a code darkmux gives, a refused connection still says so.
+        #expect(RunResultText.failure(code: "dispatch_failed", error: "Connect error: Connection refused (os error 61)", reason: nil).contains("isn't answering"))
+        // Never "see Show details" as the whole answer.
+        #expect(!RunResultText.failure(code: nil, error: "dispatch exited 1", reason: nil).contains("Show details"))
     }
 
     /// Kain, 2026-11-14: "the app isn't checking at all?" and "shouldn't
