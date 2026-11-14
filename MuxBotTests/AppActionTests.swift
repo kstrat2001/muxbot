@@ -26,6 +26,7 @@ struct AppActionTests {
             ("archive this bot", .archiveBot), ("archive yourself", .archiveBot),
             ("delete this bot", .deleteBot), ("remove this project", .deleteBot),
             ("publish it", .publish), ("how do I put it on the internet", .publish), ("deploy the site", .publish),
+            ("save my changes", .save), ("is it saved?", .save), ("how do I save my work?", .save),
         ]
         for (text, action) in cases { #expect(AppAction.match(text) == action, "\(text)") }
     }
@@ -36,7 +37,8 @@ struct AppActionTests {
                      "make the preview button bigger", "stop the video in the preview", "make the menu smaller on phones",
                      "show the phone number in the footer", "pick a color for the header", "add an info box", "what is darkmux?",
                      "turn the preview", "review the login code", "undo the header color change", "stop the video autoplaying",
-                     "clear the form after submit", "archive the old posts", "delete the about section", "add a chat widget"] {
+                     "clear the form after submit", "archive the old posts", "delete the about section", "add a chat widget",
+                     "add a save button", "save the form to local storage"] {
             #expect(AppAction.match(text) == nil, "\(text)")
         }
     }

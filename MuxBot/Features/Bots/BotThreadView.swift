@@ -179,7 +179,7 @@ struct BotThreadView: View {
                 BotStore(context: modelContext).archive(bot)
                 Task { await brain.runs.stopPreview(for: bot) }
             // Done by the brain itself (a card's Approve, or a plain answer).
-            case .undoLast, .stopRun, .deleteBot, .publish: break
+            case .undoLast, .stopRun, .deleteBot, .publish, .save: break
             }
         }
         .onDisappear {
