@@ -30,4 +30,4 @@ Each dispatch card says which model and engine the run will use, and why. Change
 
 Each Mac has its own models, so the choice is set per machine and shared with your other devices. A bot can use a different choice from its info.
 
-A model that can't run right now still shows in the list, grayed out, with the reason. For example, when Flint's own server is already running on your Mac, darkmux can't start another one until that server is stopped.
+A model that can't run right now still shows in the list, grayed out, with the reason. For example, when Flint's own server is already running on your Mac, darkmux can't start another one. You can still pick it with Change on the run's card: when you tap Approve, darkmux stops that server and starts Flint for the run.
