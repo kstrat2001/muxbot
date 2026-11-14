@@ -116,11 +116,13 @@ struct BotThreadView: View {
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
                     }
-                    if let bot, brain.runs.canStartReview(bot, store: BotStore(context: modelContext), github: github) {
+                    // Always there for a project on this Mac, so it's found; a tap
+                    // says why not when it can't start yet (signed out, nothing new).
+                    if let bot, bot.workspaceName != nil, brain.runs.review(for: bot) == nil {
                         if brain.runs.openingPR.contains(bot.id) {
                             ProgressView().controlSize(.small)
                         } else {
-                            Button("Start review", systemImage: "checkmark.bubble") { startingReview = true }
+                            Button("Start review", systemImage: "checkmark.bubble") { tryStartReview(bot) }
                                 .help("Review this task's saved changes, then merge them into the project")
                         }
                     }
@@ -170,7 +172,7 @@ struct BotThreadView: View {
                 preview.startPicking(for: bot.id)
             case .botInfo: showInfo = true
             case .pairing: router.showPairing = true
-            case .startReview: startingReview = true
+            case .startReview: tryStartReview(bot)
             case .clearConversation: router.cleared = BotStore(context: modelContext).clearConversation(context)
             case .archiveBot:
                 guard BotStore.archiveBlocker(bot) == nil else { return }
@@ -252,6 +254,15 @@ struct BotThreadView: View {
         .sheet(isPresented: $startingReview) {
             if let bot { StartReviewSheet(bot: bot) }
         }
+    }
+
+    /// Start review's sheet, or one line saying why it can't start yet.
+    private func tryStartReview(_ bot: Bot) {
+        let store = BotStore(context: modelContext)
+        let why = AppAction.startReview.unavailable(for: bot, runs: brain.runs, store: store)
+            ?? (github.token == nil ? String(localized: "A review opens on GitHub, so sign in with GitHub first (Settings › GitHub). Then tap Start review again.") : nil)
+        guard let why else { startingReview = true; return }
+        store.append(.assistant, why, to: store.conversation(for: .bot(bot.id)))
     }
 
     /// The transcript with the chat bar pinned under it. Each screen pins
