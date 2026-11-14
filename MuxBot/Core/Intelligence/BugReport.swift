@@ -48,6 +48,9 @@ struct PickedElement: Sendable, Equatable, Codable {
     var selectedText: String? = nil
     /// From "Edit" on a selection: change the selected text by hand.
     var edit: Bool? = nil
+    /// A picked `<img>`'s `src` attribute as the page's source has it
+    /// (never the resolved URL): what Replace picture points at a new file.
+    var src: String? = nil
 
     /// "Start_a_Project · /pricing · 683px"
     var chip: String { "\(label) · \(url) · \(viewport)px" }
@@ -214,7 +217,8 @@ enum BugReport {
               url: location.pathname, viewport: vw, left: Math.round(r.left), right: Math.round(vw - r.right),
               width: Math.round(r.width), height: Math.round(r.height), paddingLeft: s.paddingLeft, paddingRight: s.paddingRight,
               marginLeft: s.marginLeft, marginRight: s.marginRight, x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY),
-              fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0] }, extra || {}));
+              fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, fontFamily: (s.fontFamily || '').split(',')[0],
+              src: el.tagName === 'IMG' ? (el.getAttribute('src') || undefined) : undefined }, extra || {}));
           };
           // Delete outside a text field would make WebKit go back a page:
           // swallow it there; the page's own fields still get it.

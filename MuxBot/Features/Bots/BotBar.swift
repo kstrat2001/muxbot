@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// The one chat bar, owned by the Bots tab so it stays on screen across
 /// navigation. It talks to whichever bot you are looking at (the lead bot
@@ -13,6 +14,10 @@ struct BotBar: View {
 
     @Query private var runs: [BotRun]
     @FocusState private var barFocused: Bool
+    /// Choosing a picture from this Mac: to add it, or (with a picked
+    /// `<img>`) to show it in that image's place.
+    @State private var choosingPicture = false
+    @State private var replacing: PickedElement?
 
     /// The run a Tweak is aimed at, if it belongs to the thread on screen.
     private var tweakRun: BotRun? {
@@ -52,6 +57,16 @@ struct BotBar: View {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "scope").accessibilityHidden(true)
                     Text(element.chip).lineLimit(1)
+                    #if os(macOS)
+                    if element.src != nil, pictureBot != nil {
+                        Button("Replace picture…", systemImage: "photo") {
+                            replacing = element
+                            choosingPicture = true
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Show a picture from this Mac here instead")
+                    }
+                    #endif
                     Button("Remove", systemImage: "xmark.circle.fill") { preview.clearPick() }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
@@ -71,8 +86,21 @@ struct BotBar: View {
             }
             #if os(macOS)
             HStack(spacing: Spacing.sm) {
+                if pictureBot != nil {
+                    Button("Add a picture", systemImage: "photo.badge.plus") {
+                        replacing = nil
+                        choosingPicture = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .font(.title3)
+                    .help("Add a photo or logo from this Mac to the project")
+                }
                 field.textFieldStyle(.roundedBorder)
                 sendButton.font(.title2)
+            }
+            .fileImporter(isPresented: $choosingPicture, allowedContentTypes: [.png, .jpeg, .gif, .webP]) { result in
+                if case .success(let file) = result { addPicture(file) }
             }
             #else
             // Messages-style: a capsule with the send button inside.
@@ -90,6 +118,37 @@ struct BotBar: View {
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
         .background(.bar)
+    }
+
+    /// The bot on screen, when its project is on this Mac (pictures go into it).
+    private var pictureBot: Bot? {
+        guard let id = router.context.botId, let bot = bots.first(where: { $0.id == id }), bot.workspaceName != nil else { return nil }
+        return bot
+    }
+
+    /// Reads the chosen picture (choosing it is the approval) and has darkmux
+    /// add it. Added on its own, the bar then names it so your message can
+    /// say where it goes.
+    private func addPicture(_ file: URL) {
+        guard let bot = pictureBot else { return }
+        let element = replacing
+        replacing = nil
+        let scoped = file.startAccessingSecurityScopedResource()
+        let data = try? Data(contentsOf: file)
+        if scoped { file.stopAccessingSecurityScopedResource() }
+        let store = BotStore(context: context)
+        guard let data else {
+            store.append(.system, String(localized: "Couldn't read that picture. Try choosing it again."), to: store.conversation(for: .bot(bot.id)))
+            return
+        }
+        let name = file.lastPathComponent
+        if element != nil { preview.clearPick() }
+        Task {
+            guard let url = await brain.runs.addImage(named: name, data: data, replacing: element, bot: bot, store: store),
+                  element == nil else { return }
+            router.barDraft = String(localized: "Use the picture \(name) (\(url)) ") + router.barDraft
+            router.focusBarRequest += 1
+        }
     }
 
     /// The shortcuts for the thread on screen.
