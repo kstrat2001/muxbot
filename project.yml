@@ -102,6 +102,24 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         # User-facing strings are extracted into MuxBot/Resources/Localizable.xcstrings.
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    # Every Debug build on a Mac gets its own, larger build number, so macOS
+    # (LaunchServices) opens the newest copy for a notification click or the
+    # Dock instead of an older build left in another folder, which can't
+    # read a store a newer build migrated.
+    postBuildScripts:
+      - name: Stamp the Debug build number
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        # The stamp file is the phase's own output: Xcode refuses a phase
+        # whose only output is a file another task also writes (Info.plist).
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+          - $(DERIVED_FILE_DIR)/build-number.stamp
+        script: |
+          mkdir -p "$DERIVED_FILE_DIR" && touch "$DERIVED_FILE_DIR/build-number.stamp"
+          [ "$CONFIGURATION" = "Debug" ] && [ "$PLATFORM_NAME" = "macosx" ] || exit 0
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.$(date +%s)" "$TARGET_BUILD_DIR/$INFOPLIST_PATH"
 
   MuxBotTests:
     type: bundle.unit-test
