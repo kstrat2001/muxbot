@@ -352,8 +352,9 @@ enum GeneratedCrew {
 /// the thread; any proposed action waits on an Approve / Cancel card.
 @MainActor @Observable
 final class BotBrain {
-    /// A bot whose thread asked for its preview in words: the thread opens it.
-    var previewRequested: UUID?
+    /// What a bot's thread asked the app to do in words ("open the
+    /// preview"): the thread on screen does it.
+    var appActionRequested: AppActionRequest?
     /// The crop of the element a message was sent with, until its bug card
     /// is drafted, by thread.
     var cropsForNextBug: [ChatContext: Data] = [:]
@@ -595,15 +596,15 @@ final class BotBrain {
             store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
             return
         }
-        // "start the preview", "where's the preview?": the app opens it (or
-        // says why it can't); it's never crew work.
-        if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, PreviewRequest.matches(text) {
+        // "start the preview", "hide the preview": the app does it (or says
+        // why it can't); asking for the app is never crew work.
+        if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, let action = AppAction.match(text) {
             message.intentRaw = Intent.ask.rawValue
-            if runs.canPreview(bot) {
-                store.append(.assistant, PreviewRequest.openingText, to: conversation)
-                previewRequested = bot.id
+            if let why = action.unavailable(for: bot, runs: runs) {
+                store.append(.assistant, why, to: conversation)
             } else {
-                store.append(.assistant, PreviewRequest.cantText(bot.name), to: conversation)
+                store.append(.assistant, action.doingText, to: conversation)
+                appActionRequested = AppActionRequest(bot: bot.id, action: action)
             }
             store.save()
             return
