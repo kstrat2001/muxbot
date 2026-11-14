@@ -684,6 +684,15 @@ final class BotBrain {
             return
         }
 
+        // A bot's thread: a question about how the app works ("how do I undo
+        // a change?") is answered from the help when it covers it.
+        if speaker != nil, Guide.isEnabled, element == nil, explicit == nil || explicit == .ask, intent == nil || intent == .ask,
+           LeadGuide.isAboutTheApp(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) {
+            beginThinking(context)
+            let answered = await guide.answerIfKnown(text, in: context, store: store, brain: self)
+            endThinking(context)
+            if answered { return }
+        }
         beginThinking(context)
         defer { endThinking(context) }
         fallbackNotes[context] = nil
