@@ -144,6 +144,12 @@ struct BotThreadView: View {
                 await brain.runs.keepPreviewAlive(for: bot)
             }
         }
+        .onChange(of: brain.previewRequested) {
+            // "start the preview" in the chat opens it.
+            guard let bot, brain.previewRequested == bot.id else { return }
+            brain.previewRequested = nil
+            router.showPreview = true
+        }
         .onDisappear {
             // Leaving the bot stops its dev server after a grace period (so
             // coming straight back doesn't restart it), so none keep running
