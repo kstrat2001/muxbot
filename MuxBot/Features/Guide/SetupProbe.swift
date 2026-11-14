@@ -28,6 +28,10 @@ enum SetupProbe {
             f.listing = runs.listing
             f.listedModels = listed.count
             f.runningModels = listed.filter(\.reachable).count
+            // Paired, darkmux says what LM Studio can run (it checks LM
+            // Studio's server too, darkmux #3578); the app's own look is
+            // only for before pairing.
+            if let seen = lmStudio(in: listed) { f.lmStudio = seen }
         }
         #else
         var f = SetupFacts(platform: .phone, appleSilicon: false, memoryGB: memoryGB)
@@ -80,6 +84,15 @@ enum SetupProbe {
         var request = URLRequest(url: url)
         request.timeoutInterval = 2
         return (try? await URLSession.shared.data(for: request))?.1 is HTTPURLResponse
+    }
+
+    /// LM Studio as darkmux lists it: its server off, or how many of its
+    /// models can run; nil when darkmux lists none on LM Studio.
+    static func lmStudio(in listed: [DarkmuxClient.ProfileInfo]) -> SetupFacts.LMStudio? {
+        let onIt = listed.filter { $0.endpoint.lowercased() == "lmstudio" }
+        guard !onIt.isEmpty else { return nil }
+        if onIt.contains(where: ModelLabel.serverOff) { return .notAnswering }
+        return .models(ModelLabel.distinct(onIt).filter(ModelLabel.canRun).count)
     }
 
     private static func lmStudioModels() async -> SetupFacts.LMStudio {

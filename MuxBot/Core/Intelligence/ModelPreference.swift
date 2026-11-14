@@ -310,6 +310,14 @@ enum ModelLabel {
         return String(localized: "Approving also stops \(engine(p.endpoint))'s own server on this Mac, so darkmux can start this model.")
     }
 
+    /// (darkmux #3578) Its engine's local server is off: the engine has the
+    /// model, but a run can't reach it.
+    static func serverOff(_ p: DarkmuxClient.ProfileInfo) -> Bool {
+        guard p.availability?.state == "unavailable" else { return false }
+        return p.availability?.code == "server_off"
+            || (p.availability?.reason ?? "").lowercased().contains("local server is off")
+    }
+
     /// Why a model can't run now, in plain words; nil when it can. darkmux's
     /// own reason can name a command, so it's never shown as is (the app
     /// never asks you to run one).
@@ -319,6 +327,9 @@ enum ModelLabel {
         if needsEngineFreed(p) {
             // darkmux #3574: Approve on a run with it stops that server.
             return String(localized: "\(engine(p.endpoint))'s own server is already running on this Mac. Pick this model and darkmux stops that server when you approve the run.")
+        }
+        if serverOff(p) {
+            return String(localized: "\(engine(p.endpoint))'s local server is off, so this model can't answer. Turn on its server in \(engine(p.endpoint)).")
         }
         if reason.contains("own server") {
             // darkmux #3453: the engine's own server is up, and darkmux never stops one it didn't start.

@@ -67,16 +67,15 @@ struct RunCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(AppFont.footnote())
-            // Before Approve: does the chosen model's server answer? Checked
-            // again every few seconds while it doesn't, so turning it on
-            // clears the card by itself.
+            // Before Approve: darkmux says whether the chosen model's server
+            // answers. Asked again every few seconds while it doesn't, so
+            // turning it on clears the card by itself.
             .task(id: "\(run.id)-\(run.phase == .proposed)-\(brain.runs.profile(for: run) ?? "")") {
                 guard run.phase == .proposed else { return }
-                repeat {
-                    await brain.runs.checkModelServer(for: run)
-                    guard case .modelServerOff? = brain.runs.blocker(for: run) else { return }
+                while case .modelServerOff? = brain.runs.blocker(for: run), !Task.isCancelled, run.phase == .proposed {
                     try? await Task.sleep(for: .seconds(3))
-                } while !Task.isCancelled && run.phase == .proposed
+                    await brain.runs.recheckModels(for: run)
+                }
             }
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {

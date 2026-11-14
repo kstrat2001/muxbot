@@ -185,7 +185,7 @@ enum SetupCheck {
             switch f.lmStudioApp {
             case .installed, .running:
                 return SetupStep(id: .lmStudio, title: title, state: .optional,
-                                 detail: String(localized: "LM Studio is installed, but its local server isn't answering. Open it, download a model and turn on its local server."),
+                                 detail: String(localized: "LM Studio is installed, but its local server is off. Open LM Studio and turn on its local server (in its Developer view)."),
                                  action: .openLMStudio)
             case .notInstalled:
                 return SetupStep(id: .lmStudio, title: title, state: .optional,
