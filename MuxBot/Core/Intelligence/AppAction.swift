@@ -56,7 +56,8 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .pickMode: ["point", "pick", "pointing"]
         case .botInfo: ["info", "information", "details"]
         case .pairing: ["pair", "pairing", "darkmux"]
-        case .startReview: ["review"]
+        // "create a PR", "make a pull request": GitHub's name for a review.
+        case .startReview: ["review", "pr", "prs", "pull"]
         case .undoLast: ["undo", "revert"]
         case .stopRun: ["stop"]
         case .clearConversation: ["chat", "conversation", "thread", "messages", "history"]
@@ -87,7 +88,8 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .botInfo: ["show", "open", "see", "view", "bot", "your", "bots", "info", "about"]
         case .pairing: ["pair", "pairing", "with", "connect", "darkmux", "again", "mux", "bot", "on", "mac"]
         // "review my changes", "start a review"; "review the login code" is the Reviewer's.
-        case .startReview: ["start", "my", "changes", "change", "work", "open", "ask", "for", "ready", "send", "to", "get"]
+        case .startReview: ["start", "my", "changes", "change", "work", "open", "ask", "for", "ready", "send", "to", "get",
+                            "create", "make", "new", "request", "submit", "merge", "do", "file", "raise"]
         // "undo that", "undo the last change"; "undo the header color" is work.
         case .undoLast: ["last", "change", "changes", "go", "back", "please", "run", "edit"]
         case .stopRun: ["run", "running", "work", "working", "crew", "coder", "job", "now"]

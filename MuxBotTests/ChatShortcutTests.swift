@@ -27,6 +27,19 @@ struct ChatShortcutTests {
         #expect(none.isEmpty, "nothing it can do from a chip")
     }
 
+    /// Saved changes waiting: Start review leads, said the way typing it would.
+    @Test func savedChangesPutStartReviewFirst() {
+        let chips = ChatShortcuts.bot(.init(hasRepo: true, canPreview: true, skills: ["Add a page"], hasChanges: true))
+        #expect(chips.first?.title == "Start review")
+        #expect(chips.first?.action == .send("Start review"))
+        #expect(AppAction.match("Start review") == .startReview)
+    }
+
+    @Test(arguments: ["create a PR", "make a pull request", "open a pr", "start review", "merge my changes"])
+    func askingForAPullRequestStartsTheReview(text: String) {
+        #expect(AppAction.match(text) == .startReview, "\(text)")
+    }
+
     @Test func theRowHidesWhileYouTypeOrACardWaits() {
         #expect(ChatShortcuts.showsRow(draft: "", tweaking: false, picked: false, waitingCard: false))
         #expect(!ChatShortcuts.showsRow(draft: "fix", tweaking: false, picked: false, waitingCard: false))
