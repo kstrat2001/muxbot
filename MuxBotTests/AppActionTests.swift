@@ -105,4 +105,21 @@ struct AppActionTests {
         #expect(run.phase == .proposed)
         #expect((bot.runs ?? []).count == 1)
     }
+
+    @Test func theModelOnlyOffersSafeActionsThatCanHappen() {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        let bot = store.add(name: "Notes", instructions: "")
+        // Undo is rules only: a model's pick of it is dropped.
+        let undo = brain.checkedAppAction(BotTurn(reply: "Undoing.", action: .app(.undoLast, runId: nil, detail: "")), bot: bot, store: store)
+        #expect(undo.action == nil)
+        // No project to preview: it says why instead of a card.
+        let open = brain.checkedAppAction(BotTurn(reply: "Here it is.", action: .app(.openPreview, runId: nil, detail: "")), bot: bot, store: store)
+        #expect(open == BotTurn(reply: PreviewRequest.cantText(bot.name), action: nil))
+        // Info can always open: it stays a card for Approve.
+        let info = BotTurn(reply: "Sure.", action: .app(.botInfo, runId: nil, detail: ""))
+        #expect(brain.checkedAppAction(info, bot: bot, store: store) == info)
+        // Mux Bot's own thread has no bot: nothing.
+        #expect(brain.checkedAppAction(info, bot: nil, store: store).action == nil)
+    }
 }

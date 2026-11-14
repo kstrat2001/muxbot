@@ -178,6 +178,13 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The actions the on-device model may pick when the rules didn't
+    /// match: only ones that show or open something, always behind a card.
+    /// Undo, stop, clear, archive and merge are rules only: a wrong pick
+    /// of those costs trust, not a tap.
+    static let modelOffered: [AppAction] = [.openPreview, .reloadPreview, .fullWindowPreview, .phoneView, .tabletView,
+                                            .desktopView, .pickMode, .botInfo, .startReview]
+
     /// The newest run of this Mac's with a change Undo can take back.
     @MainActor
     static func lastUndoable(_ bot: Bot) -> BotRun? {
@@ -209,6 +216,15 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .stopRun: String(localized: "Stop the run")
         case .clearConversation: String(localized: "Clear this conversation")
         case .archiveBot: String(localized: "Archive \(bot)")
+        case .openPreview: String(localized: "Open the preview")
+        case .reloadPreview: String(localized: "Reload the preview")
+        case .fullWindowPreview: String(localized: "Show the preview in the full window")
+        case .phoneView: String(localized: "Show the preview at phone size")
+        case .tabletView: String(localized: "Show the preview at tablet size")
+        case .desktopView: String(localized: "Show the preview at desktop size")
+        case .pickMode: String(localized: "Point at something in the preview")
+        case .botInfo: String(localized: "Open \(bot)'s info")
+        case .startReview: String(localized: "Start a review")
         default: doingText
         }
     }
@@ -228,6 +244,13 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .stopRun: "stop.circle"
         case .clearConversation: "eraser"
         case .archiveBot: "archivebox"
+        case .openPreview, .reloadPreview, .fullWindowPreview: "safari"
+        case .phoneView: "iphone"
+        case .tabletView: "ipad"
+        case .desktopView: "desktopcomputer"
+        case .pickMode: "cursorarrow.rays"
+        case .botInfo: "info.circle"
+        case .startReview: "checkmark.bubble"
         default: "app"
         }
     }
