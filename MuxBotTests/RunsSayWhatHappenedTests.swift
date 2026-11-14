@@ -29,6 +29,23 @@ struct RunsSayWhatHappenedTests {
         return run
     }
 
+    /// Kain, 2026-11-14: LM Studio's server was off, the dispatch failed in
+    /// 5 seconds, and darkmux still said "done": the card said "Changed
+    /// nothing." A failed envelope is a failure that says why.
+    @Test func aDispatchThatNeverReachedTheModelIsAFailure() {
+        let s = status(#"{"status":"done","result":{"result":"error","error":"streaming request transport failure: http://localhost:1234/v1/chat/completions: Connection refused (os error 61)"},"changes":{"files":[]}}"#)
+        #expect(s.status == "error")
+        let why = RunResultText.failure(code: s.code, error: s.error ?? "", reason: s.reason)
+        #expect(why.contains("isn't answering"), "\(why)")
+        #expect(status(#"{"status":"done","result":{"result":"stop","final_assistant":"ok"}}"#).status == "done")
+    }
+
+    @Test func nothingChangedAndNothingSaidSaysWhatToTry() {
+        let line = RunResultText.fallbackSummary(report: "", files: [])
+        #expect(line.hasPrefix("Changed nothing"))
+        #expect(line.contains("another model"))
+    }
+
     private func status(_ json: String) -> DarkmuxClient.WorkStatus {
         try! JSONDecoder().decode(DarkmuxClient.WorkStatus.self, from: Data(json.utf8))
     }

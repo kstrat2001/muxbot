@@ -89,6 +89,11 @@ enum RunResultText {
         case "engine_unavailable": String(localized: "The model's server isn't running.")
         case "engine_in_use": String(localized: "The model's server is busy with something else.")
         default:
+            // The model's server not answering (LM Studio's server off):
+            // say so, with what to do.
+            if isUnreachableModel(error) {
+                return String(localized: "The model's server isn't answering, so nothing ran. Turn on the model's server (in LM Studio, its local server) and run it again.")
+            }
             // darkmux's own lines are in the run's details (Show details),
             // never the headline.
             switch classify(error: error, reason: reason) {
@@ -96,6 +101,12 @@ enum RunResultText {
             case .stopped: String(localized: "darkmux stopped it.")
             }
         }
+    }
+
+    /// darkmux couldn't connect to the model's server at all.
+    static func isUnreachableModel(_ error: String) -> Bool {
+        let lower = error.lowercased()
+        return ["connection refused", "transport failure", "connect error", "could not connect"].contains(where: lower.contains)
     }
 
     /// Only darkmux's own "cancelled" is a stop; any error is a failure,
@@ -138,6 +149,10 @@ enum RunResultText {
             .first { $0.count > 12 } ?? ""
         let cleaned = first.replacingOccurrences(of: #"^[A-Z][a-z]+:\s*"#, with: "", options: .regularExpression)
         let names = files.map { ($0 as NSString).lastPathComponent }
+        // Nothing changed and nothing said: say so, and what to try.
+        if names.isEmpty && cleaned.isEmpty {
+            return String(localized: "Changed nothing, and didn't say why. Reply with more detail, or pick another model with Change and run it again.")
+        }
         var line = (names.isEmpty ? "Changed nothing." : "Done.") + (cleaned.isEmpty ? "" : " " + String(cleaned.prefix(200)) + ".")
         if !names.isEmpty { line += " Changed \(names.joined(separator: ", "))." }
         return line
