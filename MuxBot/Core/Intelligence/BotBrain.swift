@@ -1189,6 +1189,8 @@ final class BotBrain {
         var draft = BugReport.draft(from: text.isEmpty ? "Problem with \(element?.label ?? "this element")" : text,
                                     facts: facts, page: nil, repo: repo)
         draft.selector = element?.selector
+        // The words you selected are what the report is about.
+        if let quote = element?.selectedText, !quote.isEmpty { draft.facts.insert("Selected text: “\(quote)”", at: 0) }
         draft.facts += layout?.lines ?? []
         draft.plain = layout?.plain
         draft.likelyPlace = layout?.likelyPlace
