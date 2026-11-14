@@ -22,6 +22,13 @@ struct ChatView: View {
     /// the transcript taller (a new message, a card that grows as it loads,
     /// the shelf above the chat bar) keeps the bottom in view.
     @State private var pinned = true
+    /// The bottom of the transcript is in view above the shelf, measured
+    /// from the layout itself (where the bottom marker sits in the scroll
+    /// view, and how much of the scroll view the shelf leaves visible).
+    @State private var markerY: CGFloat = 0
+    @State private var visibleBottom: CGFloat = .infinity
+    private var atBottom: Bool { markerY <= visibleBottom + 40 }
+    private static let viewport = "chat-viewport"
 
     /// Where the bottom of the transcript is, for following it.
     private static let bottomId = "chat-bottom"
@@ -87,8 +94,12 @@ struct ChatView: View {
                     }
                     .padding(Spacing.lg)
                     Color.clear.frame(height: 1).id(Self.bottomId)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.viewport)).minY } action: { markerY = $0 }
                 }
             }
+            .coordinateSpace(.named(Self.viewport))
+            .onGeometryChange(for: CGFloat.self) { $0.size.height - $0.safeAreaInsets.bottom } action: { visibleBottom = $0 }
+            .onChange(of: atBottom) { if atBottom { pinned = true } }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             // While you're at the bottom, the scroll view itself keeps the
             // bottom in place when anything grows (a setup card filling in
@@ -106,7 +117,7 @@ struct ChatView: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if !pinned {
+                if !pinned && !atBottom {
                     Button {
                         pinned = true
                         withAnimation { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
@@ -125,7 +136,7 @@ struct ChatView: View {
                     .transition(.scale.combined(with: .opacity))
                 }
             }
-            .animation(.easeOut(duration: 0.15), value: pinned)
+            .animation(.easeOut(duration: 0.15), value: pinned && atBottom)
             .onChange(of: messages.count) {
                 // A new message brings you to it, like Messages.
                 pinned = true
