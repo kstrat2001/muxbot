@@ -165,7 +165,7 @@ enum Intent: String, Codable, CaseIterable, Sendable {
             request = String(request.dropFirst(polite.count))
         }
         if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }  // "can you please…"
-        if startsWithChangeVerb(request) { return .fix }
+        if startsWithChangeVerb(request) || isChangeWish(text) { return .fix }
         if GuideRoute.isQuestion(text) { return problemWords.contains { text.contains($0) } ? .bug : .ask }
         return .bug
     }
@@ -192,9 +192,18 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     /// logo": a change said as a wish rather than a command.
     static func isChangeWish(_ lower: String) -> Bool {
         let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
-        let openers = ["i want ", "i'd like ", "id like ", "i would like ", "let's ", "lets ", "can we ", "could we "]
+        let openers = ["i want ", "i'd like ", "id like ", "i would like ", "let's ", "lets ", "can we ", "could we ",
+                       // A rule for the content: "don't use brand names", "no more stock photos".
+                       "don't ", "dont ", "do not ", "never ", "avoid ", "stop ", "no more ", "get rid of ",
+                       "i don't want ", "i dont want ", "we don't want ", "we dont want "]
+        // "this shouldn't be cut off" and "I don't see the menu" describe a
+        // problem: measured, not a rule.
+        if problemWords.contains(where: text.contains) || ["don't see", "dont see", "don't know", "dont know", "don't understand", "don't get"].contains(where: text.hasPrefix) { return false }
         if openers.contains(where: text.hasPrefix) { return true }
-        return [" should be ", " should have ", " needs to be ", " should look "].contains { " \(text) ".contains($0) }
+        if [" should be ", " should have ", " needs to be ", " should look "].contains(where: { " \(text) ".contains($0) }) { return true }
+        // "we shouldn't use brand names", "the footer shouldn't say 2024".
+        let rules = [" shouldn't ", " shouldnt ", " should not ", " must not ", " mustn't "]
+        return !text.hasSuffix("?") && rules.contains { " \(text) ".contains($0) }
     }
 
     /// Whether the first word is a change verb, allowing one typo in a

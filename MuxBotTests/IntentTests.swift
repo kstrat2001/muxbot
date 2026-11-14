@@ -45,6 +45,13 @@ struct IntentParsingTests {
         // A remark about what you see is still measured into a bug.
         ("the Start_a_Project border looks like it has no padding on left and right", false, .bug),
         ("the cards overlap the footer on phone", false, .bug),
+        // A rule for the content is a change, never a layout bug to measure.
+        ("We shouldn't use brand names", false, .fix),
+        ("We shouldn't use brand names", true, .fix),
+        ("don't mention AWS", true, .fix),
+        ("the footer should not say 2024", false, .fix),
+        ("no more stock photos", false, .fix),
+        ("this shouldn't be cut off", true, .bug),
         // Questions stay questions; one typo never makes a short word a verb.
         ("should the header be white?", false, .ask),
     ])
