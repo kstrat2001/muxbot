@@ -230,6 +230,20 @@ struct ChatSweep2Tests {
         #expect(second.id != first.id)
     }
 
+    @Test func aBugCardYouDontWantCanBeDismissed() {
+        let store = TestStore.fresh()
+        let bot = store.add(name: "site", instructions: "")
+        let thread = store.conversation(for: .bot(bot.id))
+        let card = store.append(.assistant, "bug", kind: .bugCard, to: thread)
+        let sent = store.append(.assistant, "bug", kind: .bugCard, to: thread)
+        let draft = BugDraft(title: "Gutter", described: "no gutter", page: "/", viewport: 390, facts: [], repo: nil)
+        _ = store.fixBug(sent, draft: draft, bot: bot)
+        #expect(!store.dismissBug(sent), "a card sent to Coder is canceled on its run card")
+        #expect(store.dismissBug(card))
+        #expect(!(thread.messages ?? []).contains { $0.id == card.id })
+        #expect((thread.messages ?? []).contains { $0.id == sent.id })
+    }
+
     // 9: a correction is only the correction.
 
     @Test func aCorrectionIsOnlyTheCorrection() {

@@ -441,6 +441,18 @@ extension BotStore {
         save()
         return (run, true)
     }
+
+    /// Dismiss on a bug card you don't want: the card and its crop go, and
+    /// nothing is filed or changed. A card already sent to Coder keeps its
+    /// run card instead (that's where Cancel is), so it's never dismissed.
+    @discardableResult
+    func dismissBug(_ message: ChatMessage) -> Bool {
+        guard message.kind == .bugCard, sentRun(for: message) == nil else { return false }
+        BugCrops.shared[message.id] = nil
+        context.delete(message)
+        save()
+        return true
+    }
 }
 
 /// What Clear Conversation took away, kept in memory on this device so it

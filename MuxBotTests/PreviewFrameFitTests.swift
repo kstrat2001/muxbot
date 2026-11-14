@@ -120,10 +120,11 @@ struct PageFitsTests {
         #expect(messages(store, bot).contains { $0.kind == .bugCard })
     }
 
-    @Test func aComplaintThatIsntAboutOverflowIsStillABug() async throws {
+    @Test func aDesignRemarkIsAChangeNotAMeasurement() async throws {
         let probe = MockProbe([422: fitting(422), 390: fitting(390), 768: fitting(768), 1440: fitting(1440)])
         let (store, bot) = await send("the borders look too thin", probe: probe)
-        #expect(messages(store, bot).contains { $0.kind == .bugCard })
+        #expect(!messages(store, bot).contains { $0.kind == .bugCard })
+        #expect(bot.runs?.first?.crew == .coder)
     }
 
     @Test(arguments: ["off the screen to the right", "scrolls sideways", "wider than the screen"])

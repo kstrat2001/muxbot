@@ -168,10 +168,11 @@ enum FallbackBrain {
 
     /// "The border has no padding", "the cards overlap the footer": the
     /// user describing something they see in the preview.
+    /// Only where things sit (padding, overlap, cut off) is measured: a
+    /// remark about a color, a font or the words ("the font looks corporate")
+    /// is left to the conversation, never a layout bug.
     static func isVisualReport(_ lower: String) -> Bool {
-        let words = ["looks", "border", "padding", "margin", "overlap", "misaligned", "aligned", "cut off",
-                     "too big", "too small", "spacing", "font", "color", "colour", "wraps", "cramped", "broken", "off-center", "contrast"]
-        return words.contains { lower.contains($0) } && !lower.hasSuffix("?")
+        Intent.isLayoutComplaint(lower) && !lower.hasSuffix("?")
     }
 
     /// The bot can't see the preview: it takes the user's word and offers
@@ -183,7 +184,14 @@ enum FallbackBrain {
 
     /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
     static func isIssueQuestion(_ lower: String) -> Bool {
+        // "change "logic flaws" to a different security issue" asks for a
+        // change that merely names an issue: never a list of GitHub issues.
+        if Intent.asksForAnEdit(lower) { return false }
         let padded = " \(lower.replacingOccurrences(of: "?", with: " ")) "
+        // Only a question or a request to see them: "the security issue is
+        // wrong" is a remark, not a request for the list.
+        let seeking = [" any ", " open ", " show ", " list ", " which ", " what ", " are there ", " is there ", " how many ", " see "]
+        guard lower.contains("?") || seeking.contains(where: padded.contains) else { return false }
         let asks = ["issue", "ticket", "bug", "prs", "to fix", "needs fixing", "need fixing", "broken"]
         // "PR 9 is still not right" names one PR: it's about that PR, not a list.
         let asksAboutPRs = Intent.prReference(in: lower) == nil && ["pull request", " pr "].contains { padded.contains($0) }
@@ -719,11 +727,12 @@ final class BotBrain {
         // it, so what you say next is never taken as its answer.
         if let bot, let pending = pendingAnswers[bot.id] {
             let stale = Date().timeIntervalSince(pending.askedAt) > Self.pendingAnswerLifetime
-            let other = intent.map { ![.fix, .ask].contains($0) } ?? false
+            // A described problem answers "what's still wrong?" too.
+            let other = explicit == .bug || (intent.map { ![.fix, .ask, .bug].contains($0) } ?? false)
             if stale || Self.isDismissal(text) || other || Intent.issueNumber(in: text) != nil { pendingAnswers[bot.id] = nil }
         }
         // The answer to the bot's one question becomes the run it was about.
-        if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix,
+        if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix || (intent == .bug && explicit == nil),
            !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)),
            Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()),
            let pending = pendingAnswers.removeValue(forKey: bot.id) {
@@ -1518,7 +1527,9 @@ final class BotBrain {
         #if canImport(FoundationModels)
         let others = bots.filter { $0.id != speaker?.id }
         let lower = request.lowercased()
-        let wantsIssues = FallbackBrain.isIssueQuestion(lower) || lower.contains("issue")
+        // The issues tool only for a question about issues: offered on any
+        // "issue", the model answered "No open issues" to a change.
+        let wantsIssues = FallbackBrain.isIssueQuestion(lower)
         let issueTool = OpenIssuesTool(repos: repos, client: github)
         let tools: [any Tool] = compact || repos.isEmpty || !wantsIssues ? [] : [issueTool]
         let session = LanguageModelSession(tools: tools, instructions: Self.instructions(
