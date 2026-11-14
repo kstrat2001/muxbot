@@ -9,12 +9,12 @@ import Testing
 struct SetupStatesRenderTests {
     static func facts(_ state: Int) -> SetupFacts {
         var f = SetupFacts(platform: .mac, appleSilicon: true, memoryGB: 64, endpointUp: false, lmStudio: .notAnswering)
-        f.docker = .notInstalled; f.lmStudioApp = .notInstalled
+        f.lmStudioApp = .notInstalled
         switch state {
-        case 2:   // darkmux installed, app connection not running; Docker and LM Studio installed but closed
-            f.docker = .installed; f.lmStudioApp = .installed
-        case 3:   // paired, no model answering, no LM Studio, Docker running
-            f.endpointUp = true; f.docker = .running; f.paired = true
+        case 2:   // darkmux installed, app connection not running; LM Studio installed but closed
+            f.lmStudioApp = .installed
+        case 3:   // paired, no model answering, no LM Studio
+            f.endpointUp = true; f.paired = true
             f.listing = .listed; f.listedModels = 0; f.runningModels = 0
         default: break
         }

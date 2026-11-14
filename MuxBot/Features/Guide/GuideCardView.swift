@@ -119,17 +119,10 @@ struct SetupChecklistView: View {
             #else
             Button("Sign in with GitHub", systemImage: "person.badge.key") { router.showPairing = true }.buttonStyle(.bordered).controlSize(.small)
             #endif
-        case .confirmDocker:
-            Button("Docker is running") {
-                UserDefaults.standard.set(true, forKey: SetupProbe.dockerKey)
-                facts?.dockerConfirmed = true
-            }
-            .buttonStyle(.bordered).controlSize(.small)
-        case .openDocker, .openLMStudio:
+        case .openLMStudio:
             #if os(macOS)
-            let docker = action == .openDocker
-            Button(docker ? "Open Docker" : "Open LM Studio", systemImage: "arrow.up.forward.app") {
-                SetupProbe.openApp(bundleID: docker ? SetupCheck.dockerBundleID : SetupCheck.lmStudioBundleID)
+            Button("Open LM Studio", systemImage: "arrow.up.forward.app") {
+                SetupProbe.openApp(bundleID: SetupCheck.lmStudioBundleID)
             }
             .buttonStyle(.borderedProminent).tint(Color.brandGreen).controlSize(.small)
             #else

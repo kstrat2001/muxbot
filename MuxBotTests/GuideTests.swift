@@ -69,7 +69,6 @@ struct HelpRetrievalTests {
         ("how do I undo a run", "runs"),
         ("what does loads when used mean", "models"),
         ("how do I open a pull request", "github"),
-        ("do I need docker", "install-darkmux"),
         ("how much RAM do I need", "install-darkmux"),
         ("why can't Mux Bot reach darkmux", "pairing"),
         ("what is a bot", "bots"),
@@ -102,7 +101,8 @@ struct SetupCheckTests {
         // Optional rows (LM Studio, GitHub) come last.
         // One darkmux row (installed and its app connection are one thing to
         // the app); optional rows (LM Studio, GitHub) come last.
-        #expect(SetupCheck.steps(fresh).map(\.id) == [.mac, .darkmux, .docker, .pair, .models, .lmStudio, .github])
+        // No Docker row (Kain, 2026-11-12); optional rows come last.
+        #expect(SetupCheck.steps(fresh).map(\.id) == [.mac, .darkmux, .pair, .models, .lmStudio, .github])
     }
 
     @Test func aFreshMacWithNothingInstalled() {
@@ -113,7 +113,6 @@ struct SetupCheckTests {
         #expect(steps.state(.pair) == .later, "pairing waits for darkmux")
         // Before pairing the app can't see darkmux's engines: it waits for pairing.
         #expect(steps.state(.models) == .later)
-        #expect(steps.state(.docker) == .manual)
     }
 
     @Test func theAppConnectionAnsweringMeansDarkmuxIsInstalled() {
@@ -142,7 +141,7 @@ struct SetupCheckTests {
         var facts = fresh
         facts.endpointUp = true; facts.lmStudio = .models(2); facts.paired = true
         facts.listing = .listed; facts.listedModels = 4; facts.runningModels = 2
-        facts.dockerConfirmed = true; facts.githubSignedIn = true
+        facts.githubSignedIn = true
         let steps = SetupCheck.steps(facts)
         #expect(steps.allSatisfy { $0.state == .done }, "\(steps.map { "\($0.id) \($0.state)" })")
         #expect(SetupCheck.summary(steps) == "All set")
@@ -152,8 +151,8 @@ struct SetupCheckTests {
     /// without it is "All set" (Kain saw "5 of 8" with two steps left).
     @Test func theCountLeavesOutOptionalGitHub() {
         var facts = fresh
-        facts.endpointUp = true; facts.lmStudio = .models(16); facts.docker = .running
-        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "3 of 5 done", "pairing and models still to go")
+        facts.endpointUp = true; facts.lmStudio = .models(16)
+        #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "2 of 4 done", "pairing and models still to go")
         facts.paired = true; facts.listing = .listed; facts.listedModels = 4; facts.runningModels = 2
         #expect(SetupCheck.summary(SetupCheck.steps(facts)) == "All set", "signed out of GitHub, still all set")
         facts.githubSignedIn = true
@@ -164,7 +163,7 @@ struct SetupCheckTests {
     /// still detected, never in the count (Kain, 2026-11-11).
     @Test func lmStudioIsOptional() {
         var facts = fresh
-        facts.endpointUp = true; facts.docker = .running; facts.lmStudioApp = .notInstalled; facts.lmStudio = .notAnswering
+        facts.endpointUp = true; facts.lmStudioApp = .notInstalled; facts.lmStudio = .notAnswering
         facts.paired = true; facts.listing = .listed; facts.listedModels = 1; facts.runningModels = 1
         let steps = SetupCheck.steps(facts)
         #expect(steps[.lmStudio]?.title == "LM Studio (optional)")

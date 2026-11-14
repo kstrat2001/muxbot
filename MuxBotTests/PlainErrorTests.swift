@@ -57,7 +57,8 @@ struct PreviewFailureTests {
     @Test func previewsOffNoLongerSaysItRunsOutsideTheSandbox() {
         let detail = LivePreview.Unavailable.previewsOff.detail(repo: nil, folder: nil)
         #expect(!detail.contains("outside darkmux's sandbox"))
-        #expect(detail.contains("container"))
+        // No container wording (Kain, 2026-11-12): it runs on this Mac.
+        #expect(detail.contains("on this Mac"))
     }
 }
 

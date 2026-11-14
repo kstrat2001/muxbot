@@ -79,6 +79,9 @@ struct LivePreview: Equatable, Sendable {
         case earlierPairing
         /// darkmux couldn't make the bot's work copy on this Mac.
         case noWorkCopy
+        /// This darkmux runs work in macOS's own sandbox and can't run
+        /// previews there yet (darkmux #3557's 403 under its sandbox setting).
+        case needsNewerDarkmux
 
         var title: String {
             switch self {
@@ -93,6 +96,7 @@ struct LivePreview: Equatable, Sendable {
             case .earlierPairing: String(localized: "This work copy is from an earlier pairing")
             case .noRecipe: String(localized: "This project has no preview setup")
             case .noWorkCopy: String(localized: "darkmux couldn't get the project onto this Mac")
+            case .needsNewerDarkmux: String(localized: "Live previews need a newer darkmux")
             }
         }
 
@@ -101,7 +105,7 @@ struct LivePreview: Equatable, Sendable {
             let repo = repo ?? String(localized: "this repo")
             switch self {
             case .previewsOff:
-                return String(localized: "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on in darkmux on this Mac; darkmux's guide shows how. Then try again.")
+                return String(localized: "A preview runs the project's own code, which a bot may have changed, on this Mac. So darkmux keeps previews off until you turn them on in darkmux on this Mac; darkmux's guide shows how. Then try again.")
             case .notYourCheckout:
                 return String(localized: "darkmux cloned \(repo), and it runs a preview only from your own checkout, never from a copy a bot writes to. Add your checkout of \(repo) and the preview starts from it.")
             case .newProject:
@@ -120,6 +124,8 @@ struct LivePreview: Equatable, Sendable {
                 return String(localized: "darkmux made it for this app before you paired again, so it won't let this pairing use it. Set up a new work copy for it (a new branch; the earlier commits stay on the old one).")
             case .noWorkCopy:
                 return String(localized: "darkmux makes its own copy of \(repo) on this Mac to show the preview and to work in, and that didn't work. Try again; Show details has what darkmux said.")
+            case .needsNewerDarkmux:
+                return String(localized: "Live previews need a newer darkmux on this Mac. darkmux's guide shows how to update.")
             case .noRecipe:
                 let folder = folder ?? repo
                 return String(localized: "darkmux needs to know how \(folder) starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it.")
@@ -146,6 +152,8 @@ struct LivePreview: Equatable, Sendable {
         static func from(status: Int, message: String, template: Bool) -> Unavailable? {
             let m = message.lowercased()
             switch status {
+            case 403 where m.hasPrefix("previews need"):
+                return .needsNewerDarkmux
             case 403 where m.hasPrefix("previews are off"):
                 return .previewsOff
             case 403 where m.contains("not made for this app"):
@@ -168,9 +176,10 @@ struct PreviewFailure: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         /// The project needs a newer Node than the preview has.
         case nodeTooOld
-        /// Docker (darkmux runs previews in a container) isn't running.
+        /// What darkmux runs previews in isn't available (an older darkmux's
+        /// Docker reasons).
         case docker
-        /// The preview's container didn't start.
+        /// What the preview runs in didn't start (an older darkmux's reason).
         case containerFailed
         /// The dev server listens only on 127.0.0.1 inside its container.
         case loopbackOnly
@@ -262,11 +271,11 @@ struct PreviewFailure: Equatable, Sendable {
         case .serverStopped:
             String(localized: "The project's own server stopped right after it started. Ask the bot to look at it, or try again.")
         case .docker:
-            String(localized: "darkmux runs previews in a container, and Docker isn't running on this Mac. Open Docker, then try again.")
+            String(localized: "darkmux couldn't start the preview on this Mac. Live previews need a newer darkmux; darkmux's guide shows how to update.")
         case .containerFailed:
-            String(localized: "The preview's container didn't start. Try again; if it keeps happening, restart Docker.")
+            String(localized: "The preview didn't start. Try again; if it keeps happening, darkmux's guide shows how to restart darkmux.")
         case .loopbackOnly:
-            String(localized: "The project's server only listens inside its container. It needs to listen on 0.0.0.0 (set HOST in the preview settings).")
+            String(localized: "The project's server only answers to itself, so the preview can't reach it. Ask the bot to fix the preview settings so the server listens for the preview, then try again.")
         case .notAnswering:
             String(localized: "The project's server started but never answered. Try again, or ask the bot to look at its dev script.")
         case .other:

@@ -145,6 +145,11 @@ struct PreviewStatusView: View {
             Button("Try again", systemImage: "arrow.clockwise", action: retry)
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             if let details = brain.runs.workCopyDetails[bot.id] ?? workCopyFailure { TechnicalDetails(text: details) }
+        case .needsNewerDarkmux:
+            HStack {
+                guideLink
+                Button("Try again", systemImage: "arrow.clockwise", action: retry)
+            }
         case .earlierPairing:
             HStack {
                 Button("New work copy", systemImage: "arrow.triangle.branch") {
