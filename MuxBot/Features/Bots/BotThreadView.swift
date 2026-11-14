@@ -100,30 +100,19 @@ struct BotThreadView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // The preview toggle and the review tools are on the shelf above
+        // the chat bar (`TaskStatusLine`), not up here.
+        #if !os(macOS)
         .toolbar {
             if bot != nil {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    if let bot, brain.runs.canPreview(bot) {
-                        // A panel symbol; the toggle's highlight shows it's open.
-                        @Bindable var router = router
-                        Toggle(isOn: $router.showPreview) {
-                            #if os(macOS)
-                            Label("Preview", systemImage: "sidebar.right")
-                            #else
-                            Label("Preview", systemImage: "safari")
-                            #endif
-                        }
-                        .toggleStyle(.button)
-                        .help(router.showPreview ? "Hide preview" : "Show preview")
-                    }
-                    #if !os(macOS)
+                ToolbarItem(placement: .primaryAction) {
                     // On the Mac, info is the (i) on the bot's sidebar row (and ⌘I).
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
                         .help("Bot info and resources")
-                    #endif
                 }
             }
         }
+        #endif
         .onAppear {
             markRead()
             // Back within the grace period: the preview keeps running.
@@ -287,8 +276,9 @@ struct BotThreadView: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    // The task's pending changes, or its review, right
-                    // above where you type.
+                    // The tool shelf right above where you type: the
+                    // preview toggle and the task's pending changes, or
+                    // its review.
                     VStack(spacing: 0) {
                         if let bot { TaskStatusLine(bot: bot) { tryStartReview(bot) } }
                         BotBar()
