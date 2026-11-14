@@ -23,6 +23,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
     case archiveBot
     case deleteBot
     case publish
+    case save
 
     /// How a matched action is carried out.
     enum Handling: Sendable {
@@ -41,7 +42,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
              // Its sheet is the approval: the title and who reviews are there.
              .startReview: .direct
         case .undoLast, .stopRun, .clearConversation, .archiveBot: .card
-        case .deleteBot, .publish: .reply
+        case .deleteBot, .publish, .save: .reply
         }
     }
 
@@ -62,6 +63,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .archiveBot: ["archive"]
         case .deleteBot: ["bot", "yourself", "project"]
         case .publish: ["publish", "deploy", "online", "internet"]
+        case .save: ["save", "saved", "saving"]
         }
     }
 
@@ -93,6 +95,9 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .archiveBot: ["you", "yourself", "bot", "project", "away", "put"]
         case .deleteBot: ["delete", "remove", "get", "rid", "of", "permanently", "forever", "erase"]
         case .publish: ["it", "site", "website", "put", "go", "how", "do", "i", "can", "on", "the", "live", "make", "get", "ship"]
+        // "save my changes", "is it saved?", "how do I save?"
+        case .save: ["my", "changes", "change", "work", "how", "do", "i", "did", "you", "everything", "all", "progress", "file",
+                     "files", "are", "they", "was", "got", "remember"]
         }
     }
 
@@ -138,12 +143,16 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
     }
 
     /// What the object alone asks for ("preview?").
-    private var isDefault: Bool { [.openPreview, .startReview, .undoLast, .stopRun, .archiveBot, .publish].contains(self) }
+    private var isDefault: Bool { [.openPreview, .startReview, .undoLast, .stopRun, .archiveBot, .publish, .save].contains(self) }
 
     /// Whether the bot can do it now; nil when it can, else the sentence
     /// that says why not (never handed to the crew instead).
     @MainActor
     func unavailable(for bot: Bot, runs: RunCoordinator, store: BotStore) -> String? {
+        #if !os(macOS)
+        // Runs, work copies and their changes live on the Mac.
+        if [.startReview, .undoLast].contains(self) { return String(localized: "That happens in Mux Bot on your Mac, where \(bot.name)'s changes are.") }
+        #endif
         switch self {
         case .startReview:
             if runs.review(for: bot) != nil { return String(localized: "\(bot.name) is already in review. It's pinned at the top of this thread.") }
@@ -155,7 +164,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
             if (bot.runs ?? []).contains(where: { $0.phase.isActive }) { return String(localized: "Stop it from the Mac it runs on.") }
             return String(localized: "Nothing is running right now.")
         case .archiveBot: return BotStore.archiveBlocker(bot)
-        case .clearConversation, .deleteBot, .publish: return nil
+        case .clearConversation, .deleteBot, .publish, .save: return nil
         case .openPreview, .reloadPreview, .fullWindowPreview, .phoneView, .tabletView, .desktopView, .pickMode:
             return runs.canPreview(bot) ? nil : PreviewRequest.cantText(bot.name)
         case .stopPreview: return runs.livePreviews[bot.id] == nil ? String(localized: "The preview isn't running.") : nil
@@ -243,6 +252,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .clearConversation: String(localized: "Clear this conversation? Approve to clear it.")
         case .archiveBot: String(localized: "Archive me? Approve to archive.")
         case .deleteBot: String(localized: "Delete is only in Archived Bots, so nothing is deleted by accident. Say “archive this bot” first, then delete it there.")
+        case .save: String(localized: "There's nothing to save: every change is saved as soon as its run finishes, and Undo on its card takes it back.")
         case .publish: String(localized: "Mux Bot doesn't put sites on the internet yet. The last step it does is Start review, then Merge, which saves your changes to the project on GitHub.")
         }
     }
