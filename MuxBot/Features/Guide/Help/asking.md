@@ -4,7 +4,7 @@ A bot works on one project, like your website. You tell it what you want in your
 
 ## Things to ask for
 
-- Change words: "Change the headline to Fresh bread every morning".
+- Change words: "Change the headline to Open seven days a week".
 - Change the look: "Make it dark green", "use a bigger font for the titles", "more space between sections".
 - Add or remove parts: "Add an About page", "add a section with three services", "remove the contact part".
 - Fix how it looks on a phone: "The menu is squished on my phone".
