@@ -56,8 +56,9 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .pickMode: ["point", "pick", "pointing"]
         case .botInfo: ["info", "information", "details"]
         case .pairing: ["pair", "pairing", "darkmux"]
-        // "create a PR", "make a pull request": GitHub's name for a review.
-        case .startReview: ["review", "pr", "prs", "pull"]
+        // "create a PR", "make a pull request": GitHub's name for a review;
+        // "merge my changes" starts with one too (Merge is on its card).
+        case .startReview: ["review", "pr", "prs", "pull", "merge"]
         case .undoLast: ["undo", "revert"]
         case .stopRun: ["stop"]
         case .clearConversation: ["chat", "conversation", "thread", "messages", "history"]
