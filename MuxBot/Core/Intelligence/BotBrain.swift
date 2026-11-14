@@ -213,6 +213,15 @@ enum FallbackBrain {
                        action: .dispatch(crew: .coder, task: "Fix #\(first.number): \(first.title) (\(repo))"))
     }
 
+    /// The model's crew pick, kept unless it's the Eval runner for a
+    /// request that never asks for an eval (the model picked it for "start
+    /// the preview"): that work is the Coder's.
+    static func checkedCrew(_ picked: CrewRole, request: String) -> CrewRole {
+        guard picked == .evalRunner else { return picked }
+        let lower = request.lowercased()
+        return crew(for: lower) == .evalRunner || lower.contains(CrewRole.evalRunner.name.lowercased()) ? .evalRunner : .coder
+    }
+
     /// The crew role whose keywords the request mentions most.
     static func crew(for lower: String) -> CrewRole? {
         let words = tokens(lower)
@@ -343,6 +352,8 @@ enum GeneratedCrew {
 /// the thread; any proposed action waits on an Approve / Cancel card.
 @MainActor @Observable
 final class BotBrain {
+    /// A bot whose thread asked for its preview in words: the thread opens it.
+    var previewRequested: UUID?
     /// The crop of the element a message was sent with, until its bug card
     /// is drafted, by thread.
     var cropsForNextBug: [ChatContext: Data] = [:]
@@ -582,6 +593,19 @@ final class BotBrain {
             message.intentRaw = Intent.ask.rawValue
             let pageFile = context.botId.flatMap(store.bot(id:)).flatMap(runs.recipes.recipe(for:))?.pageFile
             store.append(.assistant, ElementExplainer.explain(element, pageFile: pageFile), to: conversation)
+            return
+        }
+        // "start the preview", "where's the preview?": the app opens it (or
+        // says why it can't); it's never crew work.
+        if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, PreviewRequest.matches(text) {
+            message.intentRaw = Intent.ask.rawValue
+            if runs.canPreview(bot) {
+                store.append(.assistant, PreviewRequest.openingText, to: conversation)
+                previewRequested = bot.id
+            } else {
+                store.append(.assistant, PreviewRequest.cantText(bot.name), to: conversation)
+            }
+            store.save()
             return
         }
         var intent = explicit ?? Intent.infer(text, hasElement: element != nil)
@@ -1380,7 +1404,8 @@ final class BotBrain {
                 return BotTurn(reply: g.reply, action: .createBot(BotDraft(name: g.newBotName, instructions: g.detail)))
             case .dispatch:
                 guard speaker != nil else { return BotTurn(reply: g.reply, action: nil) }
-                return BotTurn(reply: g.reply, action: .dispatch(crew: g.crew.role, task: g.detail.isEmpty ? request : g.detail))
+                return BotTurn(reply: g.reply, action: .dispatch(crew: FallbackBrain.checkedCrew(g.crew.role, request: request),
+                                                                  task: g.detail.isEmpty ? request : g.detail))
             case .addResource:
                 let value = g.detail.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard speaker != nil, !value.isEmpty else { return BotTurn(reply: g.reply, action: nil) }

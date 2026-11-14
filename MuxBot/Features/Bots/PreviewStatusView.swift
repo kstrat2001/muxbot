@@ -141,6 +141,10 @@ struct PreviewStatusView: View {
         case .notPaired:
             Button("Pair with darkmux…", systemImage: "link") { router.showPairing = true }
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+        case .noWorkCopy:
+            Button("Try again", systemImage: "arrow.clockwise", action: retry)
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+            if let details = brain.runs.workCopyDetails[bot.id] ?? workCopyFailure { TechnicalDetails(text: details) }
         case .earlierPairing:
             HStack {
                 Button("New work copy", systemImage: "arrow.triangle.branch") {
@@ -150,6 +154,11 @@ struct PreviewStatusView: View {
                 Button("Try again", systemImage: "arrow.clockwise", action: retry)
             }
         }
+    }
+
+    /// darkmux's plain sentence when the work copy failed, if it gave no details.
+    private var workCopyFailure: String? {
+        if case let .failed(why)? = brain.runs.workCopySetup[bot.id] { why } else { nil }
     }
 
     static var needsCheckoutText: String {

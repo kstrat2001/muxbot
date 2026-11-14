@@ -714,7 +714,20 @@ final class RunCoordinator {
     /// Whether a preview can be shown: darkmux can run one in the bot's work
     /// copy, or you added a preview link.
     func canPreview(_ bot: Bot) -> Bool {
-        (bot.workspaceName != nil && connection?.isPaired == true) || bot.previewURL != nil
+        if (bot.workspaceName != nil && connection?.isPaired == true) || bot.previewURL != nil { return true }
+        #if os(macOS)
+        // A project with no work copy on this Mac yet (it failed, or you
+        // weren't paired then), or not paired now: the panel says why and
+        // offers the fix, rather than the button going missing.
+        return bot.workspaceName != nil || Self.hasProject(bot)
+        #else
+        return false
+        #endif
+    }
+
+    /// A repo, a folder of yours or a template darkmux can make a work copy from.
+    static func hasProject(_ bot: Bot) -> Bool {
+        !bot.repoSlugs.isEmpty || bot.folderBookmark != nil || !bot.useCaseId.isEmpty
     }
 
     /// Has darkmux run the bot's preview, and follows it until it's ready or
@@ -728,7 +741,7 @@ final class RunCoordinator {
 
     private func startPreview(for bot: Bot, clean: Bool) async {
         guard let name = bot.workspaceName else {
-            Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
+            await previewWithoutWorkCopy(bot)
             return
         }
         if let connection, connection.token == nil {
@@ -851,6 +864,37 @@ final class RunCoordinator {
     private var waitingPreviews: [UUID: Bot] = [:]
     /// Tests watch retries here; nil starts them for real.
     var retryPreview: ((Bot) -> Void)?
+
+    /// The preview of a bot with no work copy on this Mac: darkmux makes
+    /// one first (a worktree of your checkout, a clone, or the template's
+    /// project), then starts the preview, or the panel says why it can't.
+    private func previewWithoutWorkCopy(_ bot: Bot) async {
+        guard Self.hasProject(bot) else {
+            Self.previewLog.debug("preview \(bot.name, privacy: .public): no work copy, nothing to start")
+            return
+        }
+        if workspaceMaker == nil, connection?.token == nil {
+            livePreviews[bot.id] = LivePreview(status: connection == nil ? .waiting : .unavailable(.notPaired))
+            waitingPreviews[bot.id] = bot
+            return
+        }
+        livePreviews[bot.id] = LivePreview(status: .settingUpWorkCopy)
+        if workCopySetup[bot.id] == .settingUp {
+            // Still being made (a clone takes a while): wait for it, never a second one.
+            while workCopySetup[bot.id] == .settingUp {
+                try? await Task.sleep(for: .milliseconds(500))
+                if Task.isCancelled { return }
+            }
+        } else if let context = bot.modelContext {
+            await setUpWorkCopy(for: bot, store: BotStore(context: context))
+        }
+        guard bot.workspaceName != nil else {
+            livePreviews[bot.id] = LivePreview(status: .unavailable(.noWorkCopy))
+            return
+        }
+        livePreviews[bot.id] = nil
+        await startPreview(for: bot, clean: false)
+    }
 
     /// The darkmux connection is here: start the previews that were waiting.
     func connectionAttached() {

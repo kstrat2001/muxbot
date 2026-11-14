@@ -112,13 +112,19 @@ enum ExistingProject {
             store.save()
             await runs.setUpWorkCopy(for: bot, store: store)
         }
-        store.append(.assistant, greeting(name: name, source: source, skills: skillsSource, madeHere: bot.workspaceName != nil), to: thread)
+        var setupProblem: String?
+        if case let .failed(why)? = runs.workCopySetup[bot.id] { setupProblem = why }
+        store.append(.assistant, greeting(name: name, source: source, skills: skillsSource, madeHere: bot.workspaceName != nil,
+                                          setupProblem: setupProblem), to: thread)
         return (bot, problem)
     }
 
-    static func greeting(name: String, source: Source, skills: SkillsSource, madeHere: Bool = true) -> String {
+    static func greeting(name: String, source: Source, skills: SkillsSource, madeHere: Bool = true, setupProblem: String? = nil) -> String {
         var parts = [String(localized: "Hi, I'm \(name). Tell me what to change, or point at something in the preview.")]
-        if !madeHere {
+        if !madeHere, let setupProblem {
+            // Paired, and darkmux couldn't make the copy: never "pair first".
+            parts.append(String(localized: "darkmux couldn't set up my work copy on this Mac: \(setupProblem) Open the preview to try again."))
+        } else if !madeHere {
             parts.append(String(localized: "darkmux sets up my work copy once Mux Bot is paired with it on your Mac."))
         } else if case .github(_, nil) = source {
             parts.append(String(localized: "darkmux cloned this repo, and a clone gets no preview: darkmux runs a preview only from your own checkout. Add your checkout with Add folder in my info to see one."))

@@ -77,6 +77,8 @@ struct LivePreview: Equatable, Sendable {
         case checkoutMoved
         /// The work copy was made for this app's earlier pairing.
         case earlierPairing
+        /// darkmux couldn't make the bot's work copy on this Mac.
+        case noWorkCopy
 
         var title: String {
             switch self {
@@ -90,6 +92,7 @@ struct LivePreview: Equatable, Sendable {
             case .checkoutMoved: String(localized: "Your checkout moved")
             case .earlierPairing: String(localized: "This work copy is from an earlier pairing")
             case .noRecipe: String(localized: "This project has no preview setup")
+            case .noWorkCopy: String(localized: "darkmux couldn't get the project onto this Mac")
             }
         }
 
@@ -115,6 +118,8 @@ struct LivePreview: Equatable, Sendable {
                 return String(localized: "darkmux's copy of \(repo) is no longer linked to your checkout (it moved, or was deleted). Add your checkout again.")
             case .earlierPairing:
                 return String(localized: "darkmux made it for this app before you paired again, so it won't let this pairing use it. Set up a new work copy for it (a new branch; the earlier commits stay on the old one).")
+            case .noWorkCopy:
+                return String(localized: "darkmux makes its own copy of \(repo) on this Mac to show the preview and to work in, and that didn't work. Try again; Show details has what darkmux said.")
             case .noRecipe:
                 let folder = folder ?? String(localized: "your checkout")
                 return String(localized: "darkmux needs to know how \(folder) starts before it can show a preview. Set up the preview: Mux Bot works it out from the project's files, and you check it.")
