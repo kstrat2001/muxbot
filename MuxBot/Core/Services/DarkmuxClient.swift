@@ -60,7 +60,7 @@ struct DarkmuxClient: Sendable {
         var activity: String?
         enum CodingKeys: String, CodingKey { case status, error, result, reason, changes, commit, branch, code, files, activity; case commitError = "commit_error"; case changesError = "changes_error" }
         private struct PathOnly: Decodable { var path: String }
-        enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant" }
+        enum ResultKeys: String, CodingKey { case finalAssistant = "final_assistant", result, error }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             status = try c.decode(String.self, forKey: .status)
@@ -80,6 +80,14 @@ struct DarkmuxClient: Sendable {
             }
             let result = try? c.nestedContainer(keyedBy: ResultKeys.self, forKey: .result)
             finalAssistant = try result?.decodeIfPresent(String.self, forKey: .finalAssistant)
+            // A dispatch that failed (it never reached the model, say) still
+            // prints its envelope, and an older darkmux called that "done":
+            // it's a failure, never "Changed nothing".
+            if status == "done", (try? result?.decodeIfPresent(String.self, forKey: .result)) == "error" {
+                status = "error"
+                if error == nil { error = (try? result?.decodeIfPresent(String.self, forKey: .error)) ?? nil }
+                if reason == nil { reason = "dispatch error" }
+            }
         }
     }
 

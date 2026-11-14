@@ -29,6 +29,43 @@ struct RunsSayWhatHappenedTests {
         return run
     }
 
+    /// Kain, 2026-11-14: LM Studio's server was off, the dispatch failed in
+    /// 5 seconds, and darkmux still said "done": the card said "Changed
+    /// nothing." A failed envelope is a failure that says why.
+    @Test func aDispatchThatNeverReachedTheModelIsAFailure() {
+        let s = status(#"{"status":"done","result":{"result":"error","error":"streaming request transport failure: http://localhost:1234/v1/chat/completions: Connection refused (os error 61)"},"changes":{"files":[]}}"#)
+        #expect(s.status == "error")
+        let why = RunResultText.failure(code: s.code, error: s.error ?? "", reason: s.reason)
+        #expect(why.contains("isn't answering"), "\(why)")
+        #expect(status(#"{"status":"done","result":{"result":"stop","final_assistant":"ok"}}"#).status == "done")
+    }
+
+    /// Kain, 2026-11-14: "the app isn't checking at all?" A model on LM
+    /// Studio with its local server off can't run: the card says so before
+    /// Approve and nothing is sent; turning the server on clears it.
+    @Test func aModelWhoseServerIsOffIsCaughtBeforeApprove() async {
+        let (store, bot, runs) = setUp()
+        let run = store.proposeRun(task: "remove this text", crew: .coder, on: bot)
+        runs.lastListed = [DarkmuxClient.ProfileInfo(name: "qwen", model: "qwen3.6", endpoint: "lmstudio", reachable: true)]
+        runs.override(run, with: "qwen")
+        var up = false
+        runs.lmStudioServerProbe = { up }
+        await runs.checkModelServer(for: run)
+        #expect(runs.blocker(for: run) == .modelServerOff("LM Studio"))
+        #expect(runs.whyRunCannotStart(run)?.contains("local server is off") == true)
+        runs.decide(.approve, on: run, store: store)
+        #expect(run.phase == .proposed, "nothing is sent")
+        up = true
+        await runs.checkModelServer(for: run)
+        #expect(runs.blocker(for: run) == nil)
+    }
+
+    @Test func nothingChangedAndNothingSaidSaysWhatToTry() {
+        let line = RunResultText.fallbackSummary(report: "", files: [])
+        #expect(line.hasPrefix("Changed nothing"))
+        #expect(line.contains("another model"))
+    }
+
     private func status(_ json: String) -> DarkmuxClient.WorkStatus {
         try! JSONDecoder().decode(DarkmuxClient.WorkStatus.self, from: Data(json.utf8))
     }

@@ -19,6 +19,9 @@ enum RunBlocker: Equatable, Sendable {
     case notOnThisDevice
     /// Another run is still working in the bot's work copy.
     case runWorking(UUID)
+    /// The chosen model's server doesn't answer (LM Studio open with its
+    /// local server off): the run would fail at once, so it isn't sent.
+    case modelServerOff(String)
 
     /// Runs start only from the Mac app until phone pairing exists.
     #if os(iOS)
@@ -58,6 +61,9 @@ enum RunBlocker: Equatable, Sendable {
         case let .needsWorkCopy(what): "\(what) needs a work copy on this Mac"
         case .notOnThisDevice: "runs start from the Mac app for now"
         case .runWorking: "a run is still working in this bot's work copy: wait for it, or stop it"
+        case let .modelServerOff(engine) where engine == "LM Studio":
+            "LM Studio's local server is off, so the model can't answer. Turn on its server in LM Studio (or pick another model with Change)"
+        case let .modelServerOff(engine): "\(engine) isn't answering, so the model can't run. Start it, or pick another model with Change"
         }
     }
 }
