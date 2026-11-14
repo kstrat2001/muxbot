@@ -28,7 +28,7 @@ struct PreviewRequestTests {
         await brain.send("start the preview", in: .bot(bot.id), store: store)
         #expect((bot.runs ?? []).isEmpty, "no crew run")
         #if os(macOS)
-        #expect(brain.previewRequested == bot.id)
+        #expect(brain.appActionRequested == AppActionRequest(bot: bot.id, action: .openPreview))
         #expect(store.conversation(for: .bot(bot.id)).messages?.contains { $0.content == PreviewRequest.openingText } == true)
         #endif
     }

@@ -10,6 +10,7 @@ struct BotThreadView: View {
     @Environment(BotBrain.self) private var brain
     @Environment(GitHubAuth.self) private var github
     @Environment(FleetConnection.self) private var connection
+    @Environment(PreviewController.self) private var preview
     @Query private var conversations: [ChatConversation]
     @Query private var matches: [Bot]
     @State private var showInfo = false
@@ -144,11 +145,16 @@ struct BotThreadView: View {
                 await brain.runs.keepPreviewAlive(for: bot)
             }
         }
-        .onChange(of: brain.previewRequested) {
-            // "start the preview" in the chat opens it.
-            guard let bot, brain.previewRequested == bot.id else { return }
-            brain.previewRequested = nil
-            router.showPreview = true
+        .onChange(of: brain.appActionRequested) {
+            // "start the preview" in the chat: the app does it here.
+            guard let bot, let request = brain.appActionRequested, request.bot == bot.id else { return }
+            brain.appActionRequested = nil
+            switch request.action {
+            case .openPreview: router.showPreview = true
+            case .hidePreview: router.showPreview = false
+            case .reloadPreview:
+                if router.showPreview { preview.goHome() } else { router.showPreview = true }
+            }
         }
         .onDisappear {
             // Leaving the bot stops its dev server after a grace period (so
