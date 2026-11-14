@@ -318,12 +318,15 @@ struct BotSkill: Codable, Equatable, Sendable {
     /// What the bot asks when the skill is picked by name: what exactly,
     /// with the first example ask from its "When:" line.
     var question: String {
+        if let example { return String(localized: "\(name): what exactly? For example, “\(example)”.") }
+        return String(localized: "\(name): what exactly should I do?")
+    }
+
+    /// The first example ask from its "When:" line ("Make it dark green").
+    var example: String? {
         let when = body.components(separatedBy: "\n").first { $0.lowercased().hasPrefix("when:") } ?? ""
         let quoted = when.split(separator: "\"", omittingEmptySubsequences: false)
-        if quoted.count >= 3, !quoted[1].isEmpty {
-            return String(localized: "\(name): what exactly? For example, “\(String(quoted[1]))”.")
-        }
-        return String(localized: "\(name): what exactly should I do?")
+        return quoted.count >= 3 && !quoted[1].isEmpty ? String(quoted[1]) : nil
     }
 
     /// The skills that fit a request, best first (at most two), searched on

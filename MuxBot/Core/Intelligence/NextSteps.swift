@@ -19,6 +19,10 @@ enum NextSteps {
         "what can i do", "what can you do", "what do i do", "what should i do", "what now", "now what",
         "where do i start", "where should i start", "how do i start", "i don't know what to do", "i dont know what to do",
         "what do you do", "what can we do", "ideas", "any ideas", "give me ideas", "?",
+        "what's next", "whats next", "what is next", "what should i do next", "what do i do next", "what now then",
+        "what can you change", "what can i change", "what else", "what else can i do", "what else can you do",
+        "suggestions", "any suggestions", "what can i ask", "what can i ask for", "what can i ask you", "what do i say",
+        "what should i say", "what should i ask", "what should i ask for",
     ]
 
     /// Whether the message only asks for help with what to do.
@@ -46,7 +50,7 @@ enum NextSteps {
         }
         if let running = all.first(where: { $0.phase.isActive }) {
             let steps = runs.canPreview(bot) ? [step(.openPreview)] : []
-            return (String(localized: "The crew is working on “\(running.task)”. I'll post the result here when it's done."), steps)
+            return (String(localized: "\(running.crew.name) is working on “\(running.task)”. I'll post the result here when it's done."), steps)
         }
         var steps: [Step] = []
         let status: String
@@ -70,7 +74,19 @@ enum NextSteps {
         if runs.canPreview(bot), runs.livePreviews[bot.id] == nil { steps.append(step(.openPreview)) }
         steps += bot.skills.map { Step(title: $0.name, systemImage: "wand.and.stars", message: $0.name) }
         if runs.canPreview(bot) { steps.append(step(.pickMode)) }
-        return (status, Array(steps.prefix(maxSteps)))
+        return (examples(bot.skills).map { status + " " + $0 } ?? status, Array(steps.prefix(maxSteps)))
+    }
+
+    /// "You can say things like “Make it dark green” or “Add an About page”.",
+    /// from the skills' own examples: what a request sounds like.
+    static func examples(_ skills: [BotSkill]) -> String? {
+        let said = skills.compactMap(\.example).prefix(3).map { "“\($0)”" }
+        switch said.count {
+        case 0: return nil
+        case 1: return String(localized: "You can say things like \(said[0]).")
+        case 2: return String(localized: "You can say things like \(said[0]) or \(said[1]).")
+        default: return String(localized: "You can say things like \(said[0]), \(said[1]) or \(said[2]).")
+        }
     }
 
     private static func step(_ action: AppAction) -> Step {

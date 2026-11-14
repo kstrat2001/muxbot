@@ -220,7 +220,7 @@ struct RunCardView: View {
             }
             if isLatest && run.phase == .result {
                 HStack {
-                    Text("Reply to change it.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
+                    Text("Reply to change it, or say “help me” for ideas.").font(AppFont.caption()).foregroundStyle(Color.secondaryText)
                     Spacer()
                     if brain.runs.deciding.contains(run.id) { ProgressView().controlSize(.small) }
                     if RunCardState.canUndo(run) {

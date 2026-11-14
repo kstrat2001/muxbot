@@ -82,13 +82,37 @@ final class LeadGuide {
     }
 
     private func answer(_ question: String, store: BotStore, brain: BotBrain) async {
-        let hits = library.search(question)
-        guard let answer = await answerText(for: question, from: hits, brain: brain) else {
+        if await !answerIfKnown(question, in: .lead, store: store, brain: brain) {
             store.append(.assistant, Self.dontKnow, to: store.conversation(for: .lead))
-            return
         }
-        store.postGuideCard(.answer(text: answer.text, articles: answer.articles, onDevice: answer.onDevice), summary: answer.text)
     }
+
+    /// Answers from the help when it covers the question, citing its
+    /// articles; false when it doesn't (nothing is posted).
+    @discardableResult
+    func answerIfKnown(_ question: String, in chat: ChatContext, store: BotStore, brain: BotBrain) async -> Bool {
+        let hits = library.search(question)
+        guard let answer = await answerText(for: question, from: hits, brain: brain) else { return false }
+        store.postGuideCard(.answer(text: answer.text, articles: answer.articles, onDevice: answer.onDevice), summary: answer.text, in: chat)
+        return true
+    }
+
+    /// A question in a bot's thread about how the app works ("how do I undo
+    /// a change?", "can you see my site?"), not about the project: it names
+    /// something of the app's. The help answers it when it covers it.
+    nonisolated static func isAboutTheApp(_ lower: String) -> Bool {
+        guard GuideRoute.isQuestion(lower) else { return false }
+        if ["mux bot", "can you see", "how does this work", "how do you work", "what can you do", "what are you"].contains(where: lower.contains) { return true }
+        // "can you review the login code?" asks for work, not about the app.
+        if ["can you ", "could you ", "would you ", "will you ", "please "].contains(where: lower.hasPrefix) { return false }
+        let words = Set(lower.split { !$0.isLetter }.map(String.init))
+        return !words.isDisjoint(with: appWords)
+    }
+
+    private nonisolated static let appWords: Set<String> = [
+        "approve", "approved", "approving", "undo", "preview", "previews", "review", "merge", "github", "darkmux",
+        "model", "models", "pair", "pairing", "sync", "notifications", "card", "cards", "skill", "skills", "backup", "backed",
+    ]
 
     struct Answer { var text: String; var articles: [String]; var onDevice: Bool }
 
