@@ -727,11 +727,12 @@ final class BotBrain {
         // it, so what you say next is never taken as its answer.
         if let bot, let pending = pendingAnswers[bot.id] {
             let stale = Date().timeIntervalSince(pending.askedAt) > Self.pendingAnswerLifetime
-            let other = intent.map { ![.fix, .ask].contains($0) } ?? false
+            // A described problem answers "what's still wrong?" too.
+            let other = intent.map { ![.fix, .ask, .bug].contains($0) } ?? false
             if stale || Self.isDismissal(text) || other || Intent.issueNumber(in: text) != nil { pendingAnswers[bot.id] = nil }
         }
         // The answer to the bot's one question becomes the run it was about.
-        if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix,
+        if let bot, pendingAnswers[bot.id] != nil, intent == nil || intent == .fix || intent == .bug,
            !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)),
            Intent.issueNumber(in: text) == nil, !Self.isDismissal(text), !WorkStatus.isWorkQuestion(text.lowercased()),
            let pending = pendingAnswers.removeValue(forKey: bot.id) {
