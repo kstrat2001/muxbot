@@ -31,7 +31,7 @@ enum SetupProbe {
             // Paired, darkmux says what LM Studio can run (it checks LM
             // Studio's server too, darkmux #3578); the app's own look is
             // only for before pairing.
-            if let seen = lmStudio(in: listed) { f.lmStudio = seen }
+            if let seen = SetupProbe.lmStudio(in: listed) { f.lmStudio = seen }
         }
         #else
         var f = SetupFacts(platform: .phone, appleSilicon: false, memoryGB: memoryGB)
