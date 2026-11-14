@@ -60,9 +60,22 @@ struct IntentParsingTests {
         ("there's no space between these", true, .bug),
         // Questions stay questions; one typo never makes a short word a verb.
         ("should the header be white?", false, .ask),
+        // Naming an issue in a change is never a list of GitHub issues.
+        ("change \"logic flaws\" to a different security issue", true, .fix),
+        ("change \"logic flaws\" to a different security issue", false, .fix),
+        ("rename the bug section to Known problems", false, .fix),
+        ("any open issues?", false, .issues),
+        ("show me the open issues", false, .issues),
+        ("can you list the issues", false, .issues),
     ])
     func inference(text: String, hasElement: Bool, intent: Intent) {
         #expect(Intent.infer(text, hasElement: hasElement) == intent)
+    }
+
+    @Test(arguments: ["the security issue there is wrong", "change \"logic flaws\" to a different security issue",
+                      "rename the bug section", "make the issues list bigger"])
+    func namingAnIssueIsNotAskingForTheList(text: String) {
+        #expect(!FallbackBrain.isIssueQuestion(text.lowercased()), "\(text)")
     }
 
     @Test func plainChatInfersNothing() {

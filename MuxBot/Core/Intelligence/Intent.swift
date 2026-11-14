@@ -137,8 +137,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     static func infer(_ text: String, hasElement: Bool) -> Intent? {
         let lower = text.lowercased()
         if issueNumber(in: text) != nil, lower.contains("fix") { return .fix }
-        if FallbackBrain.isIssueQuestion(lower) { return .issues }
+        // Something picked: the message is about it, never a list of issues.
         if hasElement { return aboutElement(lower) }
+        if FallbackBrain.isIssueQuestion(lower) { return .issues }
         // "Can you change the header color?" asks for a change, not an answer.
         if isPoliteChangeRequest(lower) { return .fix }
         // "change the green color to white", "the header should be blue": a
@@ -176,6 +177,20 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     static func isLayoutComplaint(_ lower: String) -> Bool {
         let text = " \(lower.trimmingCharacters(in: .whitespacesAndNewlines)) "
         return (problemWords + layoutWords).contains { text.contains($0) }
+    }
+
+    /// A change to the project ("change X to a different security issue",
+    /// "the footer shouldn't say bug"), not a request to show something:
+    /// "show me the open issues" is a question, so "show" and "list" don't count.
+    static func asksForAnEdit(_ lower: String) -> Bool {
+        var text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        for polite in ["please ", "can you ", "could you ", "would you ", "will you ", "pls "] where text.hasPrefix(polite) {
+            text = String(text.dropFirst(polite.count))
+        }
+        if text.hasPrefix("please ") { text = String(text.dropFirst(7)) }
+        let verb = text.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        if ["show", "list", "fix"].contains(verb) { return false }
+        return startsWithChangeVerb(text)
     }
 
     /// "can/could/would/will you <change verb> …".

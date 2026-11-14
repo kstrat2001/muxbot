@@ -183,7 +183,14 @@ enum FallbackBrain {
 
     /// "Any bug tickets?", "open issues", "what PRs are open" and the like.
     static func isIssueQuestion(_ lower: String) -> Bool {
+        // "change "logic flaws" to a different security issue" asks for a
+        // change that merely names an issue: never a list of GitHub issues.
+        if Intent.asksForAnEdit(lower) { return false }
         let padded = " \(lower.replacingOccurrences(of: "?", with: " ")) "
+        // Only a question or a request to see them: "the security issue is
+        // wrong" is a remark, not a request for the list.
+        let seeking = [" any ", " open ", " show ", " list ", " which ", " what ", " are there ", " is there ", " how many ", " see "]
+        guard lower.contains("?") || seeking.contains(where: padded.contains) else { return false }
         let asks = ["issue", "ticket", "bug", "prs", "to fix", "needs fixing", "need fixing", "broken"]
         // "PR 9 is still not right" names one PR: it's about that PR, not a list.
         let asksAboutPRs = Intent.prReference(in: lower) == nil && ["pull request", " pr "].contains { padded.contains($0) }
