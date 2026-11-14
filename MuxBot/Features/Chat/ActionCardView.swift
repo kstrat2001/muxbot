@@ -8,6 +8,11 @@ struct ActionCardView: View {
     @Environment(\.modelContext) private var context
     @Environment(BotBrain.self) private var brain
 
+    /// The bot whose thread the card is in.
+    private var botName: String {
+        message.conversation?.roleId.flatMap { BotStore(context: context).bot(id: $0)?.name } ?? ""
+    }
+
     var body: some View {
         CardView {
             VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -31,6 +36,9 @@ struct ActionCardView: View {
                     PreviewSetupCardView(message: message, setup: setup)
                 case let .setUpPlaybook(setup)?:
                     PlaybookSetupCardView(message: message, setup: setup)
+                case let .app(action, _, detail)?:
+                    Label(action.cardTitle(bot: botName), systemImage: action.systemImage).font(AppFont.headline())
+                    if !detail.isEmpty { Text(detail).font(AppFont.body()) }
                 case nil:
                     Text(message.content).font(AppFont.body())
                 }

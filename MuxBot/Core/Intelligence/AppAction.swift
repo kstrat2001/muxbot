@@ -4,7 +4,7 @@ import Foundation
 /// preview", "reload the preview"): matched by rules before any crew work,
 /// so asking for the app never becomes a coding run. One registry; each
 /// entry names its own words and nothing else may be in the message.
-enum AppAction: String, CaseIterable, Sendable {
+enum AppAction: String, CaseIterable, Codable, Sendable {
     case openPreview
     case hidePreview
     case reloadPreview
@@ -16,6 +16,13 @@ enum AppAction: String, CaseIterable, Sendable {
     case pickMode
     case botInfo
     case pairing
+    case startReview
+    case undoLast
+    case stopRun
+    case clearConversation
+    case archiveBot
+    case deleteBot
+    case publish
 
     /// How a matched action is carried out.
     enum Handling: Sendable {
@@ -23,12 +30,18 @@ enum AppAction: String, CaseIterable, Sendable {
         case direct
         /// Changes something: an Approve card first.
         case card
+        /// Something the app doesn't do: a plain answer that says so.
+        case reply
     }
 
     var handling: Handling {
         switch self {
         case .openPreview, .hidePreview, .reloadPreview, .stopPreview, .fullWindowPreview, .phoneView, .tabletView,
-             .desktopView, .pickMode, .botInfo, .pairing: .direct
+             .desktopView, .pickMode, .botInfo, .pairing,
+             // Its sheet is the approval: the title and who reviews are there.
+             .startReview: .direct
+        case .undoLast, .stopRun, .clearConversation, .archiveBot: .card
+        case .deleteBot, .publish: .reply
         }
     }
 
@@ -42,6 +55,13 @@ enum AppAction: String, CaseIterable, Sendable {
         case .pickMode: ["point", "pick", "pointing"]
         case .botInfo: ["info", "information", "details"]
         case .pairing: ["pair", "pairing", "darkmux"]
+        case .startReview: ["review"]
+        case .undoLast: ["undo", "revert"]
+        case .stopRun: ["stop"]
+        case .clearConversation: ["chat", "conversation", "thread", "messages", "history"]
+        case .archiveBot: ["archive"]
+        case .deleteBot: ["bot", "yourself", "project"]
+        case .publish: ["publish", "deploy", "online", "internet"]
         }
     }
 
@@ -64,6 +84,15 @@ enum AppAction: String, CaseIterable, Sendable {
         case .pickMode: ["at", "on", "something", "thing", "element", "an", "out", "start", "turn", "mode", "show", "you", "where"]
         case .botInfo: ["show", "open", "see", "view", "bot", "your", "bots", "info", "about"]
         case .pairing: ["pair", "pairing", "with", "connect", "darkmux", "again", "mux", "bot", "on", "mac"]
+        // "review my changes", "start a review"; "review the login code" is the Reviewer's.
+        case .startReview: ["start", "my", "changes", "change", "work", "open", "ask", "for", "ready", "send", "to", "get"]
+        // "undo that", "undo the last change"; "undo the header color" is work.
+        case .undoLast: ["last", "change", "changes", "go", "back", "please", "run", "edit"]
+        case .stopRun: ["run", "running", "work", "working", "crew", "coder", "job", "now"]
+        case .clearConversation: ["clear", "empty", "wipe", "erase", "clean", "delete", "out", "start", "over", "fresh", "our"]
+        case .archiveBot: ["you", "yourself", "bot", "project", "away", "put"]
+        case .deleteBot: ["delete", "remove", "get", "rid", "of", "permanently", "forever", "erase"]
+        case .publish: ["it", "site", "website", "put", "go", "how", "do", "i", "can", "on", "the", "live", "make", "get", "ship"]
         }
     }
 
@@ -109,23 +138,88 @@ enum AppAction: String, CaseIterable, Sendable {
     }
 
     /// What the object alone asks for ("preview?").
-    private var isDefault: Bool { self == .openPreview }
+    private var isDefault: Bool { [.openPreview, .startReview, .undoLast, .stopRun, .archiveBot, .publish].contains(self) }
 
     /// Whether the bot can do it now; nil when it can, else the sentence
     /// that says why not (never handed to the crew instead).
     @MainActor
-    func unavailable(for bot: Bot, runs: RunCoordinator) -> String? {
+    func unavailable(for bot: Bot, runs: RunCoordinator, store: BotStore) -> String? {
         switch self {
+        case .startReview:
+            if runs.review(for: bot) != nil { return String(localized: "\(bot.name) is already in review. It's pinned at the top of this thread.") }
+            if bot.repoSlugs.isEmpty { return String(localized: "A review happens on GitHub, and \(bot.name) isn't there yet. Use Put it on GitHub in my info first.") }
+            return runs.unshippedRuns(bot, store: store).isEmpty ? String(localized: "There's nothing new to review yet. Ask me for a change first.") : nil
+        case .undoLast: return Self.lastUndoable(bot) == nil ? String(localized: "There's nothing to undo yet.") : nil
+        case .stopRun:
+            if Self.running(bot) != nil { return nil }
+            if (bot.runs ?? []).contains(where: { $0.phase.isActive }) { return String(localized: "Stop it from the Mac it runs on.") }
+            return String(localized: "Nothing is running right now.")
+        case .archiveBot: return BotStore.archiveBlocker(bot)
+        case .clearConversation, .deleteBot, .publish: return nil
         case .openPreview, .reloadPreview, .fullWindowPreview, .phoneView, .tabletView, .desktopView, .pickMode:
-            runs.canPreview(bot) ? nil : PreviewRequest.cantText(bot.name)
-        case .stopPreview: runs.livePreviews[bot.id] == nil ? String(localized: "The preview isn't running.") : nil
-        case .hidePreview, .botInfo: nil
+            return runs.canPreview(bot) ? nil : PreviewRequest.cantText(bot.name)
+        case .stopPreview: return runs.livePreviews[bot.id] == nil ? String(localized: "The preview isn't running.") : nil
+        case .hidePreview, .botInfo: return nil
         case .pairing:
             #if os(macOS)
-            runs.connection?.isPaired == true ? String(localized: "Mux Bot is already paired with darkmux on this Mac.") : nil
+            return runs.connection?.isPaired == true ? String(localized: "Mux Bot is already paired with darkmux on this Mac.") : nil
             #else
-            String(localized: "Pairing with darkmux happens in Mux Bot on your Mac.")
+            return String(localized: "Pairing with darkmux happens in Mux Bot on your Mac.")
             #endif
+        }
+    }
+
+    /// The newest run of this Mac's with a change Undo can take back.
+    @MainActor
+    static func lastUndoable(_ bot: Bot) -> BotRun? {
+        guard let last = (bot.runs ?? []).filter({ $0.startedAt != nil }).max(by: { $0.createdAt < $1.createdAt }),
+              last.phase == .result, last.keptCommit != nil, last.startedHere else { return nil }
+        return last
+    }
+
+    /// This Mac's run that's going now.
+    @MainActor
+    static func running(_ bot: Bot) -> BotRun? {
+        (bot.runs ?? []).first { $0.phase.isActive && $0.startedHere }
+    }
+
+    /// The run a card action is about, named on its card.
+    @MainActor
+    func target(for bot: Bot) -> BotRun? {
+        switch self {
+        case .undoLast: Self.lastUndoable(bot)
+        case .stopRun: Self.running(bot)
+        default: nil
+        }
+    }
+
+    /// The card's title and line for a card action.
+    func cardTitle(bot: String) -> String {
+        switch self {
+        case .undoLast: String(localized: "Undo the last change")
+        case .stopRun: String(localized: "Stop the run")
+        case .clearConversation: String(localized: "Clear this conversation")
+        case .archiveBot: String(localized: "Archive \(bot)")
+        default: doingText
+        }
+    }
+
+    func cardDetail(bot: String, task: String?) -> String {
+        switch self {
+        case .undoLast, .stopRun: task.map { "“\($0)”" } ?? ""
+        case .clearConversation: String(localized: "Its messages go; runs stay in Activity, and you can undo this until Mux Bot quits.")
+        case .archiveBot: String(localized: "\(bot) leaves the sidebar with everything kept. Restore brings it back from Archived Bots.")
+        default: ""
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .undoLast: "arrow.uturn.backward"
+        case .stopRun: "stop.circle"
+        case .clearConversation: "eraser"
+        case .archiveBot: "archivebox"
+        default: "app"
         }
     }
 
@@ -143,6 +237,13 @@ enum AppAction: String, CaseIterable, Sendable {
         case .pickMode: String(localized: "Point at something in the preview and click it, then tell me about it.")
         case .botInfo: String(localized: "Opening my info.")
         case .pairing: String(localized: "Opening pairing with darkmux.")
+        case .startReview: String(localized: "Opening Start review.")
+        case .undoLast: String(localized: "Undo it? Approve and darkmux takes that change back.")
+        case .stopRun: String(localized: "Stop it? Approve and darkmux stops the run.")
+        case .clearConversation: String(localized: "Clear this conversation? Approve to clear it.")
+        case .archiveBot: String(localized: "Archive me? Approve to archive.")
+        case .deleteBot: String(localized: "Delete is only in Archived Bots, so nothing is deleted by accident. Say “archive this bot” first, then delete it there.")
+        case .publish: String(localized: "Mux Bot doesn't put sites on the internet yet. The last step it does is Start review, then Merge, which saves your changes to the project on GitHub.")
         }
     }
 }
