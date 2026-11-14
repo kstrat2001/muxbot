@@ -3,7 +3,8 @@ import SwiftData
 
 /// A drafted bug: what you described, measured page facts, and two ways
 /// forward: change it now in the bot's task (the Coder crew), or File issue
-/// to save it on GitHub for later (prefilled, screenshot on the clipboard).
+/// to save it on GitHub for later (prefilled, screenshot on the clipboard),
+/// or Dismiss when it isn't what you meant (`BotStore.dismissBug`).
 /// No type: pointing at something means "change it here".
 struct BugCardView: View {
     let message: ChatMessage
@@ -33,6 +34,10 @@ struct BugCardView: View {
                     if !draft.facts.isEmpty { TechnicalDetails(text: draft.details) }
                     if store.sentRun(for: message) == nil { modelRow }
                     HStack {
+                        if store.sentRun(for: message) == nil {
+                            Button("Dismiss", systemImage: "xmark") { store.dismissBug(message) }
+                                .buttonStyle(.bordered)
+                        }
                         Button("File issue", systemImage: "arrow.up.forward.square") { file(draft) }
                             .buttonStyle(.bordered)
                             .disabled(draft.issueURL == nil)
