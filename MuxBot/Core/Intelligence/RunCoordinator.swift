@@ -189,7 +189,16 @@ final class RunCoordinator {
     /// a result to Keep.
     nonisolated static func startFailure(_ error: any Error) -> RunEvent {
         // A work copy from an earlier pairing, or a branch git couldn't make, says so.
-        .fail(reason: DarkmuxPlain.saysWhy(error) ? DarkmuxPlain.sentence(error) : "Couldn't start on darkmux", details: DarkmuxPlain.details(error))
+        let reason: String
+        if DarkmuxPlain.saysWhy(error) {
+            reason = DarkmuxPlain.sentence(error)
+        } else if let client = error as? DarkmuxClient.ClientError {
+            // Pair again says what to do; any other refusal points at its why.
+            reason = client.status == 401 ? DarkmuxPlain.sentence(error) : String(localized: "darkmux didn't start it. Show details has why.")
+        } else {
+            reason = String(localized: "Couldn't start on darkmux")
+        }
+        return .fail(reason: reason, details: DarkmuxPlain.details(error))
     }
 
     /// A Tweak re-sends the original brief, what the run changed, and the
@@ -403,7 +412,12 @@ final class RunCoordinator {
     func changes(for workspace: String) async throws -> DarkmuxClient.Changes {
         if let changesFetcher { return try await changesFetcher(workspace) }
         guard let connection, let darkmux = connection.token else { throw NotPaired() }
-        return try await connection.client.changes(token: darkmux, workspace: workspace)
+        do {
+            return try await connection.client.changes(token: darkmux, workspace: workspace)
+        } catch let error as URLError where error.code != .cancelled {
+            // These flows talk to GitHub next: say it was darkmux that didn't answer.
+            throw DarkmuxClient.Unreachable(underlying: error)
+        }
     }
 
     /// Pushes a GitHub-started project's committed work to its `mux/<bot>`
@@ -1749,7 +1763,10 @@ final class RunCoordinator {
                     do {
                         if let engineFreer { try await engineFreer(info.endpoint) }
                         else { try await connection.client.stopOwnServer(token: token, engine: info.endpoint) }
-                    } catch let error as DarkmuxClient.ClientError where error.status == 409 {}
+                    } catch let error as DarkmuxClient.ClientError where error.status == 409 {
+                    } catch {
+                        throw DarkmuxClient.EngineNotFreed(underlying: error)
+                    }
                     guard run.phase == .running else { return }
                 }
                 let brief = Self.workBrief(message, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
@@ -2144,7 +2161,7 @@ final class RunCoordinator {
     /// A failure in a plain sentence: darkmux's by status, GitHub's already
     /// are; the raw text goes behind Show details.
     static func plain(_ error: any Error) -> (sentence: String, details: String?) {
-        if error is DarkmuxClient.ClientError { return (DarkmuxPlain.sentence(error), DarkmuxPlain.details(error)) }
+        if error is DarkmuxClient.ClientError || error is DarkmuxClient.Unreachable { return (DarkmuxPlain.sentence(error), DarkmuxPlain.details(error)) }
         return (error.localizedDescription, String(describing: error))
     }
 
