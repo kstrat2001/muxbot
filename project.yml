@@ -117,7 +117,7 @@ targets:
           - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
           - $(DERIVED_FILE_DIR)/build-number.stamp
         script: |
-          touch "$DERIVED_FILE_DIR/build-number.stamp"
+          mkdir -p "$DERIVED_FILE_DIR" && touch "$DERIVED_FILE_DIR/build-number.stamp"
           [ "$CONFIGURATION" = "Debug" ] && [ "$PLATFORM_NAME" = "macosx" ] || exit 0
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.$(date +%s)" "$TARGET_BUILD_DIR/$INFOPLIST_PATH"
 
