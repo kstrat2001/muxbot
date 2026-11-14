@@ -142,7 +142,7 @@ struct RunCardView: View {
             case .kept:
                 // Earlier builds' Keep: moved to a committed result at launch
                 // (BotStore.migrateKeptRuns), so Open PR includes it.
-                Text("Saved. Start a review from the thread's Start review.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                Text("Saved. Review & merge is above the chat bar.").font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
             case .prOpened:
                 // Older builds showed a placeholder here; nothing was opened.
                 Text("Not opened.")

@@ -97,8 +97,7 @@ struct BotBar: View {
         guard let id = router.context.botId else { return ChatShortcuts.lead() }
         guard let bot = bots.first(where: { $0.id == id }) else { return [] }
         return ChatShortcuts.bot(.init(hasRepo: !bot.repoSlugs.isEmpty, canPreview: brain.runs.canPreview(bot),
-                                       skills: bot.skills.map(\.name),
-                                       hasChanges: AppAction.startReview.unavailable(for: bot, runs: brain.runs, store: BotStore(context: context)) == nil))
+                                       skills: bot.skills.map(\.name)))
     }
 
     /// A dispatch or action card in this thread is waiting for Approve.

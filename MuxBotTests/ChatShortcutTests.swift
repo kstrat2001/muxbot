@@ -27,12 +27,21 @@ struct ChatShortcutTests {
         #expect(none.isEmpty, "nothing it can do from a chip")
     }
 
-    /// Saved changes waiting: Start review leads, said the way typing it would.
-    @Test func savedChangesPutStartReviewFirst() {
-        let chips = ChatShortcuts.bot(.init(hasRepo: true, canPreview: true, skills: ["Add a page"], hasChanges: true))
-        #expect(chips.first?.title == "Start review")
-        #expect(chips.first?.action == .send("Start review"))
+    /// Review & merge lives on the status line above the chat bar, never as
+    /// a chip; typing it still starts the review.
+    @Test func reviewIsNotAChip() {
+        let chips = ChatShortcuts.bot(.init(hasRepo: true, canPreview: true, skills: ["Add a page"]))
+        #expect(!chips.contains { $0.id == "review" })
         #expect(AppAction.match("Start review") == .startReview)
+        #expect(AppAction.match("Review & merge") == .startReview)
+    }
+
+    @Test func pendingChangesAddUpFilesAndLines() {
+        #expect(PendingChanges.parse("src/App.tsx +12 −3") == .init(path: "src/App.tsx", added: 12, removed: 3))
+        #expect(PendingChanges.parse("My Notes/a b.md +1 −0") == .init(path: "My Notes/a b.md", added: 1, removed: 0))
+        #expect(PendingChanges.parse("index.html") == .init(path: "index.html"), "a hand edit keeps only the path")
+        let totals = PendingChanges.totals([["src/App.tsx +12 −3", "src/app.css +30 −14"], ["src/App.tsx +2 −1"]])
+        #expect(totals == .init(changes: 2, files: 2, added: 44, removed: 18))
     }
 
     @Test(arguments: ["create a PR", "make a pull request", "open a pr", "start review", "merge my changes"])

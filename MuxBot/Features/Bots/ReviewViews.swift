@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Start review (in place of Open PR): an editable title, the changes it
+/// Review & merge (in place of Open PR): an editable title, the changes it
 /// includes, and who reviews it. The pull request is opened first, then the
 /// review you picked starts.
 struct StartReviewSheet: View {
@@ -49,11 +49,11 @@ struct StartReviewSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Start review")
+            .navigationTitle("Review & merge")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start review") {
+                    Button("Start") {
                         let bot = bot, title = title, byReviewer = byReviewer, store = store
                         dismiss()
                         Task { await brain.runs.startReview(for: bot, title: title, byReviewer: byReviewer, store: store, github: github) }
@@ -87,7 +87,7 @@ struct StartReviewSheet: View {
     }
 }
 
-/// The task's review, pinned at the top of its thread: the Reviewer's list
+/// The task's review, above the chat bar (in `TaskStatusLine`): the Reviewer's list
 /// (each item with Fix this), where it stands on GitHub, and Merge when
 /// GitHub says it can go in. The list stays in the app.
 struct ReviewCardView: View {
