@@ -12,13 +12,23 @@ struct AppActionTests {
             ("start the preview", .openPreview), ("where's the preview?", .openPreview), ("preview", .openPreview),
             ("hide the preview", .hidePreview), ("close the preview please", .hidePreview), ("Hide preview.", .hidePreview),
             ("reload the preview", .reloadPreview), ("refresh the preview", .reloadPreview), ("can you reload the preview", .reloadPreview),
+            ("stop the preview", .stopPreview), ("turn off the preview", .stopPreview), ("shut down the preview", .stopPreview),
+            ("make the preview full screen", .fullWindowPreview), ("make the preview bigger", .fullWindowPreview),
+            ("show it on a phone", .phoneView), ("how does it look on mobile?", .phoneView), ("show the preview at phone size", .phoneView),
+            ("show it on an iPad", .tabletView), ("desktop view", .desktopView), ("see the site on a laptop", .desktopView),
+            ("let me point at it", .pickMode), ("I want to pick something", .pickMode),
+            ("show your info", .botInfo), ("bot info", .botInfo), ("open your details", .botInfo),
+            ("pair with darkmux", .pairing), ("connect to darkmux", .pairing),
         ]
         for (text, action) in cases { #expect(AppAction.match(text) == action, "\(text)") }
     }
 
     @Test func workThatNamesTheSameThingIsNotAnAction() {
         for text in ["hide the price on the preview", "close the menu in the preview", "reload the data when the preview opens",
-                     "hide the header", "refresh the page every minute", "close and reload the preview"] {
+                     "hide the header", "refresh the page every minute", "close and reload the preview",
+                     "make the preview button bigger", "stop the video in the preview", "make the menu smaller on phones",
+                     "show the phone number in the footer", "pick a color for the header", "add an info box", "what is darkmux?",
+                     "turn the preview"] {
             #expect(AppAction.match(text) == nil, "\(text)")
         }
     }
