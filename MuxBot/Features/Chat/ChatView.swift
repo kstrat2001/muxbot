@@ -17,6 +17,14 @@ struct ChatView: View {
         bots.first { $0.id == conversation.roleId }?.repoSlugs.first
     }
     @State private var flashRunId: UUID?
+    /// Following the newest message: true until you scroll up, and again
+    /// once you're back at the bottom. While it's true, anything that makes
+    /// the transcript taller (a new message, a card that grows as it loads,
+    /// the shelf above the chat bar) keeps the bottom in view.
+    @State private var pinned = true
+
+    /// Where the bottom of the transcript is, for following it.
+    private static let bottomId = "chat-bottom"
 
     private var messages: [ChatMessage] {
         (conversation.messages ?? []).sorted { $0.timestamp < $1.timestamp }
@@ -44,54 +52,95 @@ struct ChatView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: Spacing.sm) {
-                    ForEach(messages) { message in
-                        Group {
-                            if message.kind == .text {
-                                ChatBubbleView(role: message.role, content: message.content, repo: repo)
-                                if let details = brain.runs.messageDetails[message.id] {
-                                    TechnicalDetails(text: details).chatColumn(alignment: .leading)
-                                }
-                            } else if message.kind == .bugCard {
-                                BugCardView(message: message)
-                            } else if message.kind == .actionCard {
-                                ActionCardView(message: message)
-                            } else if message.kind == .guideCard {
-                                GuideCardView(message: message, isLatest: message.id == latestSetupId || message.id == latestNextStepsId)
-                            } else {
-                                RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
-                                    .overlay {
-                                        if flashRunId != nil, message.runId == flashRunId, latestCardIds.contains(message.id) {
-                                            RoundedRectangle(cornerRadius: CornerRadius.lg)
-                                                .stroke(Color.brandOrange, lineWidth: 2)
-                                                .chatColumn(alignment: .leading)
-                                                .allowsHitTesting(false)
-                                        }
+                VStack(spacing: 0) {
+                    VStack(spacing: Spacing.sm) {
+                        ForEach(messages) { message in
+                            Group {
+                                if message.kind == .text {
+                                    ChatBubbleView(role: message.role, content: message.content, repo: repo)
+                                    if let details = brain.runs.messageDetails[message.id] {
+                                        TechnicalDetails(text: details).chatColumn(alignment: .leading)
                                     }
+                                } else if message.kind == .bugCard {
+                                    BugCardView(message: message)
+                                } else if message.kind == .actionCard {
+                                    ActionCardView(message: message)
+                                } else if message.kind == .guideCard {
+                                    GuideCardView(message: message, isLatest: message.id == latestSetupId || message.id == latestNextStepsId)
+                                } else {
+                                    RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
+                                        .overlay {
+                                            if flashRunId != nil, message.runId == flashRunId, latestCardIds.contains(message.id) {
+                                                RoundedRectangle(cornerRadius: CornerRadius.lg)
+                                                    .stroke(Color.brandOrange, lineWidth: 2)
+                                                    .chatColumn(alignment: .leading)
+                                                    .allowsHitTesting(false)
+                                            }
+                                        }
+                                }
                             }
+                            .id(message.id)
                         }
-                        .id(message.id)
+                        if isThinking {
+                            ProgressView().frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
-                    if isThinking {
-                        ProgressView().frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    .padding(Spacing.lg)
+                    Color.clear.frame(height: 1).id(Self.bottomId)
                 }
-                .padding(Spacing.lg)
             }
             .defaultScrollAnchor(.bottom)
+            .onScrollGeometryChange(for: ScrollMetrics.self) { ScrollMetrics($0) } action: { old, new in
+                if new.layoutDiffers(from: old) {
+                    // Taller content or a smaller window: stay on the newest.
+                    if pinned { scrollToBottom(proxy) }
+                } else {
+                    // You scrolled: follow again only once at the bottom.
+                    pinned = new.distanceFromBottom < 40
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !pinned {
+                    Button {
+                        pinned = true
+                        withAnimation { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 36, height: 36)
+                            .background(.regularMaterial, in: Circle())
+                            .overlay(Circle().stroke(.separator, lineWidth: 0.5))
+                            .shadow(radius: 2, y: 1)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Jump to latest")
+                    .accessibilityLabel("Jump to latest")
+                    .padding(Spacing.lg)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: pinned)
             .onChange(of: messages.count) {
-                if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                // A new message brings you to it, like Messages.
+                pinned = true
+                scrollToBottom(proxy)
                 // A message asked for before it arrived (a card just posted).
                 focusMessage(proxy)
             }
             .onAppear {
-                if let last = messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                scrollToBottom(proxy)
                 focus(proxy)
                 focusMessage(proxy)
             }
             .onChange(of: router.focusRunId) { focus(proxy) }
             .onChange(of: router.focusMessageId) { focusMessage(proxy) }
         }
+    }
+
+    /// Without animation, so no in-between position reads as you scrolling
+    /// away; a card that keeps growing is followed on the next change.
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(Self.bottomId, anchor: .bottom)
     }
 
     /// A Search result: scrolls to its message, once it's in this thread.
@@ -113,5 +162,34 @@ struct ChatView: View {
             try? await Task.sleep(for: .seconds(1.6))
             withAnimation(.easeOut) { flashRunId = nil }
         }
+    }
+}
+
+/// What following the bottom needs from the scroll view: the content's
+/// height and the visible height (they change with the content and the
+/// window, not with your scrolling), and how far the bottom is out of view.
+struct ScrollMetrics: Equatable {
+    var contentHeight: CGFloat
+    var visibleHeight: CGFloat
+    var distanceFromBottom: CGFloat
+
+    init(contentHeight: CGFloat, visibleHeight: CGFloat, distanceFromBottom: CGFloat) {
+        self.contentHeight = contentHeight
+        self.visibleHeight = visibleHeight
+        self.distanceFromBottom = distanceFromBottom
+    }
+
+    init(_ geometry: ScrollGeometry) {
+        let visible = geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom
+        // The bottom of what you see, in content coordinates.
+        let seenTo = geometry.contentOffset.y + geometry.contentInsets.top + visible
+        self.init(contentHeight: geometry.contentSize.height,
+                  visibleHeight: visible,
+                  distanceFromBottom: max(0, geometry.contentSize.height - seenTo))
+    }
+
+    /// The content or the window changed size, not where you scrolled to.
+    func layoutDiffers(from other: ScrollMetrics) -> Bool {
+        abs(contentHeight - other.contentHeight) > 0.5 || abs(visibleHeight - other.visibleHeight) > 0.5
     }
 }
