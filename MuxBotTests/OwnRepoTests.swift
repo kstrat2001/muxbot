@@ -30,6 +30,20 @@ struct OwnRepoTests {
         GitHubStub.seen.first { $0.method == method && $0.path.hasSuffix(suffix) }?.body ?? [:]
     }
 
+    /// GitHub is optional: off for someone not signed in, on once signed in
+    /// unless you last switched it off.
+    @Test func backUpStartsOffUntilYouSignIn() {
+        let defaults = UserDefaults(suiteName: "muxbot-tests-backup-\(UUID().uuidString)")!
+        #expect(!StartProject.Answers(name: "Tides").backUpToGitHub)
+        #expect(!StartProject.backUpDefault(signedIn: false, defaults: defaults), "a new user never meets a sign-in")
+        #expect(StartProject.backUpDefault(signedIn: true, defaults: defaults))
+        StartProject.rememberBackUp(false, defaults: defaults)
+        #expect(!StartProject.backUpDefault(signedIn: true, defaults: defaults), "your last choice is kept")
+        StartProject.rememberBackUp(true, defaults: defaults)
+        #expect(!StartProject.backUpDefault(signedIn: false, defaults: defaults), "never on while signed out")
+        #expect(StartProject.backUpDefault(signedIn: true, defaults: defaults))
+    }
+
     @Test func theRepoIsPrivateByDefaultAndHoldsExactlyTheTemplate() async throws {
         GitHubStub.reset()
         GitHubStub.on("POST /user/repos", 201, #"{"full_name":"kain/tides","html_url":"https://github.com/kain/tides","default_branch":"main"}"#)
@@ -143,7 +157,6 @@ struct OwnRepoTests {
         var asked: DarkmuxClient.WorkspaceBody?
         brain.runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", created: true) }
         let playbook = try #require(TemplateRegistry.bundledPlaybook(for: "book"))
-        #expect(StartProject.Answers(name: "Tides").backUpToGitHub, "on unless you switch it off")
         let bot = try await StartProject.start(Self.template, playbook: playbook, answers: .init(name: "Tides", purpose: "a winter", backUpToGitHub: false),
                                                github: maker(), store: store, runs: brain.runs)
         #expect(GitHubStub.seen.isEmpty, "no sign-in needed, nothing sent")
