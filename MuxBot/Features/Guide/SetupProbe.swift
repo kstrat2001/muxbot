@@ -16,6 +16,7 @@ enum SetupProbe {
     static func facts(connection: FleetConnection?, runs: RunCoordinator, githubSignedIn: Bool) async -> SetupFacts {
         #if os(macOS)
         var f = SetupFacts(platform: .mac, appleSilicon: isAppleSilicon, memoryGB: memoryGB)
+        f.freeDiskGB = freeDiskGB
         let base = connection?.client.baseURL ?? DarkmuxClient().baseURL
         async let endpoint = answers(base.appending(path: "/client/whoami"))
         async let lmStudio = lmStudioModels()
@@ -61,6 +62,14 @@ enum SetupProbe {
     }
     #endif
 
+    /// Free space on the disk that holds the home folder, as the Mac counts
+    /// it for important downloads; nil when it can't be read.
+    static var freeDiskGB: Int? {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        guard let bytes = try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage else { return nil }
+        return Int(bytes / 1_073_741_824)
+    }
     static var memoryGB: Int { Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded()) }
 
     static var isAppleSilicon: Bool {

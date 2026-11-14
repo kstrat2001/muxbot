@@ -35,6 +35,6 @@ struct SetupStatesRenderTests {
         let png = try renderPNG(view)
         try withShotsDirectory { try png.write(to: $0.appendingPathComponent("\(name).png")) }
         Attachment.record(png, named: "\(name).png")
-        if state == 3 { #expect(SetupCheck.steps(Self.facts(3))[.models]?.detail == SetupCheck.needsEngineLine) }
+        if state == 3 { #expect(SetupCheck.steps(Self.facts(3))[.models]?.detail == SetupCheck.needsEngineLine(Self.facts(3))) }
     }
 }

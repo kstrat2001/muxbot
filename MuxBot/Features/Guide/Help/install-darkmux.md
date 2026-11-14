@@ -12,7 +12,7 @@ Mux Bot talks to darkmux through its app connection on this Mac. When it isn't r
 
 ## Model engines and Docker
 
-darkmux runs local models through a model engine on this Mac: Flint, TensorFold or LM Studio. You need one; darkmux's guide shows how to set it up. The setup check's "Models Mux Bot can use" step ticks off once darkmux lists a model that answers, whichever engine runs it.
+darkmux runs local models through a model engine on this Mac: Flint, TensorFold or LM Studio. You need one; darkmux's guide shows how to set it up. The setup check's "Models Mux Bot can use" step ticks off once darkmux lists a model that answers, whichever engine runs it. Until then, that step suggests one for this Mac: Flint, which runs privately on the Mac, when it has 48 GB of memory or more and about 30 GB free (Flint is a download of about 21 GB); otherwise a hosted model, which sends your prompts and code to its provider. It's a suggestion: any engine darkmux runs works.
 
 LM Studio is optional. Mux Bot still sees whether it's installed: Get LM Studio opens its site, and Open LM Studio opens it when it's installed but not answering.
 

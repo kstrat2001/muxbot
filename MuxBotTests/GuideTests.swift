@@ -175,8 +175,9 @@ struct SetupCheckTests {
     /// No model yet: the required step says darkmux needs a model engine
     /// and links darkmux's guide, before pairing or after.
     @Test func noModelSaysToSetUpAnEngine() {
-        let line = "darkmux needs a model engine set up on this Mac (Flint, TensorFold or LM Studio). darkmux's guide shows how."
         var facts = fresh
+        // With no engine, the step suggests one for this Mac (#103).
+        let line = EngineRecommendation.for(facts).line
         facts.endpointUp = true; facts.lmStudioApp = .notInstalled; facts.lmStudio = .notAnswering
         // Before pairing the app can't see darkmux's engines (Flint or
         // TensorFold may be there): it waits, and says where to look if not.
