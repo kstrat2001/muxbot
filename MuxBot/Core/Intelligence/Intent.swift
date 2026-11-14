@@ -155,8 +155,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
 
     /// About something picked in the preview ("Chat about this"): a change
     /// ("make this bigger", "can you replace…") is work, a question is
-    /// answered unless it names a problem ("why is this cut off?"), and any
-    /// other remark ("no gutter on the sides") is a problem to measure.
+    /// answered unless it names a problem ("why is this cut off?"), a remark
+    /// that names a layout problem ("no gutter on the sides") is measured,
+    /// and anything else ("offer a better list") is a change to the content.
     private static func aboutElement(_ lower: String) -> Intent? {
         let text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
@@ -167,7 +168,14 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         if request.hasPrefix("please ") { request = String(request.dropFirst(7)) }  // "can you please…"
         if startsWithChangeVerb(request) || isChangeWish(text) { return .fix }
         if GuideRoute.isQuestion(text) { return problemWords.contains { text.contains($0) } ? .bug : .ask }
-        return .bug
+        return isLayoutComplaint(text) ? .bug : .fix
+    }
+
+    /// A remark about how something sits on the page, which measuring can
+    /// show: "no gutter on the sides", "the cards overlap the footer".
+    static func isLayoutComplaint(_ lower: String) -> Bool {
+        let text = " \(lower.trimmingCharacters(in: .whitespacesAndNewlines)) "
+        return (problemWords + layoutWords).contains { text.contains($0) }
     }
 
     /// "can/could/would/will you <change verb> …".
@@ -235,6 +243,15 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         "move", "put", "rename", "rewrite", "reword", "update", "edit", "fix", "turn", "increase", "decrease",
         "shrink", "grow", "enlarge", "center", "align", "bold", "italicize", "underline", "shorten",
         "lengthen", "translate", "link", "unlink", "insert", "wrap", "space", "pad", "tighten", "loosen", "say",
+    ]
+
+    /// Words about where things sit, padded with spaces where a short word
+    /// could be part of another ("gap" in "gaps" is fine, "edge" in "hedge" isn't).
+    private static let layoutWords = [
+        "gutter", "margin", "padding", "spacing", " space ", " gap", "off the screen", "off screen", "offscreen",
+        "scrolls sideways", "scroll sideways", "wider than", "taller than", "too close", "too far", "touching",
+        "crowded", "not centered", "uneven", " edge", "alignment", "lined up", "line up", "wraps", "wrapping",
+        "stretched", "squashed", "spills", "sticks out",
     ]
 
     /// A question about a picked element that names one of these is a

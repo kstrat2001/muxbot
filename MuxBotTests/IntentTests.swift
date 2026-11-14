@@ -52,6 +52,12 @@ struct IntentParsingTests {
         ("the footer should not say 2024", false, .fix),
         ("no more stock photos", false, .fix),
         ("this shouldn't be cut off", true, .bug),
+        // With something picked, a request that isn't about layout is a change.
+        ("Offer a better list", true, .fix),
+        ("more examples here", true, .fix),
+        ("a friendlier headline", true, .fix),
+        ("the cards overlap the footer on phone", true, .bug),
+        ("there's no space between these", true, .bug),
         // Questions stay questions; one typo never makes a short word a verb.
         ("should the header be white?", false, .ask),
     ])
