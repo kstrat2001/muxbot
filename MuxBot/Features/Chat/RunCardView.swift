@@ -67,6 +67,17 @@ struct RunCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(AppFont.footnote())
+            // Before Approve: does the chosen model's server answer? Checked
+            // again every few seconds while it doesn't, so turning it on
+            // clears the card by itself.
+            .task(id: "\(run.id)-\(run.phase == .proposed)-\(brain.runs.profile(for: run) ?? "")") {
+                guard run.phase == .proposed else { return }
+                repeat {
+                    await brain.runs.checkModelServer(for: run)
+                    guard case .modelServerOff? = brain.runs.blocker(for: run) else { return }
+                    try? await Task.sleep(for: .seconds(3))
+                } while !Task.isCancelled && run.phase == .proposed
+            }
             if run.phase == .proposed {
                 if case let .needsWorkCopy(what)? = brain.runs.blocker(for: run), let bot = run.bot {
                     workCopyAsk(what, bot: bot, run: run)
@@ -80,6 +91,9 @@ struct RunCardView: View {
                         #if os(macOS)
                         if connection.isPaired == false {
                             Button("Pair with darkmux", systemImage: "link") { router.showPairing = true }
+                                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
+                        } else if case .modelServerOff("LM Studio")? = brain.runs.blocker(for: run) {
+                            Button("Open LM Studio", systemImage: "arrow.up.forward.app") { SetupProbe.openApp(bundleID: SetupCheck.lmStudioBundleID) }
                                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                         }
                         #endif

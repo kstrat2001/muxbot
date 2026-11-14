@@ -40,6 +40,26 @@ struct RunsSayWhatHappenedTests {
         #expect(status(#"{"status":"done","result":{"result":"stop","final_assistant":"ok"}}"#).status == "done")
     }
 
+    /// Kain, 2026-11-14: "the app isn't checking at all?" A model on LM
+    /// Studio with its local server off can't run: the card says so before
+    /// Approve and nothing is sent; turning the server on clears it.
+    @Test func aModelWhoseServerIsOffIsCaughtBeforeApprove() async {
+        let (store, bot, runs) = setUp()
+        let run = store.proposeRun(task: "remove this text", crew: .coder, on: bot)
+        runs.lastListed = [DarkmuxClient.ProfileInfo(name: "qwen", model: "qwen3.6", endpoint: "lmstudio", reachable: true)]
+        runs.override(run, with: "qwen")
+        var up = false
+        runs.lmStudioServerProbe = { up }
+        await runs.checkModelServer(for: run)
+        #expect(runs.blocker(for: run) == .modelServerOff("LM Studio"))
+        #expect(runs.whyRunCannotStart(run)?.contains("local server is off") == true)
+        runs.decide(.approve, on: run, store: store)
+        #expect(run.phase == .proposed, "nothing is sent")
+        up = true
+        await runs.checkModelServer(for: run)
+        #expect(runs.blocker(for: run) == nil)
+    }
+
     @Test func nothingChangedAndNothingSaidSaysWhatToTry() {
         let line = RunResultText.fallbackSummary(report: "", files: [])
         #expect(line.hasPrefix("Changed nothing"))

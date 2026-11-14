@@ -616,8 +616,43 @@ final class RunCoordinator {
     /// What stops a run going to darkmux right now, or nil when it can.
     func blocker(for run: BotRun) -> RunBlocker? {
         guard let bot = run.bot else { return .noCode }
-        return RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot,
-                                deviceRuns: deviceRuns, excluding: run.id)
+        if let blocked = RunBlocker.check(paired: connection?.isPaired == true && connection?.token != nil, crew: run.crew, bot: bot,
+                                          deviceRuns: deviceRuns, excluding: run.id) { return blocked }
+        if let endpoint = modelEndpoint(for: run), modelServersOff.contains(endpoint) {
+            return .modelServerOff(ModelLabel.engine(endpoint))
+        }
+        return nil
+    }
+
+    // MARK: Model server preflight
+
+    /// Engines whose own server didn't answer when last checked (`lmstudio`).
+    /// darkmux lists LM Studio's models from LM Studio itself, so a model
+    /// shows as ready while LM Studio's local server is off and every run
+    /// fails at once (Kain, 2026-11-14): the app checks before it sends.
+    private(set) var modelServersOff: Set<String> = []
+    /// Tests answer whether LM Studio's server answers here.
+    var lmStudioServerProbe: (() async -> Bool)?
+
+    /// The engine of the run's chosen model, as darkmux lists it.
+    func modelEndpoint(for run: BotRun) -> String? {
+        guard let profile = runProfiles[run.id] else { return nil }
+        return (listed(crew: run.crew) + lastListed).first { $0.name == profile }?.endpoint
+    }
+
+    /// Asks the chosen model's own server whether it answers; only LM
+    /// Studio's is known to the app (127.0.0.1:1234).
+    func checkModelServer(for run: BotRun) async {
+        guard modelEndpoint(for: run) == "lmstudio" else { return }
+        let up: Bool
+        if let lmStudioServerProbe {
+            up = await lmStudioServerProbe()
+        } else {
+            var request = URLRequest(url: URL(string: "http://127.0.0.1:1234/v1/models")!)
+            request.timeoutInterval = 2
+            up = ((try? await URLSession.shared.data(for: request))?.1 as? HTTPURLResponse) != nil
+        }
+        if up { modelServersOff.remove("lmstudio") } else { modelServersOff.insert("lmstudio") }
     }
 
     /// Why a run can't go to darkmux right now, or nil when it can.
