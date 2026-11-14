@@ -9,7 +9,6 @@ import Darwin
 /// Looks at what answers on this Mac, for the live setup checklist.
 @MainActor
 enum SetupProbe {
-    static let dockerKey = "guide.setup.dockerConfirmed"
 
     /// `githubSignedIn` comes from `GitHubAuth` (its token is cached), so
     /// the checklist doesn't read the Keychain every few seconds.
@@ -23,7 +22,6 @@ enum SetupProbe {
         f.endpointUp = await endpoint
         f.lmStudio = await lmStudio
         f.paired = connection?.isPaired ?? false
-        f.docker = appPresence(bundleID: SetupCheck.dockerBundleID)
         f.lmStudioApp = appPresence(bundleID: SetupCheck.lmStudioBundleID)
         if f.paired, f.endpointUp == true {
             let listed = await runs.listedProfiles()
@@ -34,7 +32,6 @@ enum SetupProbe {
         #else
         var f = SetupFacts(platform: .phone, appleSilicon: false, memoryGB: memoryGB)
         #endif
-        f.dockerConfirmed = UserDefaults.standard.bool(forKey: dockerKey)
         f.githubSignedIn = githubSignedIn
         return f
     }

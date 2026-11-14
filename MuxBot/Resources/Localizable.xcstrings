@@ -4,6 +4,12 @@
     "" : {
 
     },
+    " · %lld files" : {
+
+    },
+    " · 1 file" : {
+
+    },
     "%@ %lld" : {
       "localizations" : {
         "en" : {
@@ -128,6 +134,9 @@
     "%lld bots" : {
 
     },
+    "%lld changes" : {
+
+    },
     "%lld models, %lld ready now." : {
       "localizations" : {
         "en" : {
@@ -161,6 +170,9 @@
         }
       }
     },
+    "1 change" : {
+
+    },
     "32 GB or less" : {
 
     },
@@ -191,6 +203,9 @@
     "A later run changed the same files. Undo the later run first." : {
 
     },
+    "A local model wrote this list. It can miss things or be wrong." : {
+
+    },
     "A model this Mac doesn't list" : {
 
     },
@@ -201,6 +216,9 @@
 
     },
     "A preview runs the project's own code, which a bot may have changed, in a container of its own on this Mac. So darkmux keeps previews off until you turn them on. Run this in Terminal, then try again:" : {
+
+    },
+    "A preview runs the project's own code, which a bot may have changed, on this Mac. So darkmux keeps previews off until you turn them on in darkmux on this Mac; darkmux's guide shows how. Then try again." : {
 
     },
     "A project folder you already have, or a GitHub repo. Add more later from the bot's info." : {
@@ -451,10 +469,16 @@
         }
       }
     },
+    "Changes" : {
+
+    },
     "Chat" : {
 
     },
     "Check again" : {
+
+    },
+    "Check again with GitHub" : {
 
     },
     "Check it yourself" : {
@@ -562,6 +586,9 @@
     "Copy the visible preview" : {
 
     },
+    "Couldn't add this change to the review on GitHub: %@" : {
+
+    },
     "Couldn't back up this work to %@ on GitHub: %@" : {
       "localizations" : {
         "en" : {
@@ -604,6 +631,9 @@
     "Couldn't make that edit: %@" : {
 
     },
+    "Couldn't merge: %@" : {
+
+    },
     "Couldn't open the PR: %@" : {
 
     },
@@ -619,6 +649,9 @@
           }
         }
       }
+    },
+    "Couldn't start the review: %@" : {
+
     },
     "Couldn't stop it: %@" : {
 
@@ -657,18 +690,6 @@
 
     },
     "Dispatch to %@" : {
-
-    },
-    "Docker" : {
-
-    },
-    "Docker Desktop is installed but not open. Open it and leave it running." : {
-
-    },
-    "Docker Desktop is running." : {
-
-    },
-    "Docker is running" : {
 
     },
     "Dog" : {
@@ -762,6 +783,9 @@
     "Fastest first. A run whose done-when wasn't met moves to the next one." : {
 
     },
+    "File issue" : {
+
+    },
     "File on GitHub" : {
 
     },
@@ -772,6 +796,18 @@
 
     },
     "Fix it now" : {
+
+    },
+    "Fix it now changes it in this task. File issue saves it on GitHub for later and changes nothing." : {
+
+    },
+    "Fix these" : {
+
+    },
+    "Fix this" : {
+
+    },
+    "Fix what the review found" : {
 
     },
     "Fixes run on darkmux after you approve." : {
@@ -813,9 +849,6 @@
     "General" : {
 
     },
-    "Get Docker Desktop" : {
-
-    },
     "Get LM Studio" : {
 
     },
@@ -841,6 +874,9 @@
 
     },
     "GitHub is busy. Try again in a moment." : {
+
+    },
+    "GitHub is still checking whether this can be merged." : {
 
     },
     "GitHub refused the request. Try again in a moment." : {
@@ -993,8 +1029,24 @@
         }
       }
     },
+    "I'll review it myself" : {
+
+    },
     "Idle" : {
 
+    },
+    "In review" : {
+
+    },
+    "In review: pull request #%lld, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "In review: pull request #%1$lld, %2$@"
+          }
+        }
+      }
     },
     "Install" : {
 
@@ -1111,7 +1163,16 @@
     "Let's start: %@." : {
 
     },
+    "Listed by fit: how each model did on Macs like this one" : {
+
+    },
     "Live" : {
+
+    },
+    "Live previews need a newer darkmux" : {
+
+    },
+    "Live previews need a newer darkmux on this Mac. darkmux's guide shows how to update." : {
 
     },
     "Load the preview's own page again" : {
@@ -1121,6 +1182,9 @@
 
     },
     "Look" : {
+
+    },
+    "Look at the preview and the changes, then merge." : {
 
     },
     "Looking at this Mac's models…" : {
@@ -1148,6 +1212,18 @@
 
     },
     "Measured in the preview" : {
+
+    },
+    "Merge" : {
+
+    },
+    "Merged." : {
+
+    },
+    "Merged. Your next change starts a new task from the project's main version, so the preview won't show changes still in review elsewhere until they're merged." : {
+
+    },
+    "Merged. Your next change starts a new task." : {
 
     },
     "Message %@…" : {
@@ -1370,6 +1446,9 @@
     "Nothing running or waiting" : {
 
     },
+    "Nothing to review: this task has no saved changes that the project's main version doesn't already have." : {
+
+    },
     "Nothing was written." : {
 
     },
@@ -1424,13 +1503,13 @@
     "One engine darkmux can run models with. You don't need it if you use Flint or TensorFold." : {
 
     },
+    "Only someone who can merge on this project can merge it. They can do that on GitHub." : {
+
+    },
     "Open %@ on GitHub" : {
 
     },
     "Open Activity" : {
-
-    },
-    "Open Docker" : {
 
     },
     "Open GitHub" : {
@@ -1506,6 +1585,9 @@
 
     },
     "Pair with darkmux to run fixes." : {
+
+    },
+    "Pair with darkmux to run fixes. File issue saves it on GitHub for later." : {
 
     },
     "Pair with darkmux…" : {
@@ -1680,6 +1762,27 @@
     "Revert this run's commit" : {
 
     },
+    "Review this task's saved changes, then merge them into the project" : {
+
+    },
+    "Review: %@" : {
+
+    },
+    "Reviewer answered" : {
+
+    },
+    "Reviewer checks it first" : {
+
+    },
+    "Reviewer found %lld things" : {
+
+    },
+    "Reviewer found 1 thing" : {
+
+    },
+    "Reviewer found nothing to change" : {
+
+    },
     "Role" : {
 
     },
@@ -1720,10 +1823,16 @@
     "Runs happen on a Mac. Set up darkmux and Mux Bot there; your bots and threads sync here." : {
 
     },
+    "Runs on this Mac. You get a short list of things to look at." : {
+
+    },
     "Same as Settings" : {
 
     },
     "Save" : {
+
+    },
+    "Saved. Start a review from the thread's Start review." : {
 
     },
     "Saves the change to this bot's project. You can undo it from the thread." : {
@@ -1744,6 +1853,9 @@
     "See it in the preview" : {
 
     },
+    "See it on GitHub" : {
+
+    },
     "Send" : {
 
     },
@@ -1751,6 +1863,9 @@
 
     },
     "Sends it to the bot now" : {
+
+    },
+    "Sent" : {
 
     },
     "Sent to Coder" : {
@@ -1847,6 +1962,9 @@
     "Show Preview" : {
 
     },
+    "Show changes" : {
+
+    },
     "Show chat" : {
 
     },
@@ -1938,6 +2056,9 @@
     "Start over" : {
 
     },
+    "Start review" : {
+
+    },
     "Start something new from a template, paste a GitHub link in the bar below, or make one for code you have." : {
 
     },
@@ -2020,6 +2141,18 @@
     "The Dock icon shows how many runs are waiting on you." : {
 
     },
+    "The Reviewer didn't finish. You can review it yourself, then merge." : {
+
+    },
+    "The Reviewer gave no answer. You can review it yourself, then merge." : {
+
+    },
+    "The Reviewer is checking it." : {
+
+    },
+    "The Reviewer's card is waiting for your Approve." : {
+
+    },
     "The bot drafts a preview recipe in its thread for you to check and approve." : {
 
     },
@@ -2089,6 +2222,9 @@
     "The preview didn't start from the new recipe: %@. Fix the file in your checkout and open the preview again." : {
 
     },
+    "The preview didn't start. Try again; if it keeps happening, darkmux's guide shows how to restart darkmux." : {
+
+    },
     "The preview settings file in your checkout isn't in a form darkmux can use. Fix it in your checkout (darkmux never reads the bot's copy), then try again." : {
 
     },
@@ -2098,10 +2234,13 @@
     "The preview took too long to start. Try again." : {
 
     },
-    "The preview's container didn't start. Try again; if it keeps happening, restart Docker." : {
+    "The project changed in the same places since this task started. Sort it out on GitHub, then come back." : {
 
     },
     "The project gets its own repo in your GitHub account, so sign in first." : {
+
+    },
+    "The project moved on since this task started, and its rules want this brought up to date first. Do that on GitHub, then come back." : {
 
     },
     "The project's own server stopped right after it started. Ask the bot to look at it, or try again." : {
@@ -2110,7 +2249,7 @@
     "The project's preview settings aren't in a form darkmux can use. Ask the bot to fix them." : {
 
     },
-    "The project's server only listens inside its container. It needs to listen on 0.0.0.0 (set HOST in the preview settings)." : {
+    "The project's server only answers to itself, so the preview can't reach it. Ask the bot to fix the preview settings so the server listens for the preview, then try again." : {
 
     },
     "The project's server started but never answered. Try again, or ask the bot to look at its dev script." : {
@@ -2176,6 +2315,9 @@
     "This one is changed in darkmux on your Mac; here's its value." : {
 
     },
+    "This opens a pull request on GitHub: the page where a change is checked before it joins your project." : {
+
+    },
     "This project can't be previewed" : {
 
     },
@@ -2207,6 +2349,9 @@
 
     },
     "This project needs a newer version of Node than the preview has. darkmux needs an update for it." : {
+
+    },
+    "This project needs another person's review, or a check to pass, before it can be merged. See it on GitHub." : {
 
     },
     "This project's PLAYBOOK.md doesn't say which schema it follows." : {
@@ -2251,6 +2396,9 @@
 
     },
     "This project's work on this Mac builds on a version of the project that GitHub doesn't have yet, so I can't put it on GitHub from here." : {
+
+    },
+    "This review was closed on GitHub without merging. Your changes are still here." : {
 
     },
     "This run is from an earlier pairing with darkmux, so it can't be undone from here." : {
@@ -2355,6 +2503,9 @@
     "This work copy isn't on its own Mux Bot branch yet. Start a run and darkmux moves it there, then try again." : {
 
     },
+    "Title" : {
+
+    },
     "To do" : {
 
     },
@@ -2389,6 +2540,9 @@
 
     },
     "Unread" : {
+
+    },
+    "Update %@'s review" : {
 
     },
     "Use %@ for this run" : {
@@ -2503,9 +2657,6 @@
     "You can also revoke it in Terminal:" : {
 
     },
-    "You said Docker is running." : {
-
-    },
     "Your GitHub sign-in expired. Sign in again." : {
 
     },
@@ -2542,6 +2693,9 @@
     "Your project stays on this Mac. You can put it on GitHub later from its info." : {
 
     },
+    "Your review" : {
+
+    },
     "a model this Mac no longer lists" : {
 
     },
@@ -2549,6 +2703,9 @@
 
     },
     "a template has no checkout to copy files from." : {
+
+    },
+    "chosen for this run" : {
 
     },
     "darkmux" : {
@@ -2589,6 +2746,9 @@
 
     },
     "darkmux couldn't set up a work copy: %@" : {
+
+    },
+    "darkmux couldn't start the preview on this Mac. Live previews need a newer darkmux; darkmux's guide shows how to update." : {
 
     },
     "darkmux couldn't undo it. Show details has what it reported." : {
@@ -2716,18 +2876,6 @@
 
     },
     "darkmux runs a preview only from a checkout of yours, and a project made from a template doesn't have one yet. This needs a darkmux update." : {
-
-    },
-    "darkmux runs each piece of work in Docker. Get Docker Desktop from Docker's site, then open it." : {
-
-    },
-    "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; darkmux doctor does." : {
-
-    },
-    "darkmux runs each piece of work in Docker. Mux Bot can't check it from here; say when Docker Desktop is running." : {
-
-    },
-    "darkmux runs previews in a container, and Docker isn't running on this Mac. Open Docker, then try again." : {
 
     },
     "darkmux says there's nothing to approve?" : {

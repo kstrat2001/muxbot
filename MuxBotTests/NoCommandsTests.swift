@@ -17,7 +17,7 @@ struct NoCommandsTests {
         for lm in [SetupFacts.LMStudio.unknown, .notAnswering, .models(0), .models(2)] {
             for d in [SetupFacts.AppPresence.unknown, .notInstalled, .installed, .running] {
                 var f = SetupFacts(platform: .mac, appleSilicon: true, memoryGB: 64, endpointUp: up, lmStudio: lm)
-                f.docker = d; f.lmStudioApp = d; f.paired = paired
+                f.lmStudioApp = d; f.paired = paired
                 all.append(f)
             }
         }
@@ -60,7 +60,7 @@ struct NoCommandsTests {
             let detail = why.detail(repo: "kstrat2001/site", folder: "site")
             #expect(NoCommands.says(detail) == nil, "\(why): \(detail)")
         }
-        #expect(LivePreview.Unavailable.previewsOff.detail(repo: nil, folder: nil).contains("container"))
+        #expect(LivePreview.Unavailable.previewsOff.detail(repo: nil, folder: nil).contains("on this Mac"))
     }
 
     @Test func anEarlierPairingsWorkCopyPointsAtNewWorkCopy() {
