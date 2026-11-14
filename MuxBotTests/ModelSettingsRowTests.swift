@@ -47,7 +47,7 @@ struct ModelRowTests {
         p.availability = .init(state: "unavailable", reason: "rec isn't installed")
         let row = ModelRow(name: p.name, listed: [p], listing: .listed)
         #expect(row.status == .notRunning)
-        #expect(row.detail == "rec isn't installed", "darkmux's reason, on hover")
+        #expect(row.detail == ModelLabel.whyNot(p), "a plain reason, on hover, never darkmux's own text")
     }
 
     @Test func withoutAvailabilityAnOlderDarkmuxStillReads() {

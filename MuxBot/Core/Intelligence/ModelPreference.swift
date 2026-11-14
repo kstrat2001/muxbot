@@ -287,6 +287,27 @@ enum ModelLabel {
         }
     }
 
+    /// Whether a run can use it now: running, or darkmux can start it.
+    static func canRun(_ p: DarkmuxClient.ProfileInfo) -> Bool {
+        p.reachable && p.availability?.state != "unavailable"
+    }
+
+    /// Why a model can't run now, in plain words; nil when it can. darkmux's
+    /// own reason can name a command, so it's never shown as is (the app
+    /// never asks you to run one).
+    static func whyNot(_ p: DarkmuxClient.ProfileInfo) -> String? {
+        guard !canRun(p) else { return nil }
+        let reason = (p.availability?.reason ?? "").lowercased()
+        if reason.contains("own server") {
+            // darkmux #3453: the engine's own server is up, and darkmux never stops one it didn't start.
+            return String(localized: "\(engine(p.endpoint))'s own server is already running on this Mac, so darkmux can't start this one. It can once that server is stopped.")
+        }
+        if p.availability?.state == "unavailable" {
+            return String(localized: "darkmux can't start this model on this Mac right now.")
+        }
+        return String(localized: "This model isn't answering on this Mac right now.")
+    }
+
     /// "model · engine".
     static func line(_ p: DarkmuxClient.ProfileInfo) -> String {
         "\(name(p.model) ?? String(localized: "Unnamed model")) · \(engine(p.endpoint))"
@@ -337,7 +358,7 @@ struct ModelRow: Equatable {
     var name: String
     var title: String
     var subtitle: String?
-    /// Why it isn't available (darkmux's reason), for hover.
+    /// Why it isn't available, in plain words (`ModelLabel.whyNot`), for hover.
     var detail: String?
     var status: Status
 
@@ -347,7 +368,7 @@ struct ModelRow: Equatable {
         if let profile {
             title = ModelLabel.name(profile.model) ?? String(localized: "Unnamed model")
             subtitle = ModelLabel.engine(profile.endpoint)
-            detail = profile.availability?.reason
+            detail = ModelLabel.whyNot(profile)
         } else {
             title = String(localized: "A model this Mac doesn't list")
             subtitle = nil

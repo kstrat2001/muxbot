@@ -1932,12 +1932,13 @@ final class RunCoordinator {
         ModelLabel.line(profile, in: listed(crew: crew) + lastListed) ?? String(localized: "a model this Mac no longer lists")
     }
 
-    /// The models a run can switch to: one per model and engine, ready or
-    /// startable, in Fit order.
+    /// The models a run's Change menu lists: one per model and engine, in Fit
+    /// order, those that can't run now included (shown grayed with why,
+    /// `ModelLabel.whyNot`), so a model is never missing without a reason.
     func choices(for run: BotRun) -> [DarkmuxClient.ProfileInfo] { choices(crew: run.crew) }
 
     func choices(crew: CrewRole) -> [DarkmuxClient.ProfileInfo] {
-        EvalsFit.ordered(ModelLabel.distinct(listed(crew: crew)), by: fitOrder).filter(\.reachable)
+        EvalsFit.ordered(ModelLabel.distinct(listed(crew: crew)), by: fitOrder)
     }
 
     /// One per model and engine, in Fit order: what every model list shows.
