@@ -22,6 +22,13 @@ struct ChatView: View {
     /// the transcript taller (a new message, a card that grows as it loads,
     /// the shelf above the chat bar) keeps the bottom in view.
     @State private var pinned = true
+    /// The bottom of the transcript is in view above the shelf, measured
+    /// from the layout itself (where the bottom marker sits in the scroll
+    /// view, and how much of the scroll view the shelf leaves visible).
+    @State private var markerY: CGFloat = 0
+    @State private var visibleBottom: CGFloat = .infinity
+    private var atBottom: Bool { markerY <= visibleBottom + 40 }
+    private static let viewport = "chat-viewport"
 
     /// Where the bottom of the transcript is, for following it.
     private static let bottomId = "chat-bottom"
@@ -87,20 +94,30 @@ struct ChatView: View {
                     }
                     .padding(Spacing.lg)
                     Color.clear.frame(height: 1).id(Self.bottomId)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.viewport)).minY } action: { markerY = $0 }
                 }
             }
-            .defaultScrollAnchor(.bottom)
+            .coordinateSpace(.named(Self.viewport))
+            .onGeometryChange(for: CGFloat.self) { $0.size.height - $0.safeAreaInsets.bottom } action: { visibleBottom = $0 }
+            .onChange(of: atBottom) { if atBottom { pinned = true } }
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            // While you're at the bottom, the scroll view itself keeps the
+            // bottom in place when anything grows (a setup card filling in
+            // its steps); scrolled up, what you're reading stays put.
+            .defaultScrollAnchor(pinned ? .bottom : .top, for: .sizeChanges)
             .onScrollGeometryChange(for: ScrollMetrics.self) { ScrollMetrics($0) } action: { old, new in
                 if new.layoutDiffers(from: old) {
                     // Taller content or a smaller window: stay on the newest.
                     if pinned { scrollToBottom(proxy) }
-                } else {
-                    // You scrolled: follow again only once at the bottom.
+                } else if new.offsetY < old.offsetY - 1 {
+                    // You scrolled up: stop following unless still at the bottom.
                     pinned = new.distanceFromBottom < 40
+                } else if new.distanceFromBottom < 40 {
+                    pinned = true
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                if !pinned {
+                if !pinned && !atBottom {
                     Button {
                         pinned = true
                         withAnimation { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
@@ -119,7 +136,7 @@ struct ChatView: View {
                     .transition(.scale.combined(with: .opacity))
                 }
             }
-            .animation(.easeOut(duration: 0.15), value: pinned)
+            .animation(.easeOut(duration: 0.15), value: pinned && atBottom)
             .onChange(of: messages.count) {
                 // A new message brings you to it, like Messages.
                 pinned = true
@@ -141,6 +158,12 @@ struct ChatView: View {
     /// away; a card that keeps growing is followed on the next change.
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         proxy.scrollTo(Self.bottomId, anchor: .bottom)
+        // Again after this layout pass: a message just appended, or a card
+        // that just grew, isn't measured yet when the first one runs.
+        DispatchQueue.main.async {
+            guard pinned else { return }
+            proxy.scrollTo(Self.bottomId, anchor: .bottom)
+        }
     }
 
     /// A Search result: scrolls to its message, once it's in this thread.
@@ -172,11 +195,14 @@ struct ScrollMetrics: Equatable {
     var contentHeight: CGFloat
     var visibleHeight: CGFloat
     var distanceFromBottom: CGFloat
+    /// Where you've scrolled to; smaller is further up.
+    var offsetY: CGFloat = 0
 
-    init(contentHeight: CGFloat, visibleHeight: CGFloat, distanceFromBottom: CGFloat) {
+    init(contentHeight: CGFloat, visibleHeight: CGFloat, distanceFromBottom: CGFloat, offsetY: CGFloat = 0) {
         self.contentHeight = contentHeight
         self.visibleHeight = visibleHeight
         self.distanceFromBottom = distanceFromBottom
+        self.offsetY = offsetY
     }
 
     init(_ geometry: ScrollGeometry) {
@@ -185,7 +211,8 @@ struct ScrollMetrics: Equatable {
         let seenTo = geometry.contentOffset.y + geometry.contentInsets.top + visible
         self.init(contentHeight: geometry.contentSize.height,
                   visibleHeight: visible,
-                  distanceFromBottom: max(0, geometry.contentSize.height - seenTo))
+                  distanceFromBottom: max(0, geometry.contentSize.height - seenTo),
+                  offsetY: geometry.contentOffset.y)
     }
 
     /// The content or the window changed size, not where you scrolled to.
