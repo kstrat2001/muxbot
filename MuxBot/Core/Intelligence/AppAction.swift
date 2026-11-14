@@ -90,7 +90,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .pairing: ["pair", "pairing", "with", "connect", "darkmux", "again", "mux", "bot", "on", "mac"]
         // "review my changes", "start a review"; "review the login code" is the Reviewer's.
         case .startReview: ["start", "my", "changes", "change", "work", "open", "ask", "for", "ready", "send", "to", "get",
-                            "create", "make", "new", "request", "submit", "merge", "do", "file", "raise"]
+                            "create", "make", "new", "request", "submit", "merge", "do", "file", "raise", "and"]
         // "undo that", "undo the last change"; "undo the header color" is work.
         case .undoLast: ["last", "change", "changes", "go", "back", "please", "run", "edit"]
         case .stopRun: ["run", "running", "work", "working", "crew", "coder", "job", "now"]
@@ -158,7 +158,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         #endif
         switch self {
         case .startReview:
-            if runs.review(for: bot) != nil { return String(localized: "\(bot.name) is already in review. It's pinned at the top of this thread.") }
+            if runs.review(for: bot) != nil { return String(localized: "\(bot.name) is already in review. It's right above where you type.") }
             if bot.repoSlugs.isEmpty { return String(localized: "A review happens on GitHub, and \(bot.name) isn't there yet. Use Put it on GitHub in my info first.") }
             return runs.unshippedRuns(bot, store: store).isEmpty ? String(localized: "There's nothing new to review yet. Ask me for a change first.") : nil
         case .undoLast: return Self.lastUndoable(bot) == nil ? String(localized: "There's nothing to undo yet.") : nil
@@ -227,7 +227,7 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .desktopView: String(localized: "Show the preview at desktop size")
         case .pickMode: String(localized: "Point at something in the preview")
         case .botInfo: String(localized: "Open \(bot)'s info")
-        case .startReview: String(localized: "Start a review")
+        case .startReview: String(localized: "Review & merge")
         default: doingText
         }
     }
@@ -272,14 +272,14 @@ enum AppAction: String, CaseIterable, Codable, Sendable {
         case .pickMode: String(localized: "Point at something in the preview and click it, then tell me about it.")
         case .botInfo: String(localized: "Opening my info.")
         case .pairing: String(localized: "Opening pairing with darkmux.")
-        case .startReview: String(localized: "Opening Start review.")
+        case .startReview: String(localized: "Opening Review & merge.")
         case .undoLast: String(localized: "Undo it? Approve and darkmux takes that change back.")
         case .stopRun: String(localized: "Stop it? Approve and darkmux stops the run.")
         case .clearConversation: String(localized: "Clear this conversation? Approve to clear it.")
         case .archiveBot: String(localized: "Archive me? Approve to archive.")
         case .deleteBot: String(localized: "Delete is only in Archived Bots, so nothing is deleted by accident. Say “archive this bot” first, then delete it there.")
         case .save: String(localized: "There's nothing to save: every change is saved as soon as its run finishes, and Undo on its card takes it back.")
-        case .publish: String(localized: "Mux Bot doesn't put sites on the internet yet. The last step it does is Start review, then Merge, which saves your changes to the project on GitHub.")
+        case .publish: String(localized: "Mux Bot doesn't put sites on the internet yet. The last step it does is Review & merge, which saves your changes to the project on GitHub.")
         }
     }
 }

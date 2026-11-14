@@ -18,7 +18,7 @@ The bot writes the change as a card. Nothing changes until you tap Approve. When
 
 ## What the bot can't do
 
-The bot can't see your page the way you do. When something looks wrong, point at it or describe it, and the bot measures the page to find what's off. It doesn't put your site on the internet: Start review, then Merge, saves your changes to the project on GitHub.
+The bot can't see your page the way you do. When something looks wrong, point at it or describe it, and the bot measures the page to find what's off. It doesn't put your site on the internet: Review & merge saves your changes to the project on GitHub.
 
 ## When you're not sure
 

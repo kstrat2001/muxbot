@@ -1,6 +1,6 @@
 import Foundation
 
-/// Tasks and review, step one: one automatic task per bot. Start review
+/// Tasks and review, step one: one automatic task per bot. Review & merge
 /// opens the task's pull request, then the Reviewer checks it once (or you
 /// review it yourself); Merge happens here when GitHub says it can, and the
 /// next change starts a new task.
@@ -8,7 +8,7 @@ extension RunCoordinator {
     /// The current task's open review, if any (this Mac).
     func review(for bot: Bot) -> TaskReview.State? { LocalBotState.shared[bot.id]?.review }
 
-    /// Start review shows where Open PR did: signed in, a work copy and a
+    /// Review & merge can start where Open PR could: signed in, a work copy and a
     /// repo, saved changes not yet in a review, and no review open.
     func canStartReview(_ bot: Bot, store: BotStore, github: GitHubAuth) -> Bool {
         review(for: bot) == nil && canOpenPR(bot, store: store, github: github)

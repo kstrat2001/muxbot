@@ -35,8 +35,6 @@ enum ChatShortcuts {
         var hasRepo: Bool
         var canPreview: Bool
         var skills: [String]
-        /// Saved changes not in a review yet: Start review leads the row.
-        var hasChanges: Bool = false
     }
 
     /// A bot's thread: one chip per skill (the bot asks for specifics), its
@@ -44,9 +42,6 @@ enum ChatShortcuts {
     /// its issues.
     static func bot(_ facts: BotFacts) -> [ChatShortcut] {
         var chips: [ChatShortcut] = []
-        if facts.hasChanges {
-            chips.append(ChatShortcut(id: "review", title: String(localized: "Start review"), systemImage: "checkmark.bubble", action: .send("Start review")))
-        }
         chips += facts.skills.map {
             ChatShortcut(id: "skill:\($0)", title: $0, systemImage: "wand.and.stars", action: .send($0))
         }

@@ -116,16 +116,6 @@ struct BotThreadView: View {
                         .toggleStyle(.button)
                         .help(router.showPreview ? "Hide preview" : "Show preview")
                     }
-                    // Always there for a project on this Mac, so it's found; a tap
-                    // says why not when it can't start yet (signed out, nothing new).
-                    if let bot, bot.workspaceName != nil, brain.runs.review(for: bot) == nil {
-                        if brain.runs.openingPR.contains(bot.id) {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Button("Start review", systemImage: "checkmark.bubble") { tryStartReview(bot) }
-                                .help("Review this task's saved changes, then merge them into the project")
-                        }
-                    }
                     #if !os(macOS)
                     // On the Mac, info is the (i) on the bot's sidebar row (and ⌘I).
                     Button("Bot info", systemImage: "info.circle") { showInfo = true }
@@ -256,11 +246,11 @@ struct BotThreadView: View {
         }
     }
 
-    /// Start review's sheet, or one line saying why it can't start yet.
+    /// Review & merge's sheet, or one line saying why it can't start yet.
     private func tryStartReview(_ bot: Bot) {
         let store = BotStore(context: modelContext)
         let why = AppAction.startReview.unavailable(for: bot, runs: brain.runs, store: store)
-            ?? (github.token == nil ? String(localized: "A review opens on GitHub, so sign in with GitHub first (Settings › GitHub). Then tap Start review again.") : nil)
+            ?? (github.token == nil ? String(localized: "A review opens on GitHub, so sign in with GitHub first (Settings › GitHub). Then tap Review & merge again.") : nil)
         guard let why else { startingReview = true; return }
         store.append(.assistant, why, to: store.conversation(for: .bot(bot.id)))
     }
@@ -290,14 +280,20 @@ struct BotThreadView: View {
                                 VStack(spacing: 0) {
                                     clearedBanner
                                     needsYouBanner
-                                    if let bot { ReviewCardView(bot: bot) }
                                 }
                             }
                     } else {
                         ProgressView()
                     }
                 }
-                .safeAreaInset(edge: .bottom) { BotBar() }
+                .safeAreaInset(edge: .bottom) {
+                    // The task's pending changes, or its review, right
+                    // above where you type.
+                    VStack(spacing: 0) {
+                        if let bot { TaskStatusLine(bot: bot) { tryStartReview(bot) } }
+                        BotBar()
+                    }
+                }
             }
         }
     }
