@@ -1309,13 +1309,6 @@ final class BotBrain {
         let thread = store.conversation(for: .bot(bot.id))
         if (thread.messages ?? []).contains(where: { if case .setUpPlaybook? = $0.action { true } else { false } }) { return }
         let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
-        // darkmux's clone, with no checkout of yours (darkmux #3571): the card
-        // is worked out from the repo on GitHub, and Approve hands darkmux
-        // the recipe.
-        if folder == nil, bot.workspaceName != nil, let repo = bot.repoSlugs.first {
-            offerCloneSetup(for: bot, repo: repo, store: store)
-            return .preparing
-        }
         guard let folder else { return }
         let files = (checkoutReader ?? PreviewSetup.readCheckout)(folder)
         guard !files.files.contains(PlaybookSetup.path) else { return }
@@ -1379,6 +1372,13 @@ final class BotBrain {
         if let waiting = offered.last(where: { $0.actionState == .waiting }) { return .card(waiting.id) }
         if !again, let last = offered.last { return .card(last.id) }
         let folder = checkoutFolder.map { $0(bot) } ?? bot.folderBookmark.flatMap(RunCoordinator.resolve(bookmark:))
+        // darkmux's clone, with no checkout of yours (darkmux #3571): the card
+        // is worked out from the repo on GitHub, and Approve hands darkmux
+        // the recipe.
+        if folder == nil, bot.workspaceName != nil, let repo = bot.repoSlugs.first {
+            offerCloneSetup(for: bot, repo: repo, store: store)
+            return .preparing
+        }
         guard let folder else {
             let note = String(localized: "There's no preview yet: darkmux runs a preview only from your own checkout of the repo, and this one is a clone. Add your checkout with Add folder in this bot's info.")
             if !messages.contains(where: { $0.content == note }) { store.append(.assistant, note, to: thread) }
