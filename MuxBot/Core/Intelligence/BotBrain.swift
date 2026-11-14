@@ -637,6 +637,14 @@ final class BotBrain {
             store.save()
             return
         }
+        // "help me", "I'm stuck": where the project stands and what to do
+        // next, by rules from the app's state (never the model).
+        if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, NextSteps.matches(text) {
+            message.intentRaw = Intent.ask.rawValue
+            let next = NextSteps.read(bot, runs: runs, store: store)
+            store.postGuideCard(.nextSteps(status: next.status, steps: next.steps), summary: next.status, in: context)
+            return
+        }
         if let bot = context.botId.flatMap(store.bot(id:)), element == nil, explicit == nil, let action = AppAction.match(text) {
             message.intentRaw = Intent.ask.rawValue
             if let why = action.unavailable(for: bot, runs: runs, store: store) {

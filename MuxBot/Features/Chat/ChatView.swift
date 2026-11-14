@@ -27,6 +27,11 @@ struct ChatView: View {
         messages.last { $0.guideCard == .setup }?.id
     }
 
+    /// The newest next-steps card: the only one whose steps can be tapped.
+    private var latestNextStepsId: UUID? {
+        messages.last { if case .nextSteps? = $0.guideCard { true } else { false } }?.id
+    }
+
     /// The newest card of each kind for each run; older ones are history.
     private var latestCardIds: Set<UUID> {
         var latest: [String: ChatMessage] = [:]
@@ -52,7 +57,7 @@ struct ChatView: View {
                             } else if message.kind == .actionCard {
                                 ActionCardView(message: message)
                             } else if message.kind == .guideCard {
-                                GuideCardView(message: message, isLatest: message.id == latestSetupId)
+                                GuideCardView(message: message, isLatest: message.id == latestSetupId || message.id == latestNextStepsId)
                             } else {
                                 RunCardView(message: message, isLatest: latestCardIds.contains(message.id))
                                     .overlay {

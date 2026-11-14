@@ -15,6 +15,7 @@ struct GuideCardView: View {
                 case let .setting(id)?: SettingCardView(id: id)
                 case let .answer(text, articles, onDevice)?: AnswerCardView(text: text, articles: articles, onDevice: onDevice)
                 case let .pageFits(text)?: PageFitsCardView(text: text)
+                case let .nextSteps(status, steps)?: NextStepsCardView(status: status, steps: steps, isLatest: isLatest)
                 case nil: Text(message.content).font(AppFont.body())
                 }
             }
@@ -361,6 +362,38 @@ struct PageFitsCardView: View {
             Text(text).font(AppFont.body())
             Button("Reload the preview", systemImage: "arrow.clockwise") { preview.reload() }
                 .buttonStyle(.bordered)
+        }
+    }
+}
+
+/// Where the project stands and what to do next. A step is sent as your
+/// message, so it goes the way typing it would (its card, never work on
+/// its own). Only the newest card's steps can be tapped.
+struct NextStepsCardView: View {
+    let status: String
+    let steps: [NextSteps.Step]
+    var isLatest = true
+    @Environment(BotBrain.self) private var brain
+    @Environment(AppRouter.self) private var router
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(status).font(AppFont.body())
+            if !steps.isEmpty {
+                WrappingStack(spacing: Spacing.sm) {
+                    ForEach(steps, id: \.message) { step in
+                        Button(step.title, systemImage: step.systemImage) {
+                            let chat = router.context
+                            Task { await brain.send(step.message, in: chat, store: BotStore(context: modelContext)) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!isLatest || brain.isThinking(in: router.context))
+                    }
+                }
+            }
+            Text(NextSteps.closing).font(AppFont.caption()).foregroundStyle(.secondary)
         }
     }
 }

@@ -17,6 +17,9 @@ enum GuideCard: Codable, Equatable, Sendable {
     /// In a bot's thread: you reported something cut off, and the page fits
     /// at every width measured; the note offers to reload the preview.
     case pageFits(text: String)
+    /// In a bot's thread, for "help me": where the project stands and up to
+    /// three next steps, each sent as your message (`NextSteps`).
+    case nextSteps(status: String, steps: [NextSteps.Step])
 }
 
 extension ChatMessage {
