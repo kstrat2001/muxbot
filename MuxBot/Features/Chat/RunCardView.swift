@@ -529,7 +529,7 @@ struct ModelPickRow: View {
         } else if choice.ask {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Picker("Model", selection: Binding(get: { current ?? "" }, set: { pick($0) })) {
-                    ForEach(options, id: \.name) { Text(ModelLabel.line($0)).tag($0.name) }
+                    ForEach(options.filter(ModelLabel.canRun), id: \.name) { Text(ModelLabel.line($0)).tag($0.name) }
                     // The pick is kept even when it's a duplicate the list folded away.
                     if let current, !options.contains(where: { $0.name == current }) {
                         Text(line(current)).tag(current)
@@ -549,7 +549,12 @@ struct ModelPickRow: View {
                 if !options.isEmpty {
                     Menu("Change") {
                         ForEach(options, id: \.name) { p in
-                            Button(ModelLabel.line(p)) { pick(p.name) }
+                            // One that can't run now is listed grayed, with why.
+                            Button { pick(p.name) } label: {
+                                Text(ModelLabel.line(p))
+                                if let why = ModelLabel.whyNot(p) { Text(why) }
+                            }
+                            .disabled(!ModelLabel.canRun(p))
                         }
                     }
                     .fixedSize()
