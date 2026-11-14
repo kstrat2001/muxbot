@@ -14,9 +14,9 @@ enum StartProject {
         /// Schema 3: each choice question's pick (its key to the choice's
         /// id); a question you didn't touch is its first choice.
         var choices: [String: String] = [:]
-        /// On by default: the project gets its own GitHub repo too. Off, it
-        /// stays on this Mac.
-        var backUpToGitHub: Bool = true
+        /// On, the project gets its own GitHub repo too; off, it stays on
+        /// this Mac. The form starts it from `backUpDefault`.
+        var backUpToGitHub: Bool = false
         /// The new GitHub repo's name (from the project's when blank).
         var repoName: String = ""
         /// The repo is private unless you switch Public on.
@@ -29,7 +29,23 @@ enum StartProject {
         }
     }
 
-    /// With "Back up to GitHub" on (the default), the project's own GitHub
+    static let backUpChoiceKey = "startProject.backUpToGitHub"
+
+    /// Where "Back up to GitHub" starts. GitHub is optional, so it's off for
+    /// someone not signed in to GitHub here (a new user never meets a
+    /// sign-in to start a project); signed in, it's on unless you last
+    /// switched it off.
+    static func backUpDefault(signedIn: Bool, defaults: UserDefaults) -> Bool {
+        guard signedIn else { return false }
+        return defaults.object(forKey: backUpChoiceKey) as? Bool ?? true
+    }
+
+    /// Your own flip of the switch, remembered for the next project.
+    static func rememberBackUp(_ on: Bool, defaults: UserDefaults) {
+        defaults.set(on, forKey: backUpChoiceKey)
+    }
+
+    /// With "Back up to GitHub" on, the project's own GitHub
     /// repo comes first
     /// (private unless you chose public, filled with the template's files at
     /// its pinned commit), and only then the bot and the local project from

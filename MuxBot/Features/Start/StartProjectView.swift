@@ -188,7 +188,10 @@ struct StartProjectView: View {
                 }
             }
             Section {
-                Toggle("Back up to GitHub", isOn: $answers.backUpToGitHub).tint(Color.brandGreen)
+                Toggle("Back up to GitHub", isOn: Binding(get: { answers.backUpToGitHub }, set: { on in
+                    answers.backUpToGitHub = on
+                    StartProject.rememberBackUp(on, defaults: .standard)
+                })).tint(Color.brandGreen)
                 if !answers.backUpToGitHub {
                     Text("Your project stays on this Mac. You can put it on GitHub later from its info.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
@@ -255,6 +258,7 @@ struct StartProjectView: View {
     private func pick(_ entry: TemplateEntry?) {
         picked = entry
         answers = StartProject.Answers(name: "")
+        answers.backUpToGitHub = StartProject.backUpDefault(signedIn: github.token != nil, defaults: .standard)
         problem = nil
     }
 
