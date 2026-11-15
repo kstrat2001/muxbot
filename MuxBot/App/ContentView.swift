@@ -90,6 +90,15 @@ struct ContentView: View {
             NavigationStack { FleetPairingView() }
         }
         #if os(iOS)
+        // A Mac's pairing QR code (muxbot://pair?url=…) opens pairing with
+        // its address filled in; anything else is ignored.
+        .onOpenURL { url in
+            guard let mac = RemotePairing.mac(from: url.absoluteString) else { return }
+            connection.offeredRemoteURL = mac
+            router.showPairing = true
+        }
+        #endif
+        #if os(iOS)
         .sheet(isPresented: $router.showSettings) {
             NavigationStack {
                 SettingsView().toolbar {

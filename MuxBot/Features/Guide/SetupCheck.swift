@@ -272,4 +272,7 @@ enum DarkmuxLinks {
     /// Setting up a model engine (Flint, TensorFold, LM Studio): the guide's
     /// front page until darkmux's guide has a page for it.
     static let models = URL(string: "https://darkmux.com/guide/")!
+    /// Turning on remote use (pairing other devices over the tailnet): the
+    /// guide's front page until it has a page for it.
+    static let remote = URL(string: "https://darkmux.com/guide/")!
 }

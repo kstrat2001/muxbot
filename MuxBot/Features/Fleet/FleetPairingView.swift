@@ -15,17 +15,41 @@ struct FleetPairingView: View {
     @Environment(AppRouter.self) private var router
     @Query private var bots: [Bot]
     @State private var justPaired = false
+    /// The Mac's tailnet address, typed, pasted or from its QR code.
+    @State private var address = ""
 
     var body: some View {
         Form {
             switch connection.state {
             case .unpaired, .failed:
                 #if os(iOS)
-                // Where runs start comes first, then GitHub sign-in.
+                // Pairing with your Mac over the tailnet, then GitHub sign-in.
                 Section {
-                    Label("On iPhone and iPad, runs start from the Mac app for now.", systemImage: "laptopcomputer")
-                    Text("Pair Mux Bot on the Mac where darkmux runs. Pairing your phone over your tailnet comes later.")
+                    Text("On your Mac, open Mux Bot's Settings, then Computers, and scan the code there with this device's camera. Or paste the address it shows.")
                         .foregroundStyle(Color.secondaryText)
+                    TextField("Your Mac's address", text: $address)
+                        .textContentType(.URL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("Pair with your Mac", systemImage: "link") {
+                        if let mac = RemotePairing.mac(from: address) { connection.pair(over: mac) }
+                    }
+                    .disabled(RemotePairing.mac(from: address) == nil)
+                    if !address.isEmpty, RemotePairing.mac(from: address) == nil {
+                        Text("That isn't the address your Mac shows. Copy it from Mux Bot's Settings on the Mac.")
+                            .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
+                    }
+                } header: {
+                    Text("Pair with your Mac over your tailnet")
+                } footer: {
+                    Text("Runs still start from the Mac app for now.")
+                }
+                if case let .failed(message) = connection.state {
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(Color.secondaryText)
+                        if let details = connection.failureDetails { TechnicalDetails(text: details) }
+                    }
                 }
                 Section {
                     NavigationLink { GitHubSignInView() } label: { Label("GitHub sign-in", systemImage: "person.badge.key") }
@@ -47,26 +71,26 @@ struct FleetPairingView: View {
                     Text("darkmux's app connection has to be running on this Mac.")
                 }
                 #endif
+            case let .waiting(code, expires) where connection.pairingRemotely:
+                // Over the tailnet the code is how the operator tells this
+                // request from a forged one: it's large, and first, for the
+                // whole pairing.
+                Section {
+                    Self.codeText(code)
+                    step(1, String(localized: "On your Mac, darkmux asks you to approve this device.")) { EmptyView() }
+                    step(2, String(localized: "Approve it only if darkmux shows this same code.")) { EmptyView() }
+                    waiting(until: expires)
+                } header: {
+                    Text("Approve this device on your Mac")
+                }
             case let .waiting(code, expires):
                 Section {
                     step(1, Self.approveStep) {
                         Link(destination: DarkmuxLinks.guide) { Label("darkmux guide", systemImage: "safari") }.font(AppFont.footnote())
                     }
                     step(2, "Check that darkmux shows this code.") { EmptyView() }
-                    Text(code)
-                        .font(.system(.largeTitle, design: .monospaced, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .textSelection(.enabled)
-                        .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let left = max(0, Int(expires.timeIntervalSince(context.date)))
-                        HStack(spacing: Spacing.sm) {
-                            if left > 0 { ProgressView().controlSize(.small) }
-                            Text(left > 0 ? "Waiting for you to approve… code expires in \(left / 60):\(String(format: "%02d", left % 60))"
-                                          : "The code expired. Cancel and pair again.")
-                                .foregroundStyle(Color.secondaryText)
-                        }
-                    }
+                    Self.codeText(code)
+                    waiting(until: expires)
                 } header: {
                     Text("Approve this app on your Mac")
                 }
@@ -82,7 +106,8 @@ struct FleetPairingView: View {
                     Label("Paired as \(name)", systemImage: "checkmark.circle.fill")
                         .font(AppFont.headline())
                         .labelStyle(.tintedIcon(Color.brandGreen))
-                    Text("darkmux on this Mac decides which models apps may use.")
+                    Text(connection.isRemote ? "Paired with your Mac over your tailnet. Runs still start from the Mac app for now."
+                                             : "darkmux on this Mac decides which models apps may use.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
                 Section {
@@ -123,6 +148,39 @@ struct FleetPairingView: View {
         }
         .onChange(of: connection.state) {
             if case .waiting = connection.state { justPaired = true }
+        }
+        .onAppear(perform: takeOfferedAddress)
+        .onChange(of: connection.offeredRemoteURL) { takeOfferedAddress() }
+    }
+
+    /// A Mac's QR code opened the app: its address goes in the field.
+    private func takeOfferedAddress() {
+        guard let mac = connection.offeredRemoteURL else { return }
+        address = mac.absoluteString
+        connection.offeredRemoteURL = nil
+    }
+
+    /// The pairing code, large: you compare it with darkmux's on the Mac.
+    static func codeText(_ code: String) -> some View {
+        Text(code)
+            .font(.system(size: 56, weight: .bold, design: .monospaced))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.sm)
+            .textSelection(.enabled)
+            .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
+    }
+
+    private func waiting(until expires: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let left = max(0, Int(expires.timeIntervalSince(context.date)))
+            HStack(spacing: Spacing.sm) {
+                if left > 0 { ProgressView().controlSize(.small) }
+                Text(left > 0 ? "Waiting for you to approve… code expires in \(left / 60):\(String(format: "%02d", left % 60))"
+                              : "The code expired. Cancel and pair again.")
+                    .foregroundStyle(Color.secondaryText)
+            }
         }
     }
 
@@ -166,8 +224,8 @@ struct CommandBox: View {
 }
 
 extension FleetPairingView {
-    /// A phone doesn't pair (runs start on the Mac): its sheet is about
-    /// your Mac and GitHub.
+    /// A phone pairs with your Mac over the tailnet (runs still start on the
+    /// Mac): its sheet is about your Mac and GitHub.
     static func title(onPhone: Bool) -> String {
         onPhone ? String(localized: "Your Mac and GitHub") : String(localized: "Pair with darkmux")
     }
