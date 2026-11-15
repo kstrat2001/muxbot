@@ -117,6 +117,9 @@ final class RunCoordinator {
         // commit), newest first.
         var pending = Array(workIds(for: run).reversed())
         var restored: [String] = []
+        let undoneBefore = pending.count
+        // Whatever darkmux undid, all or part, reaches GitHub too (#137).
+        defer { if pending.count < undoneBefore { Task { await self.sendToGitHub(bot, store: store) } } }
         do {
             while let workId = pending.first {
                 let undone: DarkmuxClient.UndoResult
@@ -547,9 +550,11 @@ final class RunCoordinator {
         await oneAtATime(bot.id) { [self] in
             do {
                 let changes = try await changes(for: workspace)
-                guard !changes.files.isEmpty else { return }
+                guard !nothingToPush(bot, changes) else { return }
                 let session = githubSession ?? .shared
-                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) }
+                // Files you approved stay in every push (#137).
+                let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
+                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, extraFiles: approved, start: $4) }
                 _ = try await pushMovingOn(bot, changes: changes, store: store) {
                     try await pusher(changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, $0)
                 }
@@ -1413,7 +1418,23 @@ final class RunCoordinator {
         }
         store.apply(.finish(summary: String(localized: "Changed \u{201C}\(Self.clip(old))\u{201D} to \u{201C}\(Self.clip(new))\u{201D} in \(file).")), to: run)
         Task { await self.refreshPreview(for: bot) }
-        if bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
+        Task { await self.sendToGitHub(bot, store: store) }
+    }
+
+    /// A change made outside a run's finish (a hand edit, an Undo) reaches
+    /// GitHub the way a run's does: the backup of a project the app made
+    /// there, else the open review's branch, so GitHub never keeps work
+    /// that was undone here, and Merge never takes it (#137).
+    func sendToGitHub(_ bot: Bot, store: BotStore) async {
+        if bot.githubStart != nil { await backUp(bot, store: store) } else if review(for: bot) != nil { await updateReview(bot, store: store) }
+    }
+
+    /// Nothing to push: no changes, and no earlier push from this Mac that
+    /// an Undo has since taken back (then the branch goes back to the base).
+    func nothingToPush(_ bot: Bot, _ changes: DarkmuxClient.Changes) -> Bool {
+        guard changes.files.isEmpty else { return false }
+        let head = pushStart(bot, changes: changes)?.head ?? changes.branch
+        return LocalBotState.shared[bot.id]?.pushedHeads?[head] == nil
     }
 
     /// What the thread says when darkmux couldn't place the text.
@@ -1638,6 +1659,8 @@ final class RunCoordinator {
         run.keptBranch = status.branch ?? run.keptBranch
         recordWork(workId, for: run)
         store.save()
+        // A crew that only reports never leaves edits behind either.
+        if !run.crew.changesFiles { Task { await self.revertUnasked(run, store: store) } }
     }
 
     static func leftBehindLine(_ files: [String?], tweak: Bool) -> String {

@@ -196,6 +196,27 @@ struct OwnRepoTests {
         #expect(pushed?.1?.head == "mux/tides")
     }
 
+    /// An Undo that took back everything still reaches GitHub: the branch
+    /// this Mac pushed goes back to the start, never keeping undone work
+    /// (#137). Nothing pushed before: nothing to send.
+    @Test func anUndoneBackupGoesBackToTheStartOnGitHub() async throws {
+        let store = TestStore.fresh()
+        let brain = BotBrain()
+        let bot = store.add(name: "Tides", instructions: "")
+        store.addResource(.repo, "https://github.com/kain/tides", to: bot)
+        bot.workspaceName = "tides-1"
+        bot.githubStart = GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides")
+        brain.runs.githubToken = { "ghu_abc" }
+        brain.runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main", files: []) }
+        let pushed = Counter()
+        brain.runs.prPusher = { _, _, _, _, _ in pushed.add(); return GitHubPR.Pushed(commit: "c2") }
+        await brain.runs.sendToGitHub(bot, store: store)
+        #expect(pushed.count == 0)
+        LocalBotState.shared.update(bot.id) { $0.pushedHeads = ["mux/tides": "c1"] }
+        await brain.runs.sendToGitHub(bot, store: store)
+        #expect(pushed.count == 1)
+    }
+
     @Test func theBackupNeverWaitsOnTheNotificationPrompt() async throws {
         let store = TestStore.fresh()
         let brain = BotBrain()
