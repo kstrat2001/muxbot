@@ -4,7 +4,11 @@ import Foundation
 /// pairing, then real runs for a paired client. Prototype contract, local
 /// darkmux build only.
 struct DarkmuxClient: Sendable {
-    var baseURL = URL(string: "http://127.0.0.1:8767")!
+    /// darkmux's client endpoint on this Mac.
+    static let localURL = URL(string: "http://127.0.0.1:8767")!
+    /// Where requests go: this Mac, or the Mac's tailnet address once this
+    /// device paired over the tailnet.
+    var baseURL = DarkmuxClient.localURL
     /// Tests answer here instead of darkmux. Under tests the default never
     /// reaches the network (`defaultSession`).
     var session: URLSession = DarkmuxClient.defaultSession
@@ -442,15 +446,39 @@ struct DarkmuxClient: Sendable {
 
     /// What this app may run here (`GET /client/whoami`): `profiles` is nil
     /// for any local profile (darkmux's default), else the granted names.
+    /// Features are gated on `capabilities` (nil: a darkmux that predates
+    /// the list), never on the version.
     struct Whoami: Decodable, Sendable, Equatable {
-        var profiles: [String]?
-        enum CodingKeys: String, CodingKey { case scopes }
-        enum ScopeKeys: String, CodingKey { case profiles }
-        init(profiles: [String]?) { self.profiles = profiles }
-        init(from decoder: any Decoder) throws {
-            let scopes = try decoder.container(keyedBy: CodingKeys.self).nestedContainer(keyedBy: ScopeKeys.self, forKey: .scopes)
-            profiles = try? scopes.decode([String].self, forKey: .profiles)
+        /// Whether darkmux on this Mac is on the tailnet (`state` is `off`,
+        /// `available` or `unavailable`), at which address, or why not.
+        struct Remote: Decodable, Sendable, Equatable {
+            var state: String
+            var url: String?
+            var reason: String?
         }
+        var profiles: [String]?
+        var capabilities: [String]?
+        var remote: Remote?
+        /// How this request reached darkmux: `local` or `tailnet`.
+        var via: String?
+        enum CodingKeys: String, CodingKey { case scopes, capabilities, remote, via }
+        enum ScopeKeys: String, CodingKey { case profiles }
+        init(profiles: [String]?, capabilities: [String]? = nil, remote: Remote? = nil, via: String? = nil) {
+            self.profiles = profiles
+            self.capabilities = capabilities
+            self.remote = remote
+            self.via = via
+        }
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            let scopes = try c.nestedContainer(keyedBy: ScopeKeys.self, forKey: .scopes)
+            profiles = try? scopes.decode([String].self, forKey: .profiles)
+            capabilities = try? c.decodeIfPresent([String].self, forKey: .capabilities)
+            remote = try? c.decodeIfPresent(Remote.self, forKey: .remote)
+            via = try? c.decodeIfPresent(String.self, forKey: .via)
+        }
+        func can(_ capability: String) -> Bool { capabilities?.contains(capability) ?? false }
+        var overTailnet: Bool { via == "tailnet" }
     }
 
     func whoami(token: String) async throws -> Whoami {
