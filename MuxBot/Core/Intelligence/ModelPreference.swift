@@ -305,13 +305,30 @@ enum ModelLabel {
     /// never asks you to run one).
     static func whyNot(_ p: DarkmuxClient.ProfileInfo) -> String? {
         guard !canRun(p) else { return nil }
-        let reason = (p.availability?.reason ?? "").lowercased()
         if serverOff(p) {
             return String(localized: "\(engine(p.endpoint))'s local server is off, so this model can't answer. Turn on its server in \(engine(p.endpoint)).")
         }
-        if p.availability?.code == "engine_in_use" || reason.contains("own server") {
-            // darkmux #3453: the engine's own server is up, and darkmux never stops one it didn't start.
-            return String(localized: "\(engine(p.endpoint))'s own server is already running on this Mac, so darkmux can't start this one. It can once that server is stopped.")
+        let name = engine(p.endpoint)
+        // darkmux #3574: branch on `availability.code` (darkmux's refusal
+        // codes), never on its reason's wording. An older darkmux sends no
+        // code and gets the general sentence.
+        switch p.availability?.code {
+        case "engine_in_use":
+            return String(localized: "\(name)'s own server is already running on this Mac, so darkmux can't start this one. It can once that server is stopped.")
+        case "port_in_use":
+            return String(localized: "Another app on this Mac is using the connection \(name) needs, so darkmux can't start this model. It can once that app lets go.")
+        case "engine_unavailable":
+            return String(localized: "\(name) on this Mac doesn't have this model, or isn't a version darkmux works with yet.")
+        case "model_start_failed", "model_stop_failed":
+            return String(localized: "\(name) couldn't start this model on this Mac. Try again in a moment, or pick another model.")
+        case "wont_fit":
+            return String(localized: "This model is too big for this Mac's memory.")
+        case "memory_in_use":
+            return String(localized: "Other apps are using the memory this model needs. It can run once they free some.")
+        case "busy":
+            return String(localized: "Another run is using the memory this model needs. It can run once that one ends.")
+        default:
+            break
         }
         if p.availability?.state == "unavailable" {
             return String(localized: "darkmux can't start this model on this Mac right now.")
