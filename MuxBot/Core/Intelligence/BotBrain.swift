@@ -1111,7 +1111,10 @@ final class BotBrain {
     /// A message that asks for a change: no intent or Fix, not a question,
     /// not about a picked element, not a dismissal.
     nonisolated static func isChangeRequest(_ text: String, intent: Intent?, element: PickedElement?) -> Bool {
-        guard intent == nil || intent == .fix, element == nil, !isDismissal(text) else { return false }
+        // Only a message the rules read as a change continues a run without
+        // a card: one they can't place goes to the model, which can only
+        // propose (#136).
+        guard intent == .fix, element == nil, !isDismissal(text) else { return false }
         return !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
     }
 

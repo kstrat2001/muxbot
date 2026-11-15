@@ -26,6 +26,13 @@ struct ChatRoutingNearMissTests {
         ("show the price per month", true, .fix),
         ("the issue list should be shorter", true, .fix),
         ("open the link in a new tab", true, .fix),
+        // Kain, 2026-11-15: advice was sent as an edit (hcr PR 13).
+        ("suggest improvements to the content accuracy", false, .review),
+        ("suggest improvements to the content accuracy", true, .review),
+        ("can you proofread the about page", false, .review),
+        ("what would you change here?", true, .review),
+        ("give me feedback on the bio", false, .review),
+        ("check the facts in the bio", false, .review),
         // Layout, picked: measured.
         ("this is cut off", true, .bug),
         ("no gutter on the sides", true, .bug),
@@ -73,5 +80,13 @@ struct ChatRoutingNearMissTests {
                       ("show it on a phone", .phoneView), ("clear the chat", .clearConversation)])
     func actionsStillMatch(text: String, action: AppAction) {
         #expect(AppAction.match(text) == action, "\(text)")
+    }
+
+    /// A message the rules can't place never continues a run without a
+    /// card; only a change the rules read as one does.
+    @Test func onlyAReadChangeContinuesARunWithoutACard() {
+        #expect(!BotBrain.isChangeRequest("suggest improvements to the content accuracy", intent: nil, element: nil))
+        #expect(!BotBrain.isChangeRequest("bigger", intent: nil, element: nil))
+        #expect(BotBrain.isChangeRequest("make the header bigger", intent: .fix, element: nil))
     }
 }

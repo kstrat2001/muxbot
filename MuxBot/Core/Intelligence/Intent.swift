@@ -137,6 +137,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     static func infer(_ text: String, hasElement: Bool) -> Intent? {
         let lower = text.lowercased()
         if issueNumber(in: text) != nil, lower.contains("fix") { return .fix }
+        // "Suggest improvements", "check the facts": advice, never an edit.
+        // The Reviewer answers from the files and changes nothing (#136).
+        if isAdvisory(lower) { return .review }
         // Something picked: the message is about it, never a list of issues.
         if hasElement { return aboutElement(lower) }
         if FallbackBrain.isIssueQuestion(lower) { return .issues }
@@ -191,6 +194,27 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         let verb = text.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
         if ["show", "list", "fix"].contains(verb) { return false }
         return startsWithChangeVerb(text)
+    }
+
+    /// Asks for advice, a check or ideas ("suggest improvements to the
+    /// bio", "can you proofread this", "what would you change?"), not for
+    /// a change: answered by a crew that only reports, behind Approve.
+    static func isAdvisory(_ lower: String) -> Bool {
+        var text = lower.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "’", with: "'")
+        for polite in ["please ", "can you ", "could you ", "would you ", "will you ", "pls ", "please "] where text.hasPrefix(polite) {
+            text = String(text.dropFirst(polite.count))
+        }
+        let openers = ["suggest", "recommend", "proofread", "critique", "audit", "fact-check", "fact check", "look over",
+                       "go over", "give me feedback", "give feedback", "give me ideas", "give me suggestions", "ideas for",
+                       "ideas to", "any ideas", "any suggestions", "any feedback", "what would you change", "what would you improve",
+                       "what could be better", "what should i change", "what should i improve", "how can i improve",
+                       "how could i improve", "how would you improve", "how can we improve", "what do you think",
+                       "your thoughts", "thoughts on", "check for", "check the facts", "check the spelling", "check spelling",
+                       "check the grammar", "check grammar", "check the accuracy", "check accuracy", "check the content"]
+        if openers.contains(where: { text.hasPrefix($0) }) { return true }
+        let anywhere = ["suggestions for", "suggestions on", "suggest improvements", "suggest some", "recommendations for",
+                        "feedback on", "ideas to improve", "ideas for improving", "what to improve", "how to improve"]
+        return anywhere.contains { text.contains($0) }
     }
 
     /// "can/could/would/will you <change verb> …".
