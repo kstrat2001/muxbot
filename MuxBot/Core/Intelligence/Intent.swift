@@ -58,6 +58,12 @@ enum Intent: String, Codable, CaseIterable, Sendable {
             }
         }
         guard let found = best?.0 else { return nil }
+        // "no, do not change it", "not a fix": a correction toward a change
+        // that says not to is never read as one.
+        if found == .fix {
+            let rest = lower.replacingOccurrences(of: #"^(no|nope|not|actually)\b"#, with: "", options: .regularExpression)
+            if lower.hasPrefix("not") || rest.range(of: #"\b(not|don't|dont|never|no)\b"#, options: .regularExpression) != nil { return nil }
+        }
         // Only when the message is just the correction: "actually, also fix
         // the footer" is a new request.
         let cueWords = Set(cues.flatMap(\.1).flatMap { $0.split(separator: " ").map(String.init) })
@@ -137,6 +143,9 @@ enum Intent: String, Codable, CaseIterable, Sendable {
     static func infer(_ text: String, hasElement: Bool) -> Intent? {
         let lower = text.lowercased()
         if issueNumber(in: text) != nil, lower.contains("fix") { return .fix }
+        // "Suggest improvements", "check the facts": advice, never an edit.
+        // The Reviewer answers from the files and changes nothing (#136).
+        if isAdvisory(lower) { return .review }
         // Something picked: the message is about it, never a list of issues.
         if hasElement { return aboutElement(lower) }
         if FallbackBrain.isIssueQuestion(lower) { return .issues }
@@ -191,6 +200,49 @@ enum Intent: String, Codable, CaseIterable, Sendable {
         let verb = text.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
         if ["show", "list", "fix"].contains(verb) { return false }
         return startsWithChangeVerb(text)
+    }
+
+    /// Asks for advice, a check or ideas ("suggest improvements to the
+    /// bio", "can you proofread this", "what would you change?"), not for
+    /// a change: answered by a crew that only reports, behind Approve.
+    static func isAdvisory(_ lower: String) -> Bool {
+        var text = lower.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "’", with: "'")
+        for polite in ["please ", "can you ", "could you ", "would you ", "will you ", "pls ", "please "] where text.hasPrefix(polite) {
+            text = String(text.dropFirst(polite.count))
+        }
+        let openers = ["suggest", "recommend", "proofread", "critique", "audit", "fact-check", "fact check", "look over",
+                       "go over", "give me feedback", "give feedback", "give me ideas", "give me suggestions", "ideas for",
+                       "ideas to", "any ideas", "any suggestions", "any feedback", "what would you change", "what would you improve",
+                       "what could be better", "what should i change", "what should i improve", "how can i improve",
+                       "how could i improve", "how would you improve", "how can we improve", "what do you think",
+                       "your thoughts", "thoughts on", "check for", "check the facts", "check the spelling", "check spelling",
+                       "check the grammar", "check grammar", "check the accuracy", "check accuracy", "check the content"]
+        // Whole words: "recommended products should be bigger" is a change.
+        func starts(_ phrase: String) -> Bool {
+            text.range(of: "^" + NSRegularExpression.escapedPattern(for: phrase) + "\\b", options: .regularExpression) != nil
+        }
+        if openers.contains(where: starts) { return true }
+        // "I'd like your thoughts on the bio", "make suggestions about the
+        // facts", "let's review the facts": an advice word anywhere, unless
+        // the message opens with a change ("add a Feedback section").
+        let verb = text.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        if startsWithChangeVerb(text), !["make", "give", "show", "say", "use", "put"].contains(verb) { return false }
+        let words = ["suggestion", "suggestions", "suggest", "feedback", "thoughts", "opinion", "opinions", "proofread",
+                     "critique", "recommendation", "recommendations", "review", "fact-check", "ideas", "advice",
+                     "what you'd change", "what you would change"]
+        return words.contains { text.range(of: "\\b" + NSRegularExpression.escapedPattern(for: $0) + "\\b", options: .regularExpression) != nil }
+    }
+
+    /// A change the rules can act on without a card: it opens with a change
+    /// verb ("make the header bigger"), not a wish ("I'd like…") or a verb
+    /// that often only asks to see something (show, say, use, put).
+    static func isDirectChange(_ lower: String) -> Bool {
+        var text = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        for polite in ["please ", "can you ", "could you ", "would you ", "will you ", "pls ", "please "] where text.hasPrefix(polite) {
+            text = String(text.dropFirst(polite.count))
+        }
+        let verb = text.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+        return startsWithChangeVerb(text) && !["show", "say", "use", "put"].contains(verb) && !isAdvisory(lower)
     }
 
     /// "can/could/would/will you <change verb> …".

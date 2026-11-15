@@ -124,7 +124,9 @@ struct BotStore {
     @discardableResult
     func handOff(task title: String, from sender: String, to role: Bot, brief: String? = nil) -> BotRun {
         append(.system, "From \(sender): \(title)", to: conversation(for: .bot(role.id)))
-        return proposeRun(task: title, crew: .coder, on: role, brief: brief)
+        // "Ask Hcr to proofread the bio": advice goes to the Reviewer.
+        let crew: CrewRole = Intent.isAdvisory(title.lowercased()) ? .reviewer : .coder
+        return proposeRun(task: title, crew: crew, on: role, brief: brief)
     }
 
     /// Saves an action (hand-off, new bot, new resource) as an Approve card

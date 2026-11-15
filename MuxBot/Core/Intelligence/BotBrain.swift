@@ -671,6 +671,8 @@ final class BotBrain {
             return
         }
         var intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        // Mux Bot's own thread: "any ideas?" is for the guide, not a review.
+        if speaker == nil, explicit == nil, intent == .review, Intent.isAdvisory(text.lowercased()) { intent = .ask }
         // Mux Bot's thread: a change you only said ("update the pricing on
         // hcr") is handed to the bot it names, or answered as chat; only a
         // prefix makes it crew work, which needs the bot's own thread.
@@ -790,13 +792,17 @@ final class BotBrain {
            // A proposal canceled before it ever ran has nothing to follow up.
            last.startedAt != nil,
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
-            if last.phase == .result {
+            // Only a message the rules read as a change continues the run
+            // at once; one they can't place is offered as a card, so nothing
+            // edits the project without a tap (#136).
+            if last.phase == .result, intent == .fix, Intent.isDirectChange(text.lowercased()) {
                 // Your reply after a result changes that same run (a Tweak).
                 autoTweaks[bot.id] = (last.id, message.id)
                 await rerun(last, change: text, store: store)
             } else {
                 followUpOffered.insert(last.id)
-                // A stopped or failed run runs again only after Approve.
+                // A stopped or failed run, or a reply the rules can't place,
+                // runs again only after Approve.
                 store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Run it again with that change?", to: conversation)
                 store.proposeAction(.tweak(runId: last.id, change: text), in: context)
             }

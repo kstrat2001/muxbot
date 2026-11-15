@@ -26,6 +26,18 @@ struct ChatRoutingNearMissTests {
         ("show the price per month", true, .fix),
         ("the issue list should be shorter", true, .fix),
         ("open the link in a new tab", true, .fix),
+        // Kain, 2026-11-15: advice was sent as an edit (hcr PR 13).
+        ("suggest improvements to the content accuracy", false, .review),
+        ("suggest improvements to the content accuracy", true, .review),
+        ("can you proofread the about page", false, .review),
+        ("what would you change here?", true, .review),
+        ("give me feedback on the bio", false, .review),
+        ("check the facts in the bio", false, .review),
+        ("I'd like your thoughts on the bio", false, .review),
+        ("I want feedback about the bio", false, .review),
+        ("let's review the facts in the bio", false, .review),
+        ("make suggestions about the content accuracy", false, .review),
+        ("recommended products should be bigger", false, .fix),
         // Layout, picked: measured.
         ("this is cut off", true, .bug),
         ("no gutter on the sides", true, .bug),
@@ -73,5 +85,28 @@ struct ChatRoutingNearMissTests {
                       ("show it on a phone", .phoneView), ("clear the chat", .clearConversation)])
     func actionsStillMatch(text: String, action: AppAction) {
         #expect(AppAction.match(text) == action, "\(text)")
+    }
+
+    /// A correction that says not to change is never a change (Fable review).
+    @Test(arguments: ["no, do not change it", "No, I do not want a fix", "not a fix", "no, don't change it"])
+    func aNoIsNeverAFix(text: String) {
+        #expect(Intent.correction(in: text) != .fix, "\(text)")
+    }
+
+    @Test func aPlainCorrectionStillFixes() {
+        #expect(Intent.correction(in: "no, fix it") == .fix)
+    }
+
+    /// Only a message that opens with a change verb edits without a card.
+    @Test(arguments: ["I'd like the header bigger", "show me what you'd change", "let's make it blue"])
+    func wishesWaitForATap(text: String) {
+        #expect(!Intent.isDirectChange(text.lowercased()), "\(text)")
+    }
+
+    /// Advice is never a follow-up edit to the last run.
+    @Test func adviceIsNeverAFollowUpEdit() {
+        let intent = Intent.infer("suggest improvements to the content accuracy", hasElement: false)
+        #expect(!BotBrain.isChangeRequest("suggest improvements to the content accuracy", intent: intent, element: nil))
+        #expect(BotBrain.isChangeRequest("make the header bigger", intent: .fix, element: nil))
     }
 }

@@ -100,9 +100,11 @@ struct FollowUpRoutingTests {
         // This Mac's run (sweep 2: another Mac's is refused a Tweak).
         brain.runs.markStartedHere(run)
         await brain.send("i'm not seeing it fixed in the live viewer", in: .bot(bot.id), store: store)
-        // Your reply continues the run (a Tweak); unpaired here, so it says why it can't send yet.
-        #expect((thread.messages ?? []).contains { $0.content == "Can't run this yet: this app isn't paired with darkmux." })
-        #expect(!(thread.messages ?? []).contains { $0.kind == .actionCard })
+        // Your reply continues the run (a Tweak), offered on a card first:
+        // the rules can't read it as a change, so it waits for a tap (#136).
+        let card = (thread.messages ?? []).first { $0.kind == .actionCard }
+        guard case let .tweak(runId, _)? = card?.action else { Issue.record("expected an Approve card"); return }
+        #expect(runId == run.id)
         #expect(bot.runs?.count == 1, "never a new dispatch, never a stale PR")
     }
 
