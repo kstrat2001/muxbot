@@ -49,6 +49,9 @@ enum TaskReview {
     /// opened: the card asks again this many times, this far apart.
     static let settleTries = 10
     static let settleInterval: Duration = .seconds(3)
+    /// While the card is on screen, GitHub is asked again this often, so a
+    /// pull request closed or merged there drops Merge here.
+    static let watchInterval: Duration = .seconds(60)
 
     // MARK: The Reviewer's brief and answer
 
@@ -222,8 +225,14 @@ struct GitHubReview: Sendable {
         for method in ["merge", "squash", "rebase"] {
             let (data, status) = try await load("PUT", "https://api.github.com/repos/\(repo)/pulls/\(number)/merge",
                                                 ["merge_method": method, "commit_title": title])
-            struct Merged: Decodable { var sha: String? }
-            if (200..<300).contains(status) { return (try? JSONDecoder().decode(Merged.self, from: data))?.sha ?? "" }
+            struct Merged: Decodable { var sha: String?; var merged: Bool? }
+            if (200..<300).contains(status) {
+                // Only GitHub saying it merged counts as merged.
+                guard let done = try? JSONDecoder().decode(Merged.self, from: data), done.merged == true else {
+                    throw GitHubPR.Failure.github(String(localized: "GitHub didn't confirm the merge."))
+                }
+                return done.sha ?? ""
+            }
             let why = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String ?? ""
             lastWhy = why
             // This way of merging isn't allowed here: try the next one.

@@ -97,6 +97,12 @@ extension RunCoordinator {
             await refreshReview(bot, store: store, github: github)
             tries += 1
         }
+        // Then keep watching while the card is on screen (this task ends
+        // with it): a close or merge on GitHub drops Merge here.
+        while review(for: bot) != nil {
+            do { try await sleep(TaskReview.watchInterval) } catch { return }
+            await refreshReview(bot, store: store, github: github)
+        }
     }
 
     /// Merge, in the app. GitHub's refusal is said plainly, and the card
@@ -107,6 +113,16 @@ extension RunCoordinator {
         merging.insert(bot.id)
         defer { merging.remove(bot.id) }
         let thread = store.conversation(for: .bot(bot.id))
+        // Ask GitHub first: a pull request closed or merged there since the
+        // card last checked is never merged from here.
+        await refreshReview(bot, store: store, github: github)
+        guard review(for: bot)?.number == state.number, let standing = reviewStandings[bot.id] else {
+            if review(for: bot) != nil {
+                store.append(.system, String(localized: "Couldn't reach GitHub to check this review first, so nothing was merged. Try again in a moment."), to: thread)
+            }
+            return
+        }
+        guard standing == .ready else { return }
         do {
             let sha = try await GitHubReview(session: githubSession ?? .shared, token: token).merge(repo: repo, number: state.number, title: state.title)
             await afterMerge(bot, mergeSHA: sha.isEmpty ? nil : sha, store: store)
