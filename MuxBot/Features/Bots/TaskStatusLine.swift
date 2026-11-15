@@ -37,6 +37,20 @@ enum PendingChanges {
     }
 }
 
+/// The shelf's Preview toggle; its highlight shows the preview is open.
+struct PreviewToggle: View {
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        @Bindable var router = self.router
+        Toggle(isOn: $router.showPreview) {
+            Label("Preview", systemImage: "play.rectangle")
+        }
+        .toggleStyle(.button)
+        .help(router.showPreview ? "Hide preview" : "Show preview")
+    }
+}
+
 /// The tool shelf directly above the chat bar: the Preview toggle, and the
 /// task's pending changes (how many, files, lines added and removed) with
 /// See changes, Undo and Review & merge; once a review is open, the review
@@ -58,10 +72,11 @@ struct TaskStatusLine: View {
         let canPreview = brain.runs.canPreview(bot)
         let showsChanges = !inReview && bot.workspaceName != nil
         VStack(spacing: 0) {
-            if inReview { ReviewCardView(bot: bot) }
-            if canPreview || showsChanges {
+            // In review, the Preview toggle sits on the review card's own row.
+            if inReview { ReviewCardView(bot: bot, canPreview: canPreview) }
+            if !inReview && (canPreview || showsChanges) {
                 HStack(spacing: Spacing.sm) {
-                    if canPreview { previewToggle }
+                    if canPreview { PreviewToggle() }
                     if showsChanges { pending } else { Spacer(minLength: 0) }
                 }
                 .font(AppFont.footnote())
@@ -71,16 +86,6 @@ struct TaskStatusLine: View {
                 .background(.bar)
             }
         }
-    }
-
-    /// The toggle's highlight shows the preview is open.
-    private var previewToggle: some View {
-        @Bindable var router = self.router
-        return Toggle(isOn: $router.showPreview) {
-            Label("Preview", systemImage: "play.rectangle")
-        }
-        .toggleStyle(.button)
-        .help(router.showPreview ? "Hide preview" : "Show preview")
     }
 
     @ViewBuilder private var pending: some View {
