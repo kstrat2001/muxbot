@@ -82,11 +82,10 @@ struct ChatRoutingNearMissTests {
         #expect(AppAction.match(text) == action, "\(text)")
     }
 
-    /// A message the rules can't place never continues a run without a
-    /// card; only a change the rules read as one does.
-    @Test func onlyAReadChangeContinuesARunWithoutACard() {
-        #expect(!BotBrain.isChangeRequest("suggest improvements to the content accuracy", intent: nil, element: nil))
-        #expect(!BotBrain.isChangeRequest("bigger", intent: nil, element: nil))
+    /// Advice is never a follow-up edit to the last run.
+    @Test func adviceIsNeverAFollowUpEdit() {
+        let intent = Intent.infer("suggest improvements to the content accuracy", hasElement: false)
+        #expect(!BotBrain.isChangeRequest("suggest improvements to the content accuracy", intent: intent, element: nil))
         #expect(BotBrain.isChangeRequest("make the header bigger", intent: .fix, element: nil))
     }
 }

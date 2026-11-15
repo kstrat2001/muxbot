@@ -790,13 +790,17 @@ final class BotBrain {
            // A proposal canceled before it ever ran has nothing to follow up.
            last.startedAt != nil,
            Date().timeIntervalSince(last.finishedAt ?? last.createdAt) < 6 * 3600 {
-            if last.phase == .result {
+            // Only a message the rules read as a change continues the run
+            // at once; one they can't place is offered as a card, so nothing
+            // edits the project without a tap (#136).
+            if last.phase == .result, intent == .fix {
                 // Your reply after a result changes that same run (a Tweak).
                 autoTweaks[bot.id] = (last.id, message.id)
                 await rerun(last, change: text, store: store)
             } else {
                 followUpOffered.insert(last.id)
-                // A stopped or failed run runs again only after Approve.
+                // A stopped or failed run, or a reply the rules can't place,
+                // runs again only after Approve.
                 store.append(.assistant, "That sounds like a follow-up to “\(last.task)”. Run it again with that change?", to: conversation)
                 store.proposeAction(.tweak(runId: last.id, change: text), in: context)
             }
@@ -1111,10 +1115,7 @@ final class BotBrain {
     /// A message that asks for a change: no intent or Fix, not a question,
     /// not about a picked element, not a dismissal.
     nonisolated static func isChangeRequest(_ text: String, intent: Intent?, element: PickedElement?) -> Bool {
-        // Only a message the rules read as a change continues a run without
-        // a card: one they can't place goes to the model, which can only
-        // propose (#136).
-        guard intent == .fix, element == nil, !isDismissal(text) else { return false }
+        guard intent == nil || intent == .fix, element == nil, !isDismissal(text) else { return false }
         return !GuideRoute.isQuestion(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
