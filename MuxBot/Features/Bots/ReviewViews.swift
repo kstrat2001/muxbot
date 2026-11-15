@@ -246,13 +246,13 @@ struct ReviewCardView: View {
             Button("See it on GitHub", systemImage: "arrow.up.forward.square") { openURL(state.url) }
                 .buttonStyle(.bordered)
             if canPreview { PreviewToggle() }
-            if standing != .ready {
-                Button("Check again", systemImage: "arrow.clockwise") {
-                    Task { await brain.runs.refreshReview(bot, store: store, github: github) }
-                }
-                .labelStyle(.iconOnly).buttonStyle(.borderless)
-                .help("Check again with GitHub")
+            // Always there: GitHub may have changed since the last look,
+            // whatever the card says now.
+            Button("Check again", systemImage: "arrow.clockwise") {
+                Task { await brain.runs.refreshReview(bot, store: store, github: github) }
             }
+            .labelStyle(.iconOnly).buttonStyle(.borderless)
+            .help("Check again with GitHub")
         }
         .controlSize(.small)
     }
