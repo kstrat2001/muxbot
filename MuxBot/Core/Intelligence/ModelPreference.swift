@@ -292,24 +292,6 @@ enum ModelLabel {
         p.reachable && p.availability?.state != "unavailable"
     }
 
-    /// (darkmux #3574) Held back only by its engine's own server, which
-    /// darkmux stops when you approve a run on it.
-    static func needsEngineFreed(_ p: DarkmuxClient.ProfileInfo) -> Bool {
-        p.availability?.state == "unavailable" && p.availability?.code == "engine_in_use"
-    }
-
-    /// Whether Change may pick it for a run: it can run, or approving the
-    /// run frees its engine. Auto never picks one that needs freeing.
-    static func canPick(_ p: DarkmuxClient.ProfileInfo) -> Bool {
-        canRun(p) || needsEngineFreed(p)
-    }
-
-    /// What approving a run on it also does, in plain words; nil when nothing.
-    static func approveAlso(_ p: DarkmuxClient.ProfileInfo) -> String? {
-        guard needsEngineFreed(p) else { return nil }
-        return String(localized: "Approving also stops \(engine(p.endpoint))'s own server on this Mac, so darkmux can start this model.")
-    }
-
     /// (darkmux #3578) Its engine's local server is off: the engine has the
     /// model, but a run can't reach it.
     static func serverOff(_ p: DarkmuxClient.ProfileInfo) -> Bool {
@@ -324,14 +306,10 @@ enum ModelLabel {
     static func whyNot(_ p: DarkmuxClient.ProfileInfo) -> String? {
         guard !canRun(p) else { return nil }
         let reason = (p.availability?.reason ?? "").lowercased()
-        if needsEngineFreed(p) {
-            // darkmux #3574: Approve on a run with it stops that server.
-            return String(localized: "\(engine(p.endpoint))'s own server is already running on this Mac. Pick this model and darkmux stops that server when you approve the run.")
-        }
         if serverOff(p) {
             return String(localized: "\(engine(p.endpoint))'s local server is off, so this model can't answer. Turn on its server in \(engine(p.endpoint)).")
         }
-        if reason.contains("own server") {
+        if p.availability?.code == "engine_in_use" || reason.contains("own server") {
             // darkmux #3453: the engine's own server is up, and darkmux never stops one it didn't start.
             return String(localized: "\(engine(p.endpoint))'s own server is already running on this Mac, so darkmux can't start this one. It can once that server is stopped.")
         }

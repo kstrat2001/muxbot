@@ -557,22 +557,17 @@ struct ModelPickRow: View {
                     Label(line(current), systemImage: "cpu").font(AppFont.footnote(.semibold))
                     Text(current == choice.profile ? choice.reason : String(localized: "chosen for this run"))
                         .font(AppFont.caption()).foregroundStyle(Color.secondaryText)
-                    if let also = options.first(where: { $0.name == current }).flatMap(ModelLabel.approveAlso) {
-                        Text(also).font(AppFont.caption()).foregroundStyle(Color.secondaryText)
-                    }
                 }
                 Spacer()
                 if !options.isEmpty {
                     Menu("Change") {
                         ForEach(options, id: \.name) { p in
-                            // One that can't run now is listed grayed, with why;
-                            // one held back by its engine's own server can be
-                            // picked, and Approve frees it (darkmux #3574).
+                            // One that can't run now is listed grayed, with why.
                             Button { pick(p.name) } label: {
                                 Text(ModelLabel.line(p))
                                 if let why = ModelLabel.whyNot(p) { Text(why) }
                             }
-                            .disabled(!ModelLabel.canPick(p))
+                            .disabled(!ModelLabel.canRun(p))
                         }
                     }
                     .fixedSize()
