@@ -92,6 +92,8 @@ struct StartReviewSheet: View {
 /// GitHub says it can go in. The list stays in the app.
 struct ReviewCardView: View {
     let bot: Bot
+    /// Shows the shelf's Preview toggle on the card's button row (the shelf row is hidden in review).
+    var canPreview = false
 
     @Environment(BotBrain.self) private var brain
     @Environment(GitHubAuth.self) private var github
@@ -114,6 +116,7 @@ struct ReviewCardView: View {
                         Text(tag).font(AppFont.caption(.semibold)).foregroundStyle(Color.secondaryText)
                     }
                     Spacer(minLength: 0)
+                    if canPreview && !expanded { PreviewToggle().controlSize(.small) }
                     Button(expanded ? "Hide" : "Show", systemImage: expanded ? "chevron.up" : "chevron.down") { expanded.toggle() }
                         .labelStyle(.iconOnly).buttonStyle(.borderless)
                 }
@@ -242,6 +245,7 @@ struct ReviewCardView: View {
             }
             Button("See it on GitHub", systemImage: "arrow.up.forward.square") { openURL(state.url) }
                 .buttonStyle(.bordered)
+            if canPreview { PreviewToggle() }
             if standing != .ready {
                 Button("Check again", systemImage: "arrow.clockwise") {
                     Task { await brain.runs.refreshReview(bot, store: store, github: github) }
