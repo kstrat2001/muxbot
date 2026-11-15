@@ -106,13 +106,6 @@ struct DarkmuxClient: Sendable {
         var errorDescription: String? { DarkmuxPlain.sentence(underlying) }
     }
 
-    /// darkmux couldn't stop an engine's own server before an approved run
-    /// (darkmux #3574): the run never started.
-    struct EngineNotFreed: LocalizedError {
-        var underlying: any Error
-        var errorDescription: String? { DarkmuxPlain.sentence(self) }
-    }
-
     /// darkmux decides what apps may run (a machine setting), so a pairing
     /// asks for nothing beyond itself.
     func requestPairing(deviceName: String, code: String, secret: String) async throws -> String {
@@ -397,15 +390,6 @@ struct DarkmuxClient: Sendable {
 
     func cancelWork(token: String, workId: String) async throws {
         _ = try await send("POST", "/client/work/\(workId)/cancel", headers: ["Authorization": "Bearer \(token)"])
-    }
-
-    /// (darkmux #3574) Stops an engine's own server (one darkmux didn't
-    /// start, such as rec's) so darkmux can start the model it manages.
-    /// Sent only for a run you approved. 409: it wasn't running.
-    func stopOwnServer(token: String, engine: String) async throws {
-        // darkmux runs the engine's own stop and waits for it (a model
-        // server can take a while to let go of a big model).
-        _ = try await send("POST", "/client/engines/\(engine)/stop-own-server", headers: ["Authorization": "Bearer \(token)"], timeout: 30)
     }
 
     /// A profile this app may run work on here (`GET /client/profiles`):

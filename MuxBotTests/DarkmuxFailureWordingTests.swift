@@ -36,12 +36,6 @@ struct DarkmuxFailureWordingTests {
         #expect(details?.contains("clients.profiles") == true)
     }
 
-    @Test func anEngineThatWouldntLetGoSaysSo() {
-        let error = DarkmuxClient.EngineNotFreed(underlying: URLError(.timedOut))
-        guard case let .fail(reason, _) = RunCoordinator.startFailure(error) else { Issue.record("expected .fail"); return }
-        #expect(reason.hasPrefix("darkmux couldn't stop the model's own server"))
-    }
-
     @MainActor @Test func darkmuxNotAnsweringInAGitHubFlowIsNamedAsDarkmux() {
         let said = RunCoordinator.plain(DarkmuxClient.Unreachable(underlying: URLError(.cannotConnectToHost)))
         #expect(said.sentence.hasPrefix("darkmux isn't answering"))

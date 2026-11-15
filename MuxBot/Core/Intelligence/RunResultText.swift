@@ -164,9 +164,6 @@ enum RunResultText {
 enum DarkmuxPlain {
     static func sentence(_ error: any Error) -> String {
         if let unreachable = error as? DarkmuxClient.Unreachable { return sentence(unreachable.underlying) }
-        if error is DarkmuxClient.EngineNotFreed {
-            return String(localized: "darkmux couldn't stop the model's own server, so the run didn't start. Run it again, or pick another model.")
-        }
         if let url = error as? URLError {
             if url.code == .timedOut { return String(localized: "darkmux took too long to answer. Try again in a moment.") }
             return [.cannotConnectToHost, .networkConnectionLost, .cannotFindHost, .notConnectedToInternet].contains(url.code)
@@ -208,7 +205,7 @@ enum DarkmuxPlain {
 
     /// A refusal whose sentence says what happened (not just "couldn't start").
     static func saysWhy(_ error: any Error) -> Bool {
-        if error is URLError || error is DecodingError || error is DarkmuxClient.Unreachable || error is DarkmuxClient.EngineNotFreed { return true }
+        if error is URLError || error is DecodingError || error is DarkmuxClient.Unreachable { return true }
         guard let client = error as? DarkmuxClient.ClientError else { return false }
         return isEarlierPairing(error) || client.code == "branch_failed"
     }
@@ -225,7 +222,6 @@ enum DarkmuxPlain {
             return [client.status > 0 ? "darkmux answered \(client.status)" : nil, client.code, client.message].compactMap { $0 }.joined(separator: ": ")
         }
         if let unreachable = error as? DarkmuxClient.Unreachable { return details(unreachable.underlying) }
-        if let notFreed = error as? DarkmuxClient.EngineNotFreed { return details(notFreed.underlying) }
         if error is DecodingError { return String(describing: error) }
         return error.localizedDescription
     }
