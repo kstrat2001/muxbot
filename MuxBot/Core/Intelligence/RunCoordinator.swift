@@ -172,17 +172,54 @@ final class RunCoordinator {
     /// Every darkmux run gets the same working rules after its task, plus
     /// the repo's own hints from its `.darkmux/preview.json`, never a guess
     /// about how some other kind of project is laid out.
-    nonisolated static func workBrief(_ task: String, recipe: PreviewManifest? = nil, skills: [BotSkill] = []) -> String {
+    /// A crew that only reports (Reviewer, Researcher, Eval runner) gets
+    /// read-only rules: it answers, and never edits the project.
+    nonisolated static func workBrief(_ task: String, crew: CrewRole = .coder, recipe: PreviewManifest? = nil, skills: [BotSkill] = []) -> String {
         let hints = recipe?.conventions.map { "\n\nAbout this repository: \($0)" } ?? ""
+        guard crew.changesFiles else { return task + hints + "\n\n" + readOnlyRules }
         let howTo = skills.map { "\n\nHow this kind of change is done here (\($0.name)):\n\($0.body)" }.joined()
         return task + hints + howTo + """
 
 
             You are working in this repository (the current directory). Find the file responsible, \
-            make the smallest change that does it, and change nothing else. Don't run installs, builds \
+            make the smallest change that does it, and change nothing else. Never change facts (names, \
+            dates, numbers, places, quotes) unless the task asks for that exact change. Don't run installs, builds \
             or the dev server. If you can't find where to change, stop and say what you searched instead \
             of repeating searches. When done, list the files you changed.
             """
+    }
+
+    nonisolated static let readOnlyRules = """
+        You are working in this repository (the current directory), read only: don't change, create or \
+        delete any file. Don't run installs, builds or the dev server. Answer with what you found or \
+        suggest, naming the files it's about; the person decides what to change. If you can't find it, \
+        say what you searched instead of repeating searches.
+        """
+
+    /// A crew that only reports changed files anyway: they're put back at
+    /// once, so a review or research run never edits the project or
+    /// reaches GitHub.
+    func revertUnasked(_ run: BotRun, store: BotStore) async {
+        guard let bot = run.bot else { return }
+        let thread = store.conversation(for: .bot(bot.id))
+        let said = String(localized: "The \(run.crew.name) changed files though it was only asked to report")
+        do {
+            guard let connection, let token = connection.token else { throw NotPaired() }
+            for workId in workIds(for: run).reversed() {
+                do {
+                    if let workUndoer { _ = try await workUndoer(workId) } else { _ = try await connection.client.undoWork(token: token, workId: workId) }
+                } catch let error as DarkmuxClient.ClientError where error.status == 409 && Self.nothingToUndo(error.message) {}
+                forgetWork(workId, for: run)
+            }
+            run.changedFiles = []
+            run.keptCommit = nil
+            run.diff = nil
+            store.save()
+            store.append(.system, String(localized: "\(said), so I put them back. Its answer is above."), to: thread)
+            Task { await self.refreshPreview(for: bot) }
+        } catch {
+            store.append(.system, String(localized: "\(said), and darkmux couldn't put them back (\(DarkmuxPlain.sentence(error))). Nothing was sent to GitHub: use Undo on its card before your next change."), to: thread)
+        }
     }
 
     /// darkmux refusing or not answering a submit fails the run; it is never
@@ -394,6 +431,12 @@ final class RunCoordinator {
         // to the bot's branch there (no PR until you open one). On its own:
         // the run's slot is free without waiting for GitHub (a bot's pushes
         // still go one at a time, in order: `oneAtATime`).
+        // A crew that only reports never changes the project: its files are
+        // put back, and nothing goes to GitHub.
+        if status.commit != nil, !run.crew.changesFiles {
+            Task { await self.revertUnasked(run, store: store) }
+            return
+        }
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
         // A change saved while the task is in review joins the review.
         if status.commit != nil, let bot = run.bot, bot.githubStart == nil, review(for: bot) != nil { Task { await self.updateReview(bot, store: store) } }
@@ -1744,7 +1787,7 @@ final class RunCoordinator {
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 // Stopped while the model was chosen: it never reaches darkmux.
                 guard run.phase == .running else { return }
-                let brief = Self.workBrief(message, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
+                let brief = Self.workBrief(message, crew: run.crew, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
                 let workId: String, profile: String?
                 do {
                     (workId, profile) = try await submit(role, brief, runProfiles[run.id], workspace, continues)
