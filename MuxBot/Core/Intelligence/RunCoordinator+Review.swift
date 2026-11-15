@@ -174,9 +174,10 @@ extension RunCoordinator {
         await oneAtATime(bot.id) { [self] in
             do {
                 let changes = try await changes(for: workspace)
-                guard !changes.files.isEmpty else { return }
+                guard !nothingToPush(bot, changes) else { return }
                 let session = githubSession ?? .shared
-                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, start: $4) }
+                let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
+                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, extraFiles: approved, start: $4) }
                 _ = try await pushMovingOn(bot, changes: changes, store: store) {
                     try await pusher(changes, repo, String(localized: "Update \(bot.name)'s review"), bot.id, $0)
                 }
