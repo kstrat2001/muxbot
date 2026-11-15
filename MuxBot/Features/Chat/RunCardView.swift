@@ -61,7 +61,7 @@ struct RunCardView: View {
             }
             modelRow(run)
             DisclosureGroup("What \(run.crew.name) gets") {
-                Text(RunCoordinator.workBrief(run.brief ?? run.task, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
+                Text(RunCoordinator.workBrief(run.brief ?? run.task, crew: run.crew, recipe: run.bot.flatMap(brain.runs.recipes.recipe(for:))))
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)

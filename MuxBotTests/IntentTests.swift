@@ -390,3 +390,19 @@ struct ChatAboutThisTests {
         #expect(bot.runs?.isEmpty ?? true)
     }
 }
+
+struct CrewBriefTests {
+    @Test func aCrewThatOnlyReportsIsToldNeverToEdit() {
+        for crew in [CrewRole.reviewer, .researcher, .evalRunner] {
+            let text = RunCoordinator.workBrief("Suggest improvements to the content", crew: crew)
+            #expect(text.contains("read only: don't change, create or delete any file"))
+            #expect(!text.contains("make the smallest change"))
+        }
+    }
+
+    @Test func theCoderNeverChangesFactsItWasNotAskedTo() {
+        let text = RunCoordinator.workBrief("Tighten the bio")
+        #expect(text.contains("Never change facts (names, dates, numbers, places, quotes)"))
+        #expect(text.contains("make the smallest change"))
+    }
+}
