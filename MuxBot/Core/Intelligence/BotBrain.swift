@@ -671,6 +671,8 @@ final class BotBrain {
             return
         }
         var intent = explicit ?? Intent.infer(text, hasElement: element != nil)
+        // Mux Bot's own thread: "any ideas?" is for the guide, not a review.
+        if speaker == nil, explicit == nil, intent == .review, Intent.isAdvisory(text.lowercased()) { intent = .ask }
         // Mux Bot's thread: a change you only said ("update the pricing on
         // hcr") is handed to the bot it names, or answered as chat; only a
         // prefix makes it crew work, which needs the bot's own thread.
@@ -793,7 +795,7 @@ final class BotBrain {
             // Only a message the rules read as a change continues the run
             // at once; one they can't place is offered as a card, so nothing
             // edits the project without a tap (#136).
-            if last.phase == .result, intent == .fix {
+            if last.phase == .result, intent == .fix, Intent.isDirectChange(text.lowercased()) {
                 // Your reply after a result changes that same run (a Tweak).
                 autoTweaks[bot.id] = (last.id, message.id)
                 await rerun(last, change: text, store: store)
