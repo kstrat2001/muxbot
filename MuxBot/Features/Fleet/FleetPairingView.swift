@@ -114,14 +114,17 @@ struct FleetPairingView: View {
                     Button("Unpair this app", role: .destructive) { connection.unpair() }
                 }
             }
+            // Part of the form, after everything else: an overlay pinned to
+            // the bottom drew over the code when the sheet was short.
+            Section {
+            } footer: {
+                Link("Don't have darkmux yet? Get it", destination: DarkmuxLinks.install)
+                    .font(AppFont.footnote())
+                    .tint(Color.accentText)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .formStyle(.grouped)
-        .safeAreaInset(edge: .bottom) {
-            Link("Don't have darkmux yet? Get it", destination: DarkmuxLinks.install)
-                .font(AppFont.footnote())
-                .tint(Color.accentText)
-                .padding(.bottom, Spacing.md)
-        }
         #if os(iOS)
         .navigationTitle(Self.title(onPhone: true))
         #else
