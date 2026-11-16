@@ -124,17 +124,17 @@ struct KeychainHelper: KeychainProviding {
     /// this build can read without asking (it wrote it; the old keychain
     /// would otherwise ask for the login password, and an item another build
     /// wrote is left alone). Never again after the first look.
-    /// A build without the data protection keychain has nowhere safer to
-    /// move it, so it leaves it.
+    /// A build without the data protection keychain (no team) moves it to
+    /// its own name in the file-based keychain, so the old name is free.
     private func moveOldItem(_ key: String) {
-        guard let old, Self.dataProtection else { return }
+        guard let old else { return }
         let defaults = defaults ?? TestIsolation.defaults
         let flag = "keychain.oldItemChecked.\(service).\(key)"
         guard !defaults.bool(forKey: flag) else { return }
         if let item = old.read(service: service, key: key) {
             if read(key) == nil, let data = item.value.data(using: .utf8) {
                 // Not moved: leave it where it is, still the user's.
-                guard add(key, data, modern: true) == errSecSuccess else { return }
+                guard add(key, data, modern: Self.dataProtection) == errSecSuccess else { return }
             }
             old.remove(item.ref)
         }
