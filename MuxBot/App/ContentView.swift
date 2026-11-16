@@ -88,6 +88,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $router.showPairing) {
             NavigationStack { FleetPairingView() }
+                #if os(macOS)
+                .frame(minWidth: 480, minHeight: 420)
+                #endif
         }
         #if os(iOS)
         // A Mac's pairing QR code (muxbot://pair?url=…) opens pairing with
