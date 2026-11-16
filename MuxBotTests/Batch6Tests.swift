@@ -35,8 +35,9 @@ struct KeychainTests {
     /// A helper over in-memory keychains: the move never depends on how the
     /// test host is signed (CI signs with no team).
     private func helper(_ old: FakeOldKeychain, _ store: FakeNewKeychain = FakeNewKeychain(),
-                        defaults: UserDefaults? = nil, service: String? = nil) -> KeychainHelper {
-        KeychainHelper(service: service ?? self.service, defaults: defaults ?? fresh(), old: old, store: store)
+                        defaults: UserDefaults? = nil, service: String? = nil,
+                        launch: KeychainHelper.MoveAttempts = KeychainHelper.MoveAttempts()) -> KeychainHelper {
+        KeychainHelper(service: service ?? self.service, defaults: defaults ?? fresh(), old: old, store: store, attempts: launch)
     }
 
     @Test func anOldItemMovesOnceAndIsThenRemovedFromTheOldKeychain() {
@@ -64,7 +65,7 @@ struct KeychainTests {
         #expect(old.items.isEmpty, "the old copy is gone too")
     }
 
-    @Test func aFailedSaveLeavesTheOldItemAndTriesAgain() {
+    @Test func aFailedSaveLeavesTheOldItemAndTriesAgainNextLaunch() {
         let old = FakeOldKeychain()
         old.items[service + "/kept"] = "old"
         let store = FakeNewKeychain()
@@ -74,42 +75,102 @@ struct KeychainTests {
         #expect(k.get(key: "kept") == nil)
         #expect(old.items[service + "/kept"] == "old", "never removed before the new copy is saved")
         store.failAdds = false
-        #expect(k.get(key: "kept") == "old", "tried again, and moved")
+        #expect(k.get(key: "kept") == nil, "not again this launch")
+        #expect(old.reads == 1)
+        #expect(helper(old, store, defaults: defaults).get(key: "kept") == "old", "next launch: moved")
         #expect(old.items.isEmpty)
     }
 
     @Test(arguments: [errSecAuthFailed, errSecInteractionNotAllowed, errSecInvalidOwnerEdit])
-    func anOldItemThisBuildCannotReadSilentlyIsLeftAloneAndTriedAgain(status: OSStatus) {
+    func anOldItemThisBuildCannotReadSilentlyIsLeftAloneAndTriedNextLaunch(status: OSStatus) {
         let old = FakeOldKeychain()
         old.items[service + "/theirs"] = "another build's"
         old.refusal = status
-        let k = helper(old)
+        let defaults = fresh()
+        let k = helper(old, defaults: defaults)
         #expect(k.get(key: "theirs") == nil)
         #expect(k.save(key: "theirs", value: "mine"))
         k.delete(key: "theirs")
+        _ = k.get(key: "theirs")
         #expect(old.items[service + "/theirs"] == "another build's", "never deleted: this build didn't read it")
         #expect(old.removed.isEmpty)
-        let before = old.reads
-        _ = k.get(key: "theirs")
-        #expect(old.reads == before + 1, "a refusal (or a locked keychain) is asked about again, not given up on")
+        #expect(old.reads == 1, "asked once this launch, not on every read")
         old.refusal = nil
-        #expect(k.get(key: "theirs") == "another build's", "readable now: moved")
+        let next = helper(old, defaults: defaults)
+        #expect(next.get(key: "theirs") == "another build's", "asked again next launch, and moved once readable")
         #expect(old.items.isEmpty)
     }
 
-    @Test func aRefusedRemoveIsTriedAgain() {
+    @Test func aRefusedRemoveIsTriedAgainNextLaunch() {
         let old = FakeOldKeychain()
         old.items[service + "/stuck"] = "old"
         old.refuseRemove = true
-        let k = helper(old)
+        let defaults = fresh()
+        let k = helper(old, defaults: defaults)
         #expect(k.get(key: "stuck") == "old")
         #expect(old.items[service + "/stuck"] == "old", "the delete was refused")
         old.refuseRemove = false
-        #expect(k.get(key: "stuck") == "old")
-        #expect(old.items.isEmpty, "removed on the next look")
-        let reads = old.reads
         _ = k.get(key: "stuck")
-        #expect(old.reads == reads, "then done")
+        #expect(old.reads == 1, "not again this launch")
+        let next = helper(old, defaults: defaults)
+        #expect(next.get(key: "stuck") == "old")
+        #expect(old.items.isEmpty, "removed next launch")
+        _ = helper(old, defaults: defaults).get(key: "stuck")
+        #expect(old.reads == 2, "then done for good")
+    }
+
+    @Test func aLockedKeychainIsUnavailableNotEmpty() {
+        let old = FakeOldKeychain()
+        old.items[service + "/token"] = "old"
+        let store = FakeNewKeychain()
+        store.items[service + "/token"] = "mine"
+        store.unavailable = errSecInteractionNotAllowed
+        let defaults = fresh()
+        let k = helper(old, store, defaults: defaults)
+        #expect(k.read(key: "token") == .unavailable(errSecInteractionNotAllowed))
+        #expect(k.get(key: "token") == nil)
+        #expect(old.items[service + "/token"] == "old", "nothing moved or removed while it can't tell")
+        store.unavailable = nil
+        #expect(helper(old, store, defaults: defaults).read(key: "token") == .value("mine"))
+    }
+
+    @Test func aSaveThatFailsKeepsTheTokenThatWasThere() {
+        let store = FakeNewKeychain()
+        store.items[service + "/token"] = "mine"
+        store.failAdds = true
+        let k = helper(FakeOldKeychain(), store)
+        #expect(!k.save(key: "token", value: "newer"))
+        #expect(store.items[service + "/token"] == "mine", "a failed save never deletes first")
+    }
+
+    @Test(.enabled(if: KeychainHelper.dataProtection)) func tokensStayReadableWhileTheScreenIsLocked() throws {
+        // Saved "after first unlock": runs finish and push with the screen
+        // locked. One saved by an earlier build ("when unlocked") is moved
+        // to that class the first time it's read.
+        let k = KeychainHelper(service: service, defaults: fresh(), old: nil)
+        defer { k.deleteAll() }
+        #expect(k.save(key: "new", value: "a"))
+        #expect(try accessibility("new") == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: "earlier", kSecUseDataProtectionKeychain as String: true,
+            kSecValueData as String: Data("b".utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        #expect(SecItemAdd(add as CFDictionary, nil) == errSecSuccess)
+        #expect(k.get(key: "earlier") == "b")
+        #expect(try accessibility("earlier") == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+    }
+
+    private func accessibility(_ key: String) throws -> String? {
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: key, kSecUseDataProtectionKeychain as String: true,
+            kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        try #require(SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess)
+        return (result as? [String: Any])?[kSecAttrAccessible as String] as? String
     }
 
     @Test func afterTheFirstLookTheOldKeychainIsNeverReadAgain() {
@@ -189,6 +250,25 @@ struct KeychainTests {
         #endif
     }
 
+    @Test func aUITestLaunchNeverAsksIsUITestingFromItsOwnStart() throws {
+        // TestIsolation.isUITesting's start makes a KeychainHelper; if that
+        // (or the default old keychain) asked isUITesting again, a
+        // -uiTesting launch would crash in its own one-time start.
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("MuxBot/Core/Utilities/KeychainHelper.swift"), encoding: .utf8)
+        func body(after marker: String) throws -> String {
+            let start = try #require(source.range(of: marker))
+            let rest = source[start.upperBound...]
+            return String(rest[..<(rest.range(of: "\n    }\n")?.lowerBound ?? rest.endIndex)])
+        }
+        let start = try body(after: "static let isUITesting: Bool = {")
+        #expect(start.contains("old: nil"), "its KeychainHelper has no old keychain")
+        for marker in ["static var defaultOld:", "static func defaultOld(unitTesting:"] {
+            let decides = try body(after: marker)
+            #expect(!decides.contains("isUITesting") && !decides.contains("isTesting"), "\(marker) decides from the arguments")
+        }
+    }
+
     @Test(.enabled(if: KeychainHelper.signedWithTeam)) func theAppIsSignedForTheDataProtectionKeychain() {
         // Without its access group the Mac app would keep tokens in the
         // file-based keychain, where another build can ask for them.
@@ -233,18 +313,32 @@ final class FakeOldKeychain: OldKeychain, @unchecked Sendable {
     }
 }
 
-/// The keychain tokens live in now, in memory.
+/// The keychain tokens live in now, in memory. `unavailable`: reads fail
+/// as they do while the keychain can't be read (locked).
 final class FakeNewKeychain: NewKeychain, @unchecked Sendable {
     private let lock = NSLock()
     var isProtected = true
     var failAdds = false
+    var unavailable: OSStatus?
     var items: [String: String] = [:]
 
-    func read(service: String, key: String) -> String? { lock.withLock { items["\(service)/\(key)"] } }
+    func read(service: String, key: String) -> KeychainRead {
+        lock.withLock {
+            if let unavailable { return .unavailable(unavailable) }
+            return items["\(service)/\(key)"].map(KeychainRead.value) ?? .notFound
+        }
+    }
     func add(service: String, key: String, data: Data) -> OSStatus {
         lock.withLock {
             guard !failAdds else { return errSecInteractionNotAllowed }
             guard items["\(service)/\(key)"] == nil else { return errSecDuplicateItem }
+            items["\(service)/\(key)"] = String(decoding: data, as: UTF8.self)
+            return errSecSuccess
+        }
+    }
+    func set(service: String, key: String, data: Data) -> OSStatus {
+        lock.withLock {
+            guard !failAdds else { return errSecInteractionNotAllowed }
             items["\(service)/\(key)"] = String(decoding: data, as: UTF8.self)
             return errSecSuccess
         }
@@ -331,5 +425,64 @@ struct PreviewMessagingTests {
         #expect(element.selector == "h1")
         #expect(BugReport.decodePick("not json") == nil)
         #expect(BugReport.decodePick(42) == nil)
+    }
+}
+
+/// A keychain that can be locked: reads say "unavailable", never "not
+/// there", as the system's do while it can't read an item.
+final class LockableKeychain: KeychainProviding, @unchecked Sendable {
+    var items: [String: String] = [:]
+    var locked = false
+    func save(key: String, value: String) -> Bool { guard !locked else { return false }; items[key] = value; return true }
+    func get(key: String) -> String? { read(key: key).value }
+    func read(key: String) -> KeychainRead {
+        if locked { return .unavailable(errSecInteractionNotAllowed) }
+        return items[key].map(KeychainRead.value) ?? .notFound
+    }
+    func delete(key: String) { items[key] = nil }
+    func deleteAll() { items = [:] }
+}
+
+@Suite(.serialized) @MainActor
+struct LockedKeychainSignInTests {
+    private func defaults() -> UserDefaults { UserDefaults(suiteName: "muxbot-locked-\(UUID().uuidString)")! }
+
+    @Test func aLockedKeychainDuringRenewalKeepsTheSignInAndBothTokens() async {
+        GitHubStub.reset()
+        let keychain = LockableKeychain()
+        keychain.items[GitHubAuth.tokenKey] = "old"
+        keychain.items[GitHubAuth.refreshKey] = "r1"
+        let auth = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain, defaults: defaults(), sleep: { _ in })
+        keychain.locked = true
+        #expect(await auth.renewal() == .unreachable, "tried again later, not signed out")
+        #expect(keychain.items[GitHubAuth.tokenKey] == "old")
+        #expect(keychain.items[GitHubAuth.refreshKey] == "r1")
+        guard case .signedIn = auth.state else { Issue.record("signed out: \(auth.state)"); return }
+    }
+
+    @Test func aSignInReadWhileLockedIsReadAgainOnceUnlocked() {
+        let keychain = LockableKeychain()
+        keychain.items[GitHubAuth.tokenKey] = "t"
+        keychain.locked = true
+        let store = defaults()
+        store.set("kain-test", forKey: "github.user.login")
+        let auth = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain, defaults: store, sleep: { _ in })
+        #expect(auth.state == .signedIn(login: "kain-test"), "a locked keychain isn't a signed-out one")
+        #expect(auth.token == nil)
+        keychain.locked = false
+        #expect(auth.token == "t", "not remembered as missing")
+    }
+
+    @Test func aPairingReadWhileLockedIsReadAgainOnceUnlocked() {
+        let keychain = LockableKeychain()
+        keychain.items["darkmux.client.token"] = "p"
+        keychain.locked = true
+        let store = defaults()
+        store.set("Mux Bot test", forKey: "darkmux.client.name")
+        let connection = FleetConnection(keychain: keychain, defaults: store)
+        #expect(connection.isPaired, "a locked keychain isn't an unpaired one")
+        #expect(connection.token == nil)
+        keychain.locked = false
+        #expect(connection.token == "p")
     }
 }

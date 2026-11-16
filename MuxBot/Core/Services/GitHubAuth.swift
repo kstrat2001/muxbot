@@ -53,10 +53,15 @@ final class GitHubAuth {
         self.keychain = keychain
         self.defaults = defaults
         self.sleep = sleep
-        let stored = keychain.get(key: Self.tokenKey)
-        cachedToken = .some(stored)
-        if stored != nil {
+        switch keychain.read(key: Self.tokenKey) {
+        case let .value(stored):
+            cachedToken = .some(stored)
             state = .signedIn(login: defaults.string(forKey: Self.loginKey) ?? "GitHub")
+        case .notFound:
+            cachedToken = .some(nil)
+        case .unavailable:
+            // Locked: still signed in if you were; the token is read later.
+            if let login = defaults.string(forKey: Self.loginKey) { state = .signedIn(login: login) }
         }
     }
 
@@ -68,9 +73,12 @@ final class GitHubAuth {
     /// every redraw, and a Keychain read takes milliseconds.
     var token: String? {
         if let cachedToken { return cachedToken }
-        let read = keychain.get(key: Self.tokenKey)
-        cachedToken = .some(read)
-        return read
+        switch keychain.read(key: Self.tokenKey) {
+        case let .value(read): cachedToken = .some(read); return read
+        case .notFound: cachedToken = .some(nil); return nil
+        // Locked: nothing remembered, so it's read again next time.
+        case .unavailable: return nil
+        }
     }
     @ObservationIgnored private var cachedToken: String??
 
@@ -180,7 +188,14 @@ final class GitHubAuth {
     @ObservationIgnored private var refreshing: Task<GitHubRenewal, Never>?
 
     private func renew() async -> GitHubRenewal {
-        guard isConfigured, let clientID, let refreshToken = keychain.get(key: Self.refreshKey) else { expire(); return .expired }
+        guard isConfigured, let clientID else { expire(); return .expired }
+        let refreshToken: String
+        switch keychain.read(key: Self.refreshKey) {
+        case let .value(stored): refreshToken = stored
+        case .notFound: expire(); return .expired
+        // Locked (the screen, while a run finishes): try again later, signed in.
+        case .unavailable: return .unreachable
+        }
         struct Reply: Decodable { var access_token: String?; var refresh_token: String?; var error: String? }
         do {
             let reply: Reply = try await post("https://github.com/login/oauth/access_token", [

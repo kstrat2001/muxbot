@@ -22,13 +22,25 @@ struct KeychainHelper: KeychainProviding {
     private let old: (any OldKeychain)?
     /// Where tokens live now.
     private let store: any NewKeychain
+    /// What this launch already tried to move and couldn't.
+    private let attempts: MoveAttempts
 
     init(service: String = KeychainHelper.defaultService, defaults: UserDefaults? = nil,
-         old: (any OldKeychain)? = KeychainHelper.defaultOld, store: any NewKeychain = SystemKeychain.app) {
+         old: (any OldKeychain)? = KeychainHelper.defaultOld, store: any NewKeychain = SystemKeychain.app,
+         attempts: MoveAttempts = .launch) {
         self.service = service
         self.defaults = defaults
         self.old = old
         self.store = store
+        self.attempts = attempts
+    }
+
+    /// Old items this launch couldn't move (refused, locked, a failed save
+    /// or delete): each is tried once per launch, not on every read.
+    final class MoveAttempts: @unchecked Sendable {
+        static let launch = MoveAttempts()
+        fileprivate var tried: Set<String> = []
+        init() {}
     }
 
     /// This build's own items: its bundle id. Under tests (which run inside
@@ -92,16 +104,22 @@ struct KeychainHelper: KeychainProviding {
         #endif
     }()
 
+    /// Replaces the item in place: a save that fails (a locked keychain)
+    /// leaves the one that was there.
     @discardableResult
     func save(key: String, value: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
-        delete(key: key)
-        let status = store.add(service: service, key: key, data: data)
+        moveOldItem(key)
+        let status = store.set(service: service, key: key, data: data)
         if status != errSecSuccess { keychainLog.error("Keychain save failed: \(status, privacy: .public)") }
         return status == errSecSuccess
     }
 
-    func get(key: String) -> String? {
+    func get(key: String) -> String? { read(key: key).value }
+
+    /// The item, or why there is none: not there, or the keychain can't be
+    /// read now (`unavailable`, which is never "signed out").
+    func read(key: String) -> KeychainRead {
         moveOldItem(key)
         return store.read(service: service, key: key)
     }
@@ -123,8 +141,9 @@ struct KeychainHelper: KeychainProviding {
     /// build's service moves to the protected keychain and is removed there.
     /// Only one this build can read without the system asking (it wrote it);
     /// one another build wrote, or a locked keychain, is left alone and
-    /// asked about again next time. The protected copy, when there already
-    /// is one, is kept (only this or a later build saved it). Once the old
+    /// asked about again next launch. The protected copy, when there already
+    /// is one, is kept: it's the one the app reads (old item dates aren't
+    /// compared). Once the old
     /// item is gone (or there was none), never again. A build without the
     /// protected keychain moves nothing: it would only move the token to
     /// another name in the same file-based keychain.
@@ -134,18 +153,28 @@ struct KeychainHelper: KeychainProviding {
         let defaults = defaults ?? TestIsolation.defaults
         let flag = "keychain.oldItemMoved.protected.\(service).\(key)"
         Self.moveLock.withLock {
-            guard !defaults.bool(forKey: flag) else { return }
+            guard !defaults.bool(forKey: flag), !attempts.tried.contains(flag) else { return }
             switch old.read(service: service, key: key) {
             case .notFound:
                 defaults.set(true, forKey: flag)
             case let .refused(status):
+                attempts.tried.insert(flag)
                 keychainLog.error("An old keychain item couldn't be read without asking: \(status, privacy: .public)")
             case let .found(value, ref):
-                if store.read(service: service, key: key) == nil {
+                switch store.read(service: service, key: key) {
+                case .value: break
+                case .notFound:
                     // Not saved: leave the old one where it is, still the user's.
-                    guard store.add(service: service, key: key, data: Data(value.utf8)) == errSecSuccess else { return }
+                    guard store.add(service: service, key: key, data: Data(value.utf8)) == errSecSuccess else {
+                        attempts.tried.insert(flag)
+                        return
+                    }
+                case .unavailable:
+                    // Can't tell whether there's a newer copy: next launch.
+                    attempts.tried.insert(flag)
+                    return
                 }
-                if old.remove(ref) { defaults.set(true, forKey: flag) }
+                if old.remove(ref) { defaults.set(true, forKey: flag) } else { attempts.tried.insert(flag) }
             }
         }
     }
@@ -159,13 +188,28 @@ struct KeychainHelper: KeychainProviding {
     }()
 }
 
+/// What a keychain read found.
+enum KeychainRead: Equatable, Sendable {
+    case value(String)
+    case notFound
+    /// It couldn't be read now (errSecInteractionNotAllowed: the Mac or
+    /// device is locked, or not yet unlocked since it started). Never treat
+    /// it as signed out or unpaired: ask again later.
+    case unavailable(OSStatus)
+
+    var value: String? { if case let .value(v) = self { v } else { nil } }
+}
+
 /// Where tokens live now.
 protocol NewKeychain: Sendable {
     /// The data protection keychain (the app's access group), not the
     /// file-based one.
     var isProtected: Bool { get }
-    func read(service: String, key: String) -> String?
+    func read(service: String, key: String) -> KeychainRead
+    /// Adds the item only if there's none.
     func add(service: String, key: String, data: Data) -> OSStatus
+    /// Replaces the item in place, or adds it.
+    func set(service: String, key: String, data: Data) -> OSStatus
     /// One item, or with no key all of the service's.
     func delete(service: String, key: String?)
 }
@@ -177,6 +221,11 @@ struct SystemKeychain: NewKeychain {
     let isProtected: Bool
     static let app = SystemKeychain(isProtected: KeychainHelper.dataProtection)
 
+    /// Readable from the first unlock after the Mac starts until it shuts
+    /// down, locked screen included: runs finish and push while you're
+    /// away. Deliberately the same on iOS. Still this device only.
+    static var accessible: CFString { kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly }
+
     private func base(_ service: String, _ key: String?) -> [String: Any] {
         var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                 kSecAttrService as String: isProtected ? service : "\(service).unsigned"]
@@ -185,22 +234,39 @@ struct SystemKeychain: NewKeychain {
         return q
     }
 
-    func read(service: String, key: String) -> String? {
+    func read(service: String, key: String) -> KeychainRead {
         var q = base(service, key)
         q[kSecReturnData as String] = true
+        q[kSecReturnAttributes as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
-        if status == errSecSuccess, let data = result as? Data { return String(data: data, encoding: .utf8) }
-        if status != errSecItemNotFound { keychainLog.error("Keychain read failed: \(status, privacy: .public)") }
-        return nil
+        if status == errSecItemNotFound { return .notFound }
+        guard status == errSecSuccess, let found = result as? [String: Any],
+              let data = found[kSecValueData as String] as? Data, let value = String(data: data, encoding: .utf8) else {
+            keychainLog.error("Keychain read failed: \(status, privacy: .public)")
+            return .unavailable(status)
+        }
+        // Saved by an earlier build "when unlocked": move it to this class.
+        if isProtected, found[kSecAttrAccessible as String] as? String != Self.accessible as String {
+            let update = [kSecAttrAccessible as String: Self.accessible] as CFDictionary
+            let moved = SecItemUpdate(base(service, key) as CFDictionary, update)
+            if moved != errSecSuccess { keychainLog.error("Keychain class update failed: \(moved, privacy: .public)") }
+        }
+        return .value(value)
     }
 
     func add(service: String, key: String, data: Data) -> OSStatus {
         var q = base(service, key)
         q[kSecValueData as String] = data
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        q[kSecAttrAccessible as String] = Self.accessible
         return SecItemAdd(q as CFDictionary, nil)
+    }
+
+    func set(service: String, key: String, data: Data) -> OSStatus {
+        let update = [kSecValueData as String: data, kSecAttrAccessible as String: Self.accessible] as CFDictionary
+        let status = SecItemUpdate(base(service, key) as CFDictionary, update)
+        return status == errSecItemNotFound ? add(service: service, key: key, data: data) : status
     }
 
     func delete(service: String, key: String?) {
@@ -278,8 +344,15 @@ struct FileKeychain: OldKeychain {
 protocol KeychainProviding {
     @discardableResult func save(key: String, value: String) -> Bool
     func get(key: String) -> String?
+    /// The item, or why there is none (`unavailable`: locked, ask later).
+    func read(key: String) -> KeychainRead
     func delete(key: String)
     func deleteAll()
+}
+
+extension KeychainProviding {
+    /// A store that can't be locked (tests' in-memory ones).
+    func read(key: String) -> KeychainRead { get(key: key).map(KeychainRead.value) ?? .notFound }
 }
 
 /// Tests run inside the app (its bundle id and container): whatever they
