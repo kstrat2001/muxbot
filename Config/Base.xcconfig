@@ -3,8 +3,13 @@
 // and set your own DEVELOPMENT_TEAM, or set it in Xcode.
 // Defaults; Local.xcconfig may override them.
 MUXBOT_CLOUD_SYNC = NO
-MUXBOT_ENTITLEMENTS_MAC = MuxBot.entitlements
-MUXBOT_ENTITLEMENTS_IOS = MuxBot.entitlements
+// The app keeps tokens in the data protection keychain, under its own access
+// group (keychain-access-groups), which needs a signing team. A build with no
+// team (CI, a fork that signs to run locally) gets the same entitlements
+// without it: there DEVELOPMENT_TEAM is empty and the name below resolves.
+MUXBOT_NO_TEAM_ENTITLEMENTS_ = MuxBot-NoTeam.entitlements
+MUXBOT_ENTITLEMENTS_MAC = $(MUXBOT_NO_TEAM_ENTITLEMENTS_$(DEVELOPMENT_TEAM):default=MuxBot.entitlements)
+MUXBOT_ENTITLEMENTS_IOS = $(MUXBOT_NO_TEAM_ENTITLEMENTS_$(DEVELOPMENT_TEAM):default=MuxBot.entitlements)
 // The Mux Bot GitHub App (public client ID; device-flow sign-in, no secret).
 // Forks register their own app and override these in Local.xcconfig.
 MUXBOT_GITHUB_CLIENT_ID = Iv23lia70IF0WLGlkV2i

@@ -43,10 +43,15 @@ final class FleetConnection {
     init(keychain: any KeychainProviding = KeychainHelper(), defaults: UserDefaults = TestIsolation.defaults) {
         self.keychain = keychain
         self.defaults = defaults
-        let stored = keychain.get(key: Self.tokenKey)
-        cachedToken = .some(stored)
-        if stored != nil, let name = defaults.string(forKey: Self.nameKey) {
-            state = .paired(name: name)
+        switch keychain.read(key: Self.tokenKey) {
+        case let .value(stored):
+            cachedToken = .some(stored)
+            if let name = defaults.string(forKey: Self.nameKey) { state = .paired(name: name) }
+        case .notFound:
+            cachedToken = .some(nil)
+        case .unavailable:
+            // Locked: still paired if you were; the token is read later.
+            if let name = defaults.string(forKey: Self.nameKey) { state = .paired(name: name) }
         }
         restoreBaseURL()
         client.onUnauthorized = { [weak self] refused in Task { @MainActor in self?.revoked(token: refused) } }
@@ -56,9 +61,12 @@ final class FleetConnection {
     /// every redraw, and a Keychain read takes milliseconds.
     var token: String? {
         if let cachedToken { return cachedToken }
-        let read = keychain.get(key: Self.tokenKey)
-        cachedToken = .some(read)
-        return read
+        switch keychain.read(key: Self.tokenKey) {
+        case let .value(read): cachedToken = .some(read); return read
+        case .notFound: cachedToken = .some(nil); return nil
+        // Locked: nothing remembered, so it's read again next time.
+        case .unavailable: return nil
+        }
     }
     @ObservationIgnored private var cachedToken: String??
 
