@@ -241,18 +241,26 @@ struct SystemKeychain: NewKeychain {
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
-        if status == errSecItemNotFound { return .notFound }
-        guard status == errSecSuccess, let found = result as? [String: Any],
-              let data = found[kSecValueData as String] as? Data, let value = String(data: data, encoding: .utf8) else {
-            keychainLog.error("Keychain read failed: \(status, privacy: .public)")
-            return .unavailable(status)
-        }
+        let found = result as? [String: Any]
+        let read = Self.result(status: status, found: found)
+        if case .unavailable = read { keychainLog.error("Keychain read failed: \(status, privacy: .public)") }
+        guard case .value = read else { return read }
         // Saved by an earlier build "when unlocked": move it to this class.
-        if isProtected, found[kSecAttrAccessible as String] as? String != Self.accessible as String {
+        if isProtected, found?[kSecAttrAccessible as String] as? String != Self.accessible as String {
             let update = [kSecAttrAccessible as String: Self.accessible] as CFDictionary
             let moved = SecItemUpdate(base(service, key) as CFDictionary, update)
             if moved != errSecSuccess { keychainLog.error("Keychain class update failed: \(moved, privacy: .public)") }
         }
+        return read
+    }
+
+    /// The system's answer to a read: not found only for errSecItemNotFound;
+    /// any other failure (-25308 while locked, a missing entitlement) is
+    /// unavailable, never "not there".
+    static func result(status: OSStatus, found: [String: Any]?) -> KeychainRead {
+        if status == errSecItemNotFound { return .notFound }
+        guard status == errSecSuccess, let data = found?[kSecValueData as String] as? Data,
+              let value = String(data: data, encoding: .utf8) else { return .unavailable(status) }
         return .value(value)
     }
 

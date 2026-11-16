@@ -134,6 +134,16 @@ struct KeychainTests {
         #expect(helper(old, store, defaults: defaults).read(key: "token") == .value("mine"))
     }
 
+    @Test func theSystemsAnswerMapsToFoundNotFoundOrUnavailable() {
+        let item: [String: Any] = [kSecValueData as String: Data("t".utf8)]
+        #expect(SystemKeychain.result(status: errSecSuccess, found: item) == .value("t"))
+        #expect(SystemKeychain.result(status: errSecItemNotFound, found: nil) == .notFound)
+        // Locked (-25308): never "not there", which would sign you out.
+        #expect(SystemKeychain.result(status: errSecInteractionNotAllowed, found: nil) == .unavailable(errSecInteractionNotAllowed))
+        #expect(SystemKeychain.result(status: errSecMissingEntitlement, found: nil) == .unavailable(errSecMissingEntitlement))
+        #expect(SystemKeychain.result(status: errSecSuccess, found: [:]) == .unavailable(errSecSuccess), "an answer without the data")
+    }
+
     @Test func aSaveThatFailsKeepsTheTokenThatWasThere() {
         let store = FakeNewKeychain()
         store.items[service + "/token"] = "mine"
@@ -261,7 +271,9 @@ struct KeychainTests {
             let rest = source[start.upperBound...]
             return String(rest[..<(rest.range(of: "\n    }\n")?.lowerBound ?? rest.endIndex)])
         }
-        let start = try body(after: "static let isUITesting: Bool = {")
+        let opened = try #require(source.range(of: "static let isUITesting: Bool = {"))
+        let closed = try #require(source[opened.upperBound...].range(of: "\n    }()\n"))
+        let start = String(source[opened.upperBound..<closed.lowerBound])
         #expect(start.contains("old: nil"), "its KeychainHelper has no old keychain")
         for marker in ["static var defaultOld:", "static func defaultOld(unitTesting:"] {
             let decides = try body(after: marker)
