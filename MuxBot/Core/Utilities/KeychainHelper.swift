@@ -2,13 +2,15 @@ import Foundation
 import OSLog
 import Security
 
+private let keychainLog = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "keychain")
+
 /// The Keychain for tokens: this device only, never synced, in the data
-/// protection keychain (macOS too), where an item belongs to the app that
-/// saved it (its team and bundle id). Each build keeps its items under its
-/// own bundle id, so a copy with another bundle id never even asks for the
-/// real app's. Items older builds left in the macOS file-based keychain,
-/// where any app can ask for them, are moved once and removed there
-/// (`moveOldItem`); after that the old keychain is never read again.
+/// protection keychain (macOS too), where an item belongs to the app's
+/// access group (its team and bundle id). Each build keeps its items under
+/// its own bundle id, so a copy with another bundle id never even asks for
+/// the real app's. Items older builds left in the macOS file-based
+/// keychain, where any app can ask for them, are moved once and removed
+/// there (`moveOldItem`); after that the old keychain is never read again.
 /// Failures are logged, not ignored.
 struct KeychainHelper: KeychainProviding {
     private let service: String
@@ -18,13 +20,15 @@ struct KeychainHelper: KeychainProviding {
     /// The file-based keychain older builds wrote to: nil on iOS and under
     /// tests (they never touch this Mac's login keychain; they pass a fake).
     private let old: (any OldKeychain)?
-    private static let log = Logger(subsystem: "com.darklyenergized.darkmuxapp", category: "keychain")
+    /// Where tokens live now.
+    private let store: any NewKeychain
 
     init(service: String = KeychainHelper.defaultService, defaults: UserDefaults? = nil,
-         old: (any OldKeychain)? = KeychainHelper.defaultOld) {
+         old: (any OldKeychain)? = KeychainHelper.defaultOld, store: any NewKeychain = SystemKeychain.app) {
         self.service = service
         self.defaults = defaults
         self.old = old
+        self.store = store
     }
 
     /// This build's own items: its bundle id. Under tests (which run inside
@@ -44,8 +48,15 @@ struct KeychainHelper: KeychainProviding {
     }
 
     static var defaultOld: (any OldKeychain)? {
+        defaultOld(unitTesting: TestIsolation.isUnitTesting, arguments: ProcessInfo.processInfo.arguments)
+    }
+
+    /// The real old keychain, except under tests. Decided from the launch
+    /// arguments, never `TestIsolation.isUITesting`: that one's own start
+    /// makes a KeychainHelper, and asking it from here would recurse.
+    static func defaultOld(unitTesting: Bool, arguments: [String]) -> (any OldKeychain)? {
         #if os(macOS)
-        TestIsolation.isTesting ? nil : FileKeychain()
+        unitTesting || TestIsolation.isUITest(arguments: arguments) ? nil : FileKeychain()
         #else
         nil
         #endif
@@ -65,97 +76,164 @@ struct KeychainHelper: KeychainProviding {
         #endif
     }()
 
-    /// A build signed without a team can't use the data protection keychain
-    /// and keeps its items in the file-based one, under a name of its own:
-    /// never the one older builds used, so it can't reach those items.
-    private var unsignedService: String { "\(service).unsigned" }
-
-    private func base(_ key: String?, modern: Bool) -> [String: Any] {
-        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                kSecAttrService as String: modern ? service : unsignedService]
-        if let key { q[kSecAttrAccount as String] = key }
-        if modern { q[kSecUseDataProtectionKeychain as String] = true }
-        return q
-    }
+    /// Signed with a team (CI's ad hoc signature isn't).
+    static let signedWithTeam: Bool = {
+        #if os(macOS)
+        var code: SecCode?
+        var staticCode: SecStaticCode?
+        var info: CFDictionary?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess
+        else { return false }
+        return (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] != nil
+        #else
+        true
+        #endif
+    }()
 
     @discardableResult
     func save(key: String, value: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
         delete(key: key)
-        let status = add(key, data, modern: Self.dataProtection)
-        if status != errSecSuccess { Self.log.error("Keychain save failed: \(status, privacy: .public)") }
+        let status = store.add(service: service, key: key, data: data)
+        if status != errSecSuccess { keychainLog.error("Keychain save failed: \(status, privacy: .public)") }
         return status == errSecSuccess
-    }
-
-    private func add(_ key: String, _ data: Data, modern: Bool) -> OSStatus {
-        var q = base(key, modern: modern)
-        q[kSecValueData as String] = data
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        return SecItemAdd(q as CFDictionary, nil)
     }
 
     func get(key: String) -> String? {
         moveOldItem(key)
-        return read(key)
+        return store.read(service: service, key: key)
     }
 
-    private func read(_ key: String) -> String? {
-        var q = base(key, modern: Self.dataProtection)
+    func delete(key: String) {
+        moveOldItem(key)
+        store.delete(service: service, key: key)
+    }
+
+    func deleteAll() {
+        store.delete(service: service, key: nil)
+    }
+
+    /// One move at a time in this process: the old keychain's prompt switch
+    /// is the process's, and two moves of one token would race.
+    private static let moveLock = NSLock()
+
+    /// An item an older build left in the file-based keychain under this
+    /// build's service moves to the protected keychain and is removed there.
+    /// Only one this build can read without the system asking (it wrote it);
+    /// one another build wrote, or a locked keychain, is left alone and
+    /// asked about again next time. The protected copy, when there already
+    /// is one, is kept (only this or a later build saved it). Once the old
+    /// item is gone (or there was none), never again. A build without the
+    /// protected keychain moves nothing: it would only move the token to
+    /// another name in the same file-based keychain.
+    private func moveOldItem(_ key: String) {
+        guard let old else { return }
+        guard store.isProtected else { _ = Self.cantMove; return }
+        let defaults = defaults ?? TestIsolation.defaults
+        let flag = "keychain.oldItemMoved.protected.\(service).\(key)"
+        Self.moveLock.withLock {
+            guard !defaults.bool(forKey: flag) else { return }
+            switch old.read(service: service, key: key) {
+            case .notFound:
+                defaults.set(true, forKey: flag)
+            case let .refused(status):
+                keychainLog.error("An old keychain item couldn't be read without asking: \(status, privacy: .public)")
+            case let .found(value, ref):
+                if store.read(service: service, key: key) == nil {
+                    // Not saved: leave the old one where it is, still the user's.
+                    guard store.add(service: service, key: key, data: Data(value.utf8)) == errSecSuccess else { return }
+                }
+                if old.remove(ref) { defaults.set(true, forKey: flag) }
+            }
+        }
+    }
+
+    /// Said once: a team-signed build without its access group (signed with
+    /// the no-team entitlements) leaves old items where they are.
+    private static let cantMove: Void = {
+        if signedWithTeam {
+            keychainLog.error("Signed with a team but without the keychain access group: tokens stay in the file-based keychain and old items are not moved")
+        }
+    }()
+}
+
+/// Where tokens live now.
+protocol NewKeychain: Sendable {
+    /// The data protection keychain (the app's access group), not the
+    /// file-based one.
+    var isProtected: Bool { get }
+    func read(service: String, key: String) -> String?
+    func add(service: String, key: String, data: Data) -> OSStatus
+    /// One item, or with no key all of the service's.
+    func delete(service: String, key: String?)
+}
+
+/// The system keychain: the data protection one when this build has its
+/// access group; otherwise (no team) the file-based one, under a name of its
+/// own, never the one older builds used, so it can't reach those items.
+struct SystemKeychain: NewKeychain {
+    let isProtected: Bool
+    static let app = SystemKeychain(isProtected: KeychainHelper.dataProtection)
+
+    private func base(_ service: String, _ key: String?) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                kSecAttrService as String: isProtected ? service : "\(service).unsigned"]
+        if let key { q[kSecAttrAccount as String] = key }
+        if isProtected { q[kSecUseDataProtectionKeychain as String] = true }
+        return q
+    }
+
+    func read(service: String, key: String) -> String? {
+        var q = base(service, key)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data { return String(data: data, encoding: .utf8) }
-        if status != errSecItemNotFound { Self.log.error("Keychain read failed: \(status, privacy: .public)") }
+        if status != errSecItemNotFound { keychainLog.error("Keychain read failed: \(status, privacy: .public)") }
         return nil
     }
 
-    func delete(key: String) {
-        moveOldItem(key)
-        SecItemDelete(base(key, modern: Self.dataProtection) as CFDictionary)
+    func add(service: String, key: String, data: Data) -> OSStatus {
+        var q = base(service, key)
+        q[kSecValueData as String] = data
+        q[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        return SecItemAdd(q as CFDictionary, nil)
     }
 
-    func deleteAll() {
-        SecItemDelete(base(nil, modern: Self.dataProtection) as CFDictionary)
+    func delete(service: String, key: String?) {
+        SecItemDelete(base(service, key) as CFDictionary)
     }
+}
 
-    /// Once per key: an item an older build left in the file-based keychain
-    /// under this build's service moves here and is removed there. Only one
-    /// this build can read without asking (it wrote it; the old keychain
-    /// would otherwise ask for the login password, and an item another build
-    /// wrote is left alone). Never again after the first look.
-    /// A build without the data protection keychain (no team) moves it to
-    /// its own name in the file-based keychain, so the old name is free.
-    private func moveOldItem(_ key: String) {
-        guard let old else { return }
-        let defaults = defaults ?? TestIsolation.defaults
-        let flag = "keychain.oldItemChecked.\(service).\(key)"
-        guard !defaults.bool(forKey: flag) else { return }
-        if let item = old.read(service: service, key: key) {
-            if read(key) == nil, let data = item.value.data(using: .utf8) {
-                // Not moved: leave it where it is, still the user's.
-                guard add(key, data, modern: Self.dataProtection) == errSecSuccess else { return }
-            }
-            old.remove(item.ref)
-        }
-        defaults.set(true, forKey: flag)
-    }
+/// What reading an old item found.
+enum OldKeychainRead: Equatable {
+    case found(value: String, ref: Data)
+    case notFound
+    /// The system wouldn't hand it over without asking (another build wrote
+    /// it), or couldn't (locked).
+    case refused(OSStatus)
 }
 
 /// The macOS file-based keychain older builds kept tokens in.
 protocol OldKeychain {
     /// The item, only if this build can read it without the system asking.
-    func read(service: String, key: String) -> (value: String, ref: Data)?
-    /// Removes exactly the item `read` returned.
-    func remove(_ ref: Data)
+    func read(service: String, key: String) -> OldKeychainRead
+    /// Removes exactly the item `read` returned: true once it's gone.
+    func remove(_ ref: Data) -> Bool
 }
 
 #if os(macOS)
 /// Reads with the system's prompts turned off, so an item this build didn't
 /// write is refused (errSecAuthFailed) instead of asking for the login
-/// password. The switch is the process's, so it's on only for the call.
+/// password. The switch is the process's, so it's off only for the call,
+/// one call at a time.
 struct FileKeychain: OldKeychain {
-    func read(service: String, key: String) -> (value: String, ref: Data)? {
+    private static let promptLock = NSLock()
+
+    func read(service: String, key: String) -> OldKeychainRead {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -167,25 +245,32 @@ struct FileKeychain: OldKeychain {
         ]
         var result: AnyObject?
         let status = withoutPrompts { SecItemCopyMatching(q as CFDictionary, &result) }
+        if status == errSecItemNotFound { return .notFound }
         guard status == errSecSuccess, let found = result as? [String: Any],
               let data = found[kSecValueData as String] as? Data, let value = String(data: data, encoding: .utf8),
-              let ref = found[kSecValuePersistentRef as String] as? Data else { return nil }
-        return (value, ref)
+              let ref = found[kSecValuePersistentRef as String] as? Data else { return .refused(status) }
+        return .found(value: value, ref: ref)
     }
 
-    func remove(_ ref: Data) {
+    func remove(_ ref: Data) -> Bool {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                 kSecValuePersistentRef as String: ref,
                                 kSecUseDataProtectionKeychain as String: false]
-        _ = withoutPrompts { SecItemDelete(q as CFDictionary) }
+        let status = withoutPrompts { SecItemDelete(q as CFDictionary) }
+        if status != errSecSuccess && status != errSecItemNotFound {
+            keychainLog.error("An old keychain item couldn't be removed: \(status, privacy: .public)")
+        }
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     private func withoutPrompts(_ body: () -> OSStatus) -> OSStatus {
-        var allowed: DarwinBoolean = true
-        SecKeychainGetUserInteractionAllowed(&allowed)
-        SecKeychainSetUserInteractionAllowed(false)
-        defer { SecKeychainSetUserInteractionAllowed(allowed.boolValue) }
-        return body()
+        Self.promptLock.withLock {
+            var allowed: DarwinBoolean = true
+            SecKeychainGetUserInteractionAllowed(&allowed)
+            SecKeychainSetUserInteractionAllowed(false)
+            defer { SecKeychainSetUserInteractionAllowed(allowed.boolValue) }
+            return body()
+        }
     }
 }
 #endif
@@ -211,7 +296,8 @@ enum TestIsolation {
     static let isUITesting: Bool = {
         guard isUITest(arguments: ProcessInfo.processInfo.arguments) else { return false }
         UserDefaults.standard.removePersistentDomain(forName: uiTestDefaultsSuite)
-        KeychainHelper(service: uiTestKeychainService).deleteAll()
+        // No old keychain here: its default would ask isUITesting, which is starting.
+        KeychainHelper(service: uiTestKeychainService, old: nil).deleteAll()
         return true
     }()
     static let isTesting = isUnitTesting || isUITesting

@@ -32,54 +32,125 @@ struct KeychainTests {
     /// Defaults of its own, so "already moved" starts false for each test.
     private func fresh() -> UserDefaults { UserDefaults(suiteName: "muxbot-keychain-\(UUID().uuidString)")! }
 
+    /// A helper over in-memory keychains: the move never depends on how the
+    /// test host is signed (CI signs with no team).
+    private func helper(_ old: FakeOldKeychain, _ store: FakeNewKeychain = FakeNewKeychain(),
+                        defaults: UserDefaults? = nil, service: String? = nil) -> KeychainHelper {
+        KeychainHelper(service: service ?? self.service, defaults: defaults ?? fresh(), old: old, store: store)
+    }
+
     @Test func anOldItemMovesOnceAndIsThenRemovedFromTheOldKeychain() {
         // Earlier builds wrote to the file-based keychain; the token must survive the move.
         let old = FakeOldKeychain()
         old.items[service + "/legacy"] = "old"
-        let k = KeychainHelper(service: service, defaults: fresh(), old: old)
+        let store = FakeNewKeychain()
+        let k = helper(old, store)
         #expect(k.get(key: "legacy") == "old")
         #expect(old.items.isEmpty, "moved, so no other build can find it there")
-        #expect(k.get(key: "legacy") == "old", "read from the new keychain now")
+        #expect(store.items[service + "/legacy"] == "old", "now in the protected keychain")
+        #expect(k.get(key: "legacy") == "old")
         #expect(old.reads == 1, "looked once")
         k.delete(key: "legacy")
         #expect(k.get(key: "legacy") == nil)
     }
 
-    @Test func anOldCopyIsRemovedEvenWhenTheNewKeychainAlreadyHasOne() {
+    @Test func theProtectedCopyWinsOverAnOldOneAndTheOldOneIsRemoved() {
         let old = FakeOldKeychain()
-        let k = KeychainHelper(service: service, defaults: fresh(), old: nil)
-        #expect(k.save(key: "both", value: "new"))
         old.items[service + "/both"] = "stale"
-        let moving = KeychainHelper(service: service, defaults: fresh(), old: old)
-        #expect(moving.get(key: "both") == "new", "the newer one wins")
-        #expect(old.items.isEmpty, "the stale copy is gone too")
-        k.delete(key: "both")
+        let store = FakeNewKeychain()
+        store.items[service + "/both"] = "new"
+        let k = helper(old, store)
+        #expect(k.get(key: "both") == "new", "the protected copy is kept")
+        #expect(old.items.isEmpty, "the old copy is gone too")
     }
 
-    @Test func anOldItemThisBuildCannotReadSilentlyIsLeftAlone() {
+    @Test func aFailedSaveLeavesTheOldItemAndTriesAgain() {
+        let old = FakeOldKeychain()
+        old.items[service + "/kept"] = "old"
+        let store = FakeNewKeychain()
+        store.failAdds = true
+        let defaults = fresh()
+        let k = helper(old, store, defaults: defaults)
+        #expect(k.get(key: "kept") == nil)
+        #expect(old.items[service + "/kept"] == "old", "never removed before the new copy is saved")
+        store.failAdds = false
+        #expect(k.get(key: "kept") == "old", "tried again, and moved")
+        #expect(old.items.isEmpty)
+    }
+
+    @Test(arguments: [errSecAuthFailed, errSecInteractionNotAllowed, errSecInvalidOwnerEdit])
+    func anOldItemThisBuildCannotReadSilentlyIsLeftAloneAndTriedAgain(status: OSStatus) {
         let old = FakeOldKeychain()
         old.items[service + "/theirs"] = "another build's"
-        old.unreadable = [service + "/theirs"]
-        let k = KeychainHelper(service: service, defaults: fresh(), old: old)
+        old.refusal = status
+        let k = helper(old)
         #expect(k.get(key: "theirs") == nil)
         #expect(k.save(key: "theirs", value: "mine"))
         k.delete(key: "theirs")
-        #expect(old.items[service + "/theirs"] == "another build's", "never deleted: this build didn't write it")
+        #expect(old.items[service + "/theirs"] == "another build's", "never deleted: this build didn't read it")
         #expect(old.removed.isEmpty)
+        let before = old.reads
+        _ = k.get(key: "theirs")
+        #expect(old.reads == before + 1, "a refusal (or a locked keychain) is asked about again, not given up on")
+        old.refusal = nil
+        #expect(k.get(key: "theirs") == "another build's", "readable now: moved")
+        #expect(old.items.isEmpty)
+    }
+
+    @Test func aRefusedRemoveIsTriedAgain() {
+        let old = FakeOldKeychain()
+        old.items[service + "/stuck"] = "old"
+        old.refuseRemove = true
+        let k = helper(old)
+        #expect(k.get(key: "stuck") == "old")
+        #expect(old.items[service + "/stuck"] == "old", "the delete was refused")
+        old.refuseRemove = false
+        #expect(k.get(key: "stuck") == "old")
+        #expect(old.items.isEmpty, "removed on the next look")
+        let reads = old.reads
+        _ = k.get(key: "stuck")
+        #expect(old.reads == reads, "then done")
     }
 
     @Test func afterTheFirstLookTheOldKeychainIsNeverReadAgain() {
         let defaults = fresh()
         let old = FakeOldKeychain()
-        let k = KeychainHelper(service: service, defaults: defaults, old: old)
+        let store = FakeNewKeychain()
+        let k = helper(old, store, defaults: defaults)
         #expect(k.get(key: "late") == nil, "nothing to move")
         old.items[service + "/late"] = "planted later"
         #expect(k.get(key: "late") == nil, "no fallback to the old keychain")
         #expect(k.save(key: "late", value: "mine"))
         k.delete(key: "late")
-        #expect(KeychainHelper(service: service, defaults: defaults, old: old).get(key: "late") == nil, "not on a later launch either")
+        #expect(helper(old, store, defaults: defaults).get(key: "late") == nil, "not on a later launch either")
         #expect(old.reads == 1)
         #expect(old.items[service + "/late"] == "planted later", "saving and deleting never reach it")
+    }
+
+    @Test func aBuildWithoutTheProtectedKeychainNeverMovesTheToken() {
+        // A team build signed with the no-team entitlements would otherwise
+        // move the real token into the weaker file-based name.
+        let old = FakeOldKeychain()
+        old.items[service + "/token"] = "the real token"
+        let store = FakeNewKeychain()
+        store.isProtected = false
+        let k = helper(old, store)
+        #expect(k.get(key: "token") == nil)
+        #expect(old.reads == 0, "never even read")
+        #expect(old.items[service + "/token"] == "the real token")
+        #expect(store.items.isEmpty)
+    }
+
+    @Test func movesAtTheSameTimeHappenOnce() {
+        let old = FakeOldKeychain()
+        old.items[service + "/shared"] = "old"
+        old.readDelay = 0.02
+        let store = FakeNewKeychain()
+        let k = helper(old, store)
+        DispatchQueue.concurrentPerform(iterations: 8) { _ in _ = k.get(key: "shared") }
+        #expect(old.maxConcurrentReads == 1, "one at a time (the old keychain's prompt switch is the process's)")
+        #expect(old.reads == 1)
+        #expect(store.items[service + "/shared"] == "old")
     }
 
     @Test func aSecondServiceCanNeitherReadNorDeleteTheFirstsItems() {
@@ -108,51 +179,80 @@ struct KeychainTests {
 
     @Test func testsNeverTouchThisMacsOldKeychain() {
         #expect(KeychainHelper.defaultOld == nil)
-    }
-
-    /// Signed with a team (not CI's ad hoc signature, which can't have an
-    /// access group).
-    private static var signedWithTeam: Bool {
+        // A UI-test launch is decided from its arguments alone: asking must
+        // never start TestIsolation.isUITesting, whose own start makes a
+        // KeychainHelper (that recursion crashed a -uiTesting launch).
+        #expect(KeychainHelper.defaultOld(unitTesting: false, arguments: ["Mux Bot", "-uiTesting"]) == nil)
+        #expect(KeychainHelper.defaultOld(unitTesting: false, arguments: ["Mux Bot", "-uiTestingEmpty"]) == nil)
         #if os(macOS)
-        var code: SecCode?
-        var staticCode: SecStaticCode?
-        var info: CFDictionary?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
-              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
-              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess
-        else { return false }
-        return (info as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] != nil
-        #else
-        true
+        #expect(KeychainHelper.defaultOld(unitTesting: false, arguments: ["Mux Bot"]) != nil, "the app looks")
         #endif
     }
 
-    @Test(.enabled(if: signedWithTeam)) func theAppIsSignedForTheDataProtectionKeychain() {
+    @Test(.enabled(if: KeychainHelper.signedWithTeam)) func theAppIsSignedForTheDataProtectionKeychain() {
         // Without its access group the Mac app would keep tokens in the
         // file-based keychain, where another build can ask for them.
         #expect(KeychainHelper.dataProtection)
     }
 }
 
-/// The file-based keychain, in memory: "service/key" to value. An item in
-/// `unreadable` is one the system would ask about (another build wrote it).
+/// The file-based keychain, in memory: "service/key" to value. With a
+/// `refusal`, reads fail as the system does for an item another build
+/// wrote (or a locked keychain).
 final class FakeOldKeychain: OldKeychain, @unchecked Sendable {
+    private let lock = NSLock()
     var items: [String: String] = [:]
-    var unreadable: Set<String> = []
-    var reads = 0
-    var removed: [String] = []
+    var refusal: OSStatus?
+    var refuseRemove = false
+    var readDelay: TimeInterval = 0
+    private(set) var reads = 0
+    private(set) var removed: [String] = []
+    private(set) var maxConcurrentReads = 0
+    private var reading = 0
 
-    func read(service: String, key: String) -> (value: String, ref: Data)? {
-        reads += 1
-        let id = "\(service)/\(key)"
-        guard !unreadable.contains(id), let value = items[id] else { return nil }
-        return (value, Data(id.utf8))
+    func read(service: String, key: String) -> OldKeychainRead {
+        lock.withLock { reads += 1; reading += 1; maxConcurrentReads = max(maxConcurrentReads, reading) }
+        if readDelay > 0 { Thread.sleep(forTimeInterval: readDelay) }
+        return lock.withLock {
+            reading -= 1
+            let id = "\(service)/\(key)"
+            guard let value = items[id] else { return .notFound }
+            if let refusal { return .refused(refusal) }
+            return .found(value: value, ref: Data(id.utf8))
+        }
     }
 
-    func remove(_ ref: Data) {
-        let id = String(decoding: ref, as: UTF8.self)
-        removed.append(id)
-        items[id] = nil
+    func remove(_ ref: Data) -> Bool {
+        lock.withLock {
+            guard !refuseRemove else { return false }
+            let id = String(decoding: ref, as: UTF8.self)
+            removed.append(id)
+            items[id] = nil
+            return true
+        }
+    }
+}
+
+/// The keychain tokens live in now, in memory.
+final class FakeNewKeychain: NewKeychain, @unchecked Sendable {
+    private let lock = NSLock()
+    var isProtected = true
+    var failAdds = false
+    var items: [String: String] = [:]
+
+    func read(service: String, key: String) -> String? { lock.withLock { items["\(service)/\(key)"] } }
+    func add(service: String, key: String, data: Data) -> OSStatus {
+        lock.withLock {
+            guard !failAdds else { return errSecInteractionNotAllowed }
+            guard items["\(service)/\(key)"] == nil else { return errSecDuplicateItem }
+            items["\(service)/\(key)"] = String(decoding: data, as: UTF8.self)
+            return errSecSuccess
+        }
+    }
+    func delete(service: String, key: String?) {
+        lock.withLock {
+            if let key { items["\(service)/\(key)"] = nil } else { items = items.filter { !$0.key.hasPrefix("\(service)/") } }
+        }
     }
 }
 
