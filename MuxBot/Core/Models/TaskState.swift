@@ -140,7 +140,7 @@ enum TaskState: Equatable, Sendable {
                 return nil
             case .notSent: return String(localized: "Some changes haven't reached GitHub yet. They're sent first, then you can merge.")
             case .changedOnGitHub: return String(localized: "Someone changed this review on GitHub. Look at their changes before merging.")
-            case .mainMoved: return (standing ?? .conflict).sentence
+            case .mainMoved: return standing?.sentence ?? TaskReview.Standing.conflict.sentence
             case .merged: return String(localized: "Merged.")
             case .closed: return TaskReview.Standing.closed.sentence
             default: return String(localized: "Open a review first.")
