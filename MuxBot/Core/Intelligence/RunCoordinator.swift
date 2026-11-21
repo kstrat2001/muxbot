@@ -492,6 +492,9 @@ final class RunCoordinator {
         if pushTails[bot] == mine { pushTails[bot] = nil }
     }
 
+    /// A GitHub push for `bot` is going or waiting.
+    func isPushing(_ bot: UUID) -> Bool { pushTails[bot] != nil }
+
     /// Where this Mac pushes the bot's work on GitHub: its GitHub start, or
     /// the branch it moved to after someone else pushed to darkmux's.
     func pushStart(_ bot: Bot, changes: DarkmuxClient.Changes) -> GitHubPR.Start? {
@@ -2212,6 +2215,8 @@ final class RunCoordinator {
     var openingPR: Set<UUID> = []
     /// Where each bot's open review stands on GitHub (this launch).
     var reviewStandings: [UUID: TaskReview.Standing] = [:]
+    /// Each open review's branch and head commit on GitHub (this launch).
+    var reviewHeads: [UUID: GitHubReview.Head] = [:]
     /// Bots whose review is being merged (Merge waits).
     var merging: Set<UUID> = []
 

@@ -101,7 +101,9 @@ struct TaskStatusLine: View {
                 .buttonStyle(.bordered)
                 .popover(isPresented: $showingChanges) { PendingChangesList(bot: bot) }
             if let last = AppAction.lastUndoable(bot), runs.contains(where: { $0.id == last.id }) {
-                Button("Undo", systemImage: "arrow.uturn.backward") { brain.runs.decide(.discard, on: last, store: store) }
+                Button("Undo", systemImage: "arrow.uturn.backward") {
+                    brain.runs.whenAllowed(.undo, bot, store: store) { brain.runs.decide(.discard, on: last, store: store) }
+                }
                     .buttonStyle(.bordered)
                     .disabled(brain.runs.deciding.contains(last.id))
                     .help("Take back the latest change")
@@ -109,7 +111,9 @@ struct TaskStatusLine: View {
             if brain.runs.openingPR.contains(bot.id) {
                 ProgressView().controlSize(.small)
             } else {
-                Button("Review & merge", systemImage: "checkmark.bubble", action: startReview)
+                Button("Review & merge", systemImage: "checkmark.bubble") {
+                    brain.runs.whenAllowed(.reviewAndMerge, bot, store: store, startReview)
+                }
                     .buttonStyle(.borderedProminent).tint(Color.brandGreen)
                     .help("Review this task's saved changes, then merge them into the project")
             }

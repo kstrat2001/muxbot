@@ -232,16 +232,16 @@ struct ReviewCardView: View {
 
     @ViewBuilder private func actions(_ state: TaskReview.State) -> some View {
         HStack(spacing: Spacing.sm) {
-            if standing == .ready {
-                if brain.runs.merging.contains(bot.id) {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Merge", systemImage: "arrow.triangle.merge") {
-                        Task { await brain.runs.mergeReview(bot, store: store, github: github) }
-                    }
-                    .buttonStyle(.borderedProminent).tint(Color.brandGreen)
-                    .disabled(reviewerRun(state)?.phase == .running)
+            // Merge is always here while the review is open: a tap runs the
+            // task's checks and merges at once, or says what's in the way
+            // (`TaskState`, `RunCoordinator.mergeReview`).
+            if brain.runs.merging.contains(bot.id) {
+                ProgressView().controlSize(.small)
+            } else if standing != nil {
+                Button("Merge", systemImage: "arrow.triangle.merge") {
+                    Task { await brain.runs.mergeReview(bot, store: store, github: github) }
                 }
+                .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
             Button("See it on GitHub", systemImage: "arrow.up.forward.square") { openURL(state.url) }
                 .buttonStyle(.bordered)
