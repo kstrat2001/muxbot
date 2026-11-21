@@ -205,26 +205,42 @@ struct GitHubReview: Sendable {
         var mergeable: Bool?
         var mergeable_state: String?
         var merge_commit_sha: String?
+        var head: Head?
+    }
+
+    /// The review's branch on GitHub and the commit it's at.
+    struct Head: Decodable, Equatable, Sendable {
+        var sha: String
+        var ref: String
     }
 
     func standing(repo: String, number: Int) async throws -> TaskReview.Standing {
+        try await look(repo: repo, number: number).standing
+    }
+
+    /// Where the review stands, and the commit GitHub has at its head: the
+    /// task state compares that with what was sent, and Merge is pinned to it.
+    func look(repo: String, number: Int) async throws -> (standing: TaskReview.Standing, head: Head?) {
         let pull: Pull = try await get("https://api.github.com/repos/\(repo)/pulls/\(number)")
         struct Repo: Decodable { struct Permissions: Decodable { var admin: Bool?; var maintain: Bool?; var push: Bool? }; var permissions: Permissions? }
         let info: Repo? = try? await get("https://api.github.com/repos/\(repo)")
         let p = info?.permissions
         // Unknown permissions: let GitHub's own answer to Merge decide.
         let canMerge = p.map { ($0.push ?? false) || ($0.maintain ?? false) || ($0.admin ?? false) } ?? true
-        return TaskReview.standing(state: pull.state, merged: pull.merged ?? false, mergeable: pull.mergeable,
-                                   mergeableState: pull.mergeable_state, mergeSHA: pull.merge_commit_sha, canMerge: canMerge)
+        return (TaskReview.standing(state: pull.state, merged: pull.merged ?? false, mergeable: pull.mergeable,
+                                    mergeableState: pull.mergeable_state, mergeSHA: pull.merge_commit_sha, canMerge: canMerge),
+                pull.head)
     }
 
     /// Merges with a merge commit, else the way the project allows (squash,
-    /// then rebase). Returns the commit main is now at.
-    func merge(repo: String, number: Int, title: String) async throws -> String {
+    /// then rebase). Returns the commit main is now at. With `sha`, GitHub
+    /// merges only if the review's head is still that commit, so a change
+    /// pushed after the checks is never merged unseen.
+    func merge(repo: String, number: Int, title: String, sha: String? = nil) async throws -> String {
         var lastWhy = ""
         for method in ["merge", "squash", "rebase"] {
             let (data, status) = try await load("PUT", "https://api.github.com/repos/\(repo)/pulls/\(number)/merge",
-                                                ["merge_method": method, "commit_title": title])
+                                                ["merge_method": method, "commit_title": title].merging(sha.map { ["sha": $0] } ?? [:]) { $1 })
             struct Merged: Decodable { var sha: String?; var merged: Bool? }
             if (200..<300).contains(status) {
                 // Only GitHub saying it merged counts as merged.

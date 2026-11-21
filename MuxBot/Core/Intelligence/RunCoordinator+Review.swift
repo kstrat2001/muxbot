@@ -70,19 +70,63 @@ extension RunCoordinator {
     func refreshReview(_ bot: Bot, store: BotStore, github: GitHubAuth) async {
         guard let state = review(for: bot), let repo = bot.repoSlugs.first, let token = github.token else { return }
         do {
-            let standing = try await GitHubReview(session: githubSession ?? .shared, token: token).standing(repo: repo, number: state.number)
+            let look = try await GitHubReview(session: githubSession ?? .shared, token: token).look(repo: repo, number: state.number)
+            let standing = look.standing
             reviewStandings[bot.id] = standing
+            reviewHeads[bot.id] = look.head
             switch standing {
             case let .merged(sha): await afterMerge(bot, mergeSHA: sha, store: store)
             case .closed:
                 LocalBotState.shared.update(bot.id) { $0.review = nil }
                 reviewStandings[bot.id] = nil
+                reviewHeads[bot.id] = nil
                 store.append(.system, TaskReview.Standing.closed.sentence ?? "", to: store.conversation(for: .bot(bot.id)))
             default: break
             }
         } catch {
             reviewStandings[bot.id] = nil
+            reviewHeads[bot.id] = nil
         }
+    }
+
+    /// The facts `TaskState` is made of, from what this app reads today.
+    /// Until darkmux reports the work copy's own status (darkmux #3681),
+    /// the work copy's head is what was last sent to the review's branch,
+    /// and "busy" is a run, an Undo, a review being opened, a push or a Put
+    /// on GitHub going for this bot.
+    func taskFacts(_ bot: Bot, store: BotStore) -> TaskState.Facts {
+        let runs = bot.runs ?? []
+        var facts = TaskState.Facts()
+        facts.busy = runs.contains { $0.phase == .running || deciding.contains($0.id) }
+            || openingPR.contains(bot.id) || isPushing(bot.id) || puttingOnGitHub.contains(bot.id)
+        facts.pending = unshippedRuns(bot, store: store).count
+        if review(for: bot) != nil, let standing = reviewStandings[bot.id] {
+            let head = reviewHeads[bot.id]
+            let status: TaskState.Review.Status = switch standing {
+            case .merged: .merged
+            case .closed: .closed
+            default: .open
+            }
+            facts.review = .init(status: status, head: head?.sha ?? "", standing: standing)
+            facts.head = head.flatMap { LocalBotState.shared[bot.id]?.pushedHeads?[$0.ref] }
+        }
+        return facts
+    }
+
+    func taskState(_ bot: Bot, store: BotStore) -> TaskState {
+        TaskState.of(taskFacts(bot, store: store))
+    }
+
+    /// Runs `action` when the task allows it now; otherwise says why in the
+    /// thread, in one plain sentence, and does nothing.
+    @discardableResult
+    func whenAllowed(_ action: TaskState.Action, _ bot: Bot, store: BotStore, _ work: () -> Void) -> Bool {
+        if let why = taskState(bot, store: store).refusal(action, standing: reviewStandings[bot.id]) {
+            store.append(.system, why, to: store.conversation(for: .bot(bot.id)))
+            return false
+        }
+        work()
+        return true
     }
 
     /// Asks GitHub again while it's still working out whether the pull
@@ -122,9 +166,15 @@ extension RunCoordinator {
             }
             return
         }
-        guard standing == .ready else { return }
+        // The checks, then the merge at once (no confirmation, Kain
+        // 2026-11-16): anything in the way is said, and nothing is merged.
+        if let why = taskState(bot, store: store).refusal(.merge, standing: standing) {
+            store.append(.system, why, to: thread)
+            return
+        }
         do {
-            let sha = try await GitHubReview(session: githubSession ?? .shared, token: token).merge(repo: repo, number: state.number, title: state.title)
+            let sha = try await GitHubReview(session: githubSession ?? .shared, token: token)
+                .merge(repo: repo, number: state.number, title: state.title, sha: reviewHeads[bot.id]?.sha)
             await afterMerge(bot, mergeSHA: sha.isEmpty ? nil : sha, store: store)
         } catch GitHubPR.Failure.cantWrite(let repo) {
             store.append(.system, Self.cantWriteText(repo, await github.installState(for: repo)), to: thread)
@@ -152,6 +202,7 @@ extension RunCoordinator {
             $0.pushHead = nil
         }
         reviewStandings[bot.id] = nil
+        reviewHeads[bot.id] = nil
         store.append(.system, TaskReview.nextTaskLine(fromMain: fromMain), to: thread)
         if var start = bot.githubStart {
             start.head = GitHubPR.nextBranch(start.head)
