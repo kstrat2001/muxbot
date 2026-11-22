@@ -1552,7 +1552,7 @@ final class RunCoordinator {
             ? String(localized: "Replaced the picture with \(name).")
             : String(localized: "Added \(name) to the project.")), to: run)
         Task { await self.refreshPreview(for: bot) }
-        if bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
+        Task { await self.sendToGitHub(bot, store: store) }
         return url
     }
 
