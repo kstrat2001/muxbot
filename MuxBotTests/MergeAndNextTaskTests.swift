@@ -57,6 +57,7 @@ struct MergeAndNextTaskTests {
         var merges = GitHubStub.seen.filter { $0.method == "PUT" && $0.path.hasSuffix("/merge") }
         #expect(merges.isEmpty, "GitHub's head isn't the work copy's")
         runs.gitStatusSource = { _ in self.status(head: "abc") }
+        pull(head: "abc")
         await runs.mergeReview(bot, store: store, github: github)
         merges = GitHubStub.seen.filter { $0.method == "PUT" && $0.path.hasSuffix("/merge") }
         #expect(merges.first?.body?["sha"] as? String == "abc")
@@ -138,6 +139,21 @@ struct MergeAndNextTaskTests {
         await runs.bringInChanges(bot, store: store, github: github)
         #expect(steps.values == ["fetch", "merge", "push"], "\(steps.values)")
         #expect(said(store, bot).contains { $0.contains("Brought in the project's latest version") })
+    }
+
+    /// Unsent work goes to GitHub on its own when darkmux's status shows it,
+    /// at most once a minute.
+    @Test func unsentWorkIsSentOnItsOwnOnceAMinute() async {
+        let (store, bot, runs, _) = setUp()
+        runs.gitStatusSource = { _ in self.status(head: "def", ahead: 1) }
+        let pushes = Counter()
+        runs.gitPusher = { _, _, _ in pushes.add(); return .init(branch: "mux/site-1", head: "def", remote: "github.com/kain/site", addedOrigin: false) }
+        await runs.refreshTaskStatus(bot, store: store)
+        for _ in 0..<200 where pushes.count == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(pushes.count == 1)
+        await runs.refreshTaskStatus(bot, store: store)
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(pushes.count == 1, "not again within the minute")
     }
 
     @Test func alreadyUpToDateSaysSoAndSendsNothing() async {
