@@ -105,9 +105,10 @@ struct MergeAndNextTaskTests {
         runs.gitFetcher = { _, _ in try? await Task.sleep(for: .milliseconds(50)); return self.status() }
         let moves = Counter()
         runs.gitNewTasker = { _, _, _ in moves.add(); return .init(moved: true, branch: "mux/site-2", head: "n1", carried: 0) }
-        async let one: Void = runs.afterMerge(bot, mergeSHA: "m1", store: store)
-        async let two: Void = runs.afterMerge(bot, mergeSHA: "m1", store: store)
-        _ = await (one, two)
+        let one = Task { await runs.afterMerge(bot, mergeSHA: "m1", store: store) }
+        let two = Task { await runs.afterMerge(bot, mergeSHA: "m1", store: store) }
+        await one.value
+        await two.value
         #expect(moves.count == 1)
         #expect(said(store, bot).filter { $0 == TaskReview.nextTaskLine }.count == 1)
     }
