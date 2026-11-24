@@ -291,15 +291,14 @@ struct ChatSweep2Tests {
         store.addResource(.repo, "https://github.com/kain/site", to: bot)
         _ = committed(store, bot, brain.runs)
         GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/site/git/commits/b0", 200, #"{"sha":"b0","tree":{"sha":"t0"}}"#)
-        GitHubStub.on("POST /repos/kain/site/git/blobs", 201, #"{"sha":"n1"}"#)
-        GitHubStub.on("POST /repos/kain/site/git/trees", 201, #"{"sha":"t1"}"#)
-        GitHubStub.on("POST /repos/kain/site/git/commits", 201, #"{"sha":"c1"}"#)
-        GitHubStub.on("POST /repos/kain/site/git/refs", 201, #"{"ref":"refs/heads/mux/site"}"#)
         GitHubStub.on("POST /repos/kain/site/pulls", 201, #"{"number":5,"html_url":"https://github.com/kain/site/pull/5"}"#)
         brain.runs.githubSession = GitHubStub.session
-        brain.runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "b0", baseBranch: "main", head: "h", branch: "mux/site",
-                                                                  files: [.init(path: "a.css", mode: nil, content: "eA==", deleted: nil)]) }
+        // darkmux's status and push (darkmux #3681).
+        brain.runs.gitStatusSource = { _ in
+            .init(branch: "mux/site", head: "h", origin: "github.com/kain/site", defaultBranch: "main", base: "b0", pending: 1,
+                  upstream: nil, ahead: nil, behind: nil, behindMain: 0, dirty: false, busy: nil)
+        }
+        brain.runs.gitPusher = { _, _, _ in .init(branch: "mux/site", head: "h", remote: "github.com/kain/site", addedOrigin: false) }
         let keychain = MemoryKeychain()
         keychain.items[GitHubAuth.tokenKey] = "ghu"
         let github = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain, sleep: { _ in })
