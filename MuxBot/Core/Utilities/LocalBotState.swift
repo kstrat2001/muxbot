@@ -47,9 +47,6 @@ final class LocalBotState: @unchecked Sendable {
         var task: Int?
         /// The current task's open review (`TaskReview.State`).
         var review: TaskReview.State?
-        /// A merge ended the last task: the next run starts it fresh from the
-        /// project's main version (darkmux #3684).
-        var startFresh: Bool?
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil && previewPaneWidth == nil

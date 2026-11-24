@@ -104,11 +104,6 @@ extension RunCoordinator {
         facts.head = status?.head
         facts.pending = status?.pending ?? 0
         facts.ahead = status.map { $0.ahead ?? $0.pending } ?? 0
-        // Just merged: nothing in this task until its next run starts fresh.
-        if LocalBotState.shared[bot.id]?.startFresh == true {
-            facts.pending = 0
-            facts.ahead = 0
-        }
         if review(for: bot) != nil, let standing = reviewStandings[bot.id] {
             let head = reviewHeads[bot.id]
             let reviewStatus: TaskState.Review.Status = switch standing {
@@ -200,33 +195,69 @@ extension RunCoordinator {
         }
     }
 
-    /// The task's changes joined the project: the review closes and the
-    /// next change starts a new task from the project's main version. With
-    /// darkmux's fresh runs (darkmux #3684) the work copy stays and the next
-    /// run starts on a new branch from the merged main, fetched now;
-    /// without, a fresh work copy is made.
+    /// The task's changes joined the project: the review closes, and the
+    /// work copy moves onto the next task from the merged main
+    /// (`startNextTask`, darkmux #3684), so darkmux's status reads clean on
+    /// every device. Without darkmux's `new_task`, or with no merge commit
+    /// to go on, a fresh work copy is made instead. Ends once, however many
+    /// looks at GitHub see the merge.
     func afterMerge(_ bot: Bot, mergeSHA: String?, store: BotStore) async {
-        guard review(for: bot) != nil else { return }
+        guard review(for: bot) != nil, endingTasks.insert(bot.id).inserted else { return }
+        defer { endingTasks.remove(bot.id) }
         let thread = store.conversation(for: .bot(bot.id))
-        let canStartFresh = gitFetcher != nil ? true : (await capabilities()).contains("fresh_branch")
-        let fresh = bot.workspaceName != nil && canStartFresh
+        let mergedHead = reviewHeads[bot.id]?.sha
         LocalBotState.shared.update(bot.id) {
             $0.review = nil
             $0.shippedThrough = .now
-            if fresh { $0.startFresh = true } else { $0.task = ($0.task ?? 1) + 1 }
         }
         reviewStandings[bot.id] = nil
         reviewHeads[bot.id] = nil
-        store.append(.system, TaskReview.nextTaskLine(fromMain: true), to: thread)
-        if fresh {
-            if let token = githubToken?() { _ = try? await fetchTask(bot, github: token) }
+        store.append(.system, TaskReview.nextTaskLine, to: thread)
+        let canMove = gitNewTasker != nil ? true : (await capabilities()).contains("new_task")
+        if canMove, bot.workspaceName != nil, let mergedHead, let mergeSHA {
+            await startNextTask(bot, mergedHead: mergedHead, mergeSHA: mergeSHA, store: store)
+            return
+        }
+        if darkmuxCapabilities == nil, bot.workspaceName != nil {
+            store.append(.system, Self.darkmuxNotAnswering, to: thread)
             return
         }
         // Until the new work copy is made, no run goes to the merged one.
+        LocalBotState.shared.update(bot.id) { $0.task = ($0.task ?? 1) + 1 }
         bot.workspaceName = nil
         taskStatuses[bot.id] = nil
         store.save()
         await setUpWorkCopy(for: bot, store: store)
+    }
+
+    /// The work copy onto the next task (darkmux's `new_task`): the merged
+    /// main fetched first, waiting while something holds the copy (a run in
+    /// the merged task too: what it saves comes along). A change made after
+    /// the merge that can't come along changes nothing, and says so.
+    func startNextTask(_ bot: Bot, mergedHead: String, mergeSHA: String, store: BotStore) async {
+        guard let workspace = bot.workspaceName else { return }
+        let thread = store.conversation(for: .bot(bot.id))
+        let move = gitNewTasker ?? { [connection] workspace, mergedHead, mergeSHA in
+            guard let connection, let token = connection.token else { throw NotPaired() }
+            return try await connection.client.gitNewTask(token: token, workspace: workspace, mergedHead: mergedHead, mergeSHA: mergeSHA)
+        }
+        let until = ContinuousClock.now + Self.busyWaitLimit
+        while true {
+            do {
+                try await whileBusy { try await self.fetchTask(bot, github: self.githubToken?()) }
+                _ = try await whileBusy { try await move(workspace, mergedHead, mergeSHA) }
+                await refreshTaskStatus(bot)
+                return
+            } catch let error as DarkmuxClient.ClientError where (error.holder == "run" || error.code == "stale_main") && ContinuousClock.now < until {
+                // A run in the merged task, or the merge not fetched yet: again shortly.
+                try? await Task.sleep(for: runWaitInterval)
+            } catch {
+                let said = Self.plain(error)
+                let line = store.append(.system, String(localized: "Couldn't start the next task from the merged project yet: \(said.sentence)"), to: thread)
+                messageDetails[line.id] = said.details
+                return
+            }
+        }
     }
 
     /// Fetches the project's branches into the work copy (darkmux #3681).
@@ -265,10 +296,18 @@ extension RunCoordinator {
                     guard let connection, let token = connection.token else { throw NotPaired() }
                     return try await connection.client.gitMergeMain(token: token, workspace: workspace)
                 }
-                let merged = try await merge(workspace)
-                if !merged.upToDate {
+                let merged = try await whileBusy { try await merge(workspace) }
+                guard !merged.upToDate else {
+                    store.append(.system, String(localized: "This task already has the project's latest version."), to: thread)
+                    return
+                }
+                do {
                     _ = try await pushTask(bot, store: store, github: token)
                     store.append(.system, String(localized: "Brought in the project's latest version. The review has it now."), to: thread)
+                } catch {
+                    let said = Self.plain(error)
+                    let line = store.append(.system, String(localized: "Brought in the project's latest version here, but couldn't send it to the review yet: \(said.sentence) It's sent on its own soon."), to: thread)
+                    messageDetails[line.id] = said.details
                 }
             } catch {
                 let said = Self.plain(error)

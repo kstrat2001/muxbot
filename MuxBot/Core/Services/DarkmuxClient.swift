@@ -136,18 +136,14 @@ struct DarkmuxClient: Sendable {
         var workspace: String
         /// A Tweak: the run it continues.
         var continues: String? = nil
-        /// The next task after a merge: darkmux starts the run on a new
-        /// branch from the project's main version (darkmux #3684).
-        var fresh: Bool? = nil
     }
 
     /// Starts a run in a workspace. `profile` nil lets darkmux pick it the
     /// way `darkmux dispatch <role>` would; the reply names the profile used.
-    func submitWork(token: String, role: String, message: String, profile: String?, workspace: String, continues: String? = nil,
-                    fresh: Bool = false) async throws -> (workId: String, profile: String?) {
+    func submitWork(token: String, role: String, message: String, profile: String?, workspace: String, continues: String? = nil) async throws -> (workId: String, profile: String?) {
         struct Reply: Decodable { var work_id: String; var profile: String? }
         let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace,
-                                                                         continues: continues, fresh: fresh ? true : nil),
+                                                                         continues: continues),
                                   headers: ["Authorization": "Bearer \(token)"])
         let reply = try JSONDecoder().decode(Reply.self, from: data)
         return (reply.work_id, reply.profile)

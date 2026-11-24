@@ -3,8 +3,8 @@ import Testing
 @testable import MuxBot
 
 /// #144 step 4: Merge is pinned to the head darkmux reports for the work
-/// copy; after a merge the next run starts the next task fresh from the
-/// project's main version (darkmux #3684); and Bring in changes brings a
+/// copy; after a merge the work copy moves onto the next task from the
+/// merged main (darkmux's `new_task`, #3684); and Bring in changes brings a
 /// main version that moved into the task through darkmux (`merge_main`).
 @Suite(.serialized) @MainActor
 struct MergeAndNextTaskTests {
@@ -44,49 +44,84 @@ struct MergeAndNextTaskTests {
         (store.conversation(for: .bot(bot.id)).messages ?? []).map(\.content)
     }
 
+    /// darkmux's head and GitHub's differ: nothing merges, and the sha a
+    /// merge sends is darkmux's, never only GitHub's.
     @Test func mergeIsPinnedToTheHeadDarkmuxReports() async {
         let (store, bot, runs, github) = setUp()
+        runs.gitNewTasker = { _, _, _ in .init(moved: true, branch: "mux/site-2", head: "n1", carried: 0) }
         runs.gitFetcher = { _, _ in self.status() }
+        runs.gitStatusSource = { _ in self.status(head: "local9") }
         pull(head: "abc")
         GitHubStub.on("PUT /repos/\(repo)/pulls/7/merge", 200, #"{"sha":"m1","merged":true}"#)
         await runs.mergeReview(bot, store: store, github: github)
-        let merges = GitHubStub.seen.filter { $0.method == "PUT" && $0.path.hasSuffix("/merge") }
+        var merges = GitHubStub.seen.filter { $0.method == "PUT" && $0.path.hasSuffix("/merge") }
+        #expect(merges.isEmpty, "GitHub's head isn't the work copy's")
+        runs.gitStatusSource = { _ in self.status(head: "abc") }
+        await runs.mergeReview(bot, store: store, github: github)
+        merges = GitHubStub.seen.filter { $0.method == "PUT" && $0.path.hasSuffix("/merge") }
         #expect(merges.first?.body?["sha"] as? String == "abc")
     }
 
-    @Test func afterAMergeTheNextRunStartsTheNextTaskFresh() async {
-        let (store, bot, runs, _) = setUp()
-        let fetched = Recorder()
-        runs.gitFetcher = { workspace, github in fetched.add("\(workspace) \(github ?? "-")"); return self.status(pending: 0) }
+    @Test func afterAMergeTheWorkCopyMovesOntoTheNextTask() async {
+        let (store, bot, runs, github) = setUp()
+        pull(head: "abc")
+        await runs.refreshReview(bot, store: store, github: github)
+        let steps = Recorder()
+        runs.gitFetcher = { workspace, github in steps.add("fetch \(workspace) \(github ?? "-")"); return self.status() }
+        runs.gitNewTasker = { workspace, head, sha in steps.add("new_task \(workspace) \(head) \(sha)"); return .init(moved: true, branch: "mux/site-2", head: "n1", carried: 0) }
         runs.workspaceMaker = { _ in Issue.record("no new work copy"); throw CancellationError() }
+        runs.gitStatusSource = { _ in self.status(head: "n1", pending: 0) }
         await runs.afterMerge(bot, mergeSHA: "m1", store: store)
-        #expect(fetched.values == ["site-1 ghu_abc"], "the merged main is fetched")
+        #expect(steps.values == ["fetch site-1 ghu_abc", "new_task site-1 abc m1"], "\(steps.values)")
         #expect(bot.workspaceName == "site-1", "the work copy stays")
-        #expect(LocalBotState.shared[bot.id]?.startFresh == true)
-        #expect(runs.taskState(bot, store: store) == .clean, "nothing in the next task yet")
-        #expect(said(store, bot).contains(TaskReview.nextTaskLine(fromMain: true)))
+        #expect(runs.taskState(bot, store: store) == .clean, "darkmux's own status reads clean, on every device")
+        #expect(said(store, bot).contains(TaskReview.nextTaskLine))
     }
 
-    @Test func theFreshFlagGoesWithTheFirstRunOnlyAndNeverWithATweak() async {
-        let (store, bot, runs, _) = setUp()
-        LocalBotState.shared.update(bot.id) { $0.review = nil; $0.startFresh = true }
-        let keychain = MemoryKeychain()
-        keychain.items["darkmux.client.token"] = "t0ken"
-        let defaults = UserDefaults(suiteName: "muxbot-tests-fresh-\(UUID().uuidString)")!
-        defaults.set("Mux Bot", forKey: "darkmux.client.name")
-        runs.connection = FleetConnection(keychain: keychain, defaults: defaults)
-        runs.deviceRuns = true
-        runs.useOnDeviceModel = false
-        runs.profileSource = { [] }
-        runs.capabilitiesSource = { ["fresh_branch"] }
-        runs.workSubmitter = { _, _, _, _, _ in ("w-1", nil) }
-        runs.workStatusFetcher = { _ in try JSONDecoder().decode(DarkmuxClient.WorkStatus.self, from: Data(#"{"status":"running"}"#.utf8)) }
-        let first = store.proposeRun(task: "Next thing", crew: .coder, on: bot)
-        runs.decide(.approve, on: first, store: store)
-        for _ in 0..<100 where first.darkmuxWorkId == nil { try? await Task.sleep(for: .milliseconds(20)) }
-        #expect(runs.submittedFresh.contains(first.id), "the next task's first run starts fresh")
-        #expect(LocalBotState.shared[bot.id]?.startFresh == nil, "only once")
-        first.phase = .canceled
+    @Test func theNextTaskWaitsForTheMergeToBeFetchedAndForARunToEnd() async {
+        let (store, bot, runs, github) = setUp()
+        runs.runWaitInterval = .milliseconds(10)
+        runs.busyRetryInterval = .milliseconds(10)
+        pull(head: "abc")
+        await runs.refreshReview(bot, store: store, github: github)
+        runs.gitFetcher = { _, _ in self.status() }
+        let tries = Counter()
+        runs.gitNewTasker = { _, _, _ in
+            tries.add()
+            switch tries.count {
+            case 1: throw DarkmuxClient.ClientError(message: "fetch first", status: 409, code: "stale_main")
+            case 2: throw DarkmuxClient.ClientError(message: "run w-3 is working", status: 409, code: "work_copy_busy", holder: "run")
+            default: return .init(moved: true, branch: "mux/site-2", head: "n1", carried: 1)
+            }
+        }
+        await runs.afterMerge(bot, mergeSHA: "m1", store: store)
+        #expect(tries.count == 3, "after the fetch, and after the run, it moves")
+    }
+
+    @Test func aMergeSeenTwiceEndsTheTaskOnce() async {
+        let (store, bot, runs, github) = setUp()
+        pull(head: "abc")
+        await runs.refreshReview(bot, store: store, github: github)
+        runs.gitFetcher = { _, _ in try? await Task.sleep(for: .milliseconds(50)); return self.status() }
+        let moves = Counter()
+        runs.gitNewTasker = { _, _, _ in moves.add(); return .init(moved: true, branch: "mux/site-2", head: "n1", carried: 0) }
+        async let one: Void = runs.afterMerge(bot, mergeSHA: "m1", store: store)
+        async let two: Void = runs.afterMerge(bot, mergeSHA: "m1", store: store)
+        _ = await (one, two)
+        #expect(moves.count == 1)
+        #expect(said(store, bot).filter { $0 == TaskReview.nextTaskLine }.count == 1)
+    }
+
+    @Test func withoutNewTaskAFreshWorkCopyIsMade() async {
+        let (store, bot, runs, github) = setUp()
+        pull(head: "abc")
+        await runs.refreshReview(bot, store: store, github: github)
+        runs.capabilitiesSource = { ["git_route"] }
+        var asked: DarkmuxClient.WorkspaceBody?
+        runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "site 2", branch: "mux/site-9", created: true) }
+        await runs.afterMerge(bot, mergeSHA: "m1", store: store)
+        #expect(asked != nil, "a fresh work copy from the main version")
+        #expect(bot.workspaceName == "site 2")
     }
 
     @Test func bringInChangesMergesTheMovedMainAndSendsIt() async {
@@ -102,6 +137,17 @@ struct MergeAndNextTaskTests {
         await runs.bringInChanges(bot, store: store, github: github)
         #expect(steps.values == ["fetch", "merge", "push"], "\(steps.values)")
         #expect(said(store, bot).contains { $0.contains("Brought in the project's latest version") })
+    }
+
+    @Test func alreadyUpToDateSaysSoAndSendsNothing() async {
+        let (store, bot, runs, github) = setUp()
+        pull(head: "abc", state: "behind")
+        await runs.refreshReview(bot, store: store, github: github)
+        runs.gitFetcher = { _, _ in self.status() }
+        runs.gitMerger = { _ in .init(head: "abc", upToDate: true, fastForward: false) }
+        runs.gitPusher = { _, _, _ in Issue.record("nothing pushed"); throw CancellationError() }
+        await runs.bringInChanges(bot, store: store, github: github)
+        #expect(said(store, bot).last == "This task already has the project's latest version.")
     }
 
     @Test func aConflictBringsInNothingAndSaysSoPlainly() async {
