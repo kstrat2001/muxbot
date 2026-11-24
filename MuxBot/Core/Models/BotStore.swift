@@ -158,6 +158,7 @@ struct BotStore {
         case let .dispatch(crew, task): "Dispatch to \(crew.name): \(task)"
         case let .addResource(kind, value): "Add \(kind.label.lowercased()): \(value)"
         case let .tweak(_, change): "Tweak: \(change)"
+        case let .startFromGitHub(repo): "Start again from \(repo) on GitHub"
         }
     }
 

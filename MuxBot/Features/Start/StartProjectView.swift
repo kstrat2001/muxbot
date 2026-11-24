@@ -208,8 +208,8 @@ struct StartProjectView: View {
                     }
                     Toggle("Public", isOn: $answers.isPublic).tint(Color.brandGreen)
                     Text(answers.isPublic
-                         ? "Anyone can see a public repo. Mux Bot puts the template's files in it as the first commit."
-                         : "Private: only you can see it. Mux Bot puts the template's files in it as the first commit.")
+                         ? "Anyone can see a public repo. Your project goes into it from your Mac, from its first change on."
+                         : "Private: only you can see it. Your project goes into it from your Mac, from its first change on.")
                         .font(AppFont.footnote()).foregroundStyle(Color.secondaryText)
                 }
             } header: {

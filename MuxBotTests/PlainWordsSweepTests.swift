@@ -63,13 +63,12 @@ struct PlainWordsSweepTests {
         #expect(!GitHubError(status: 418, signedIn: true).localizedDescription.contains("418"))
     }
 
-    @Test func aPushRefusalShowsNoStatusCode() async {
+    @Test func aPullRequestRefusalShowsNoStatusCode() async {
         GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/site/git/ref/heads/mux/site", 502, "")
-        let gh = GitHubPR(session: GitHubStub.session, token: "t", local: LocalBotState(fileURL: nil))
-        let changes = DarkmuxClient.Changes(base: "b", baseBranch: "main", head: "h", branch: "mux/site", files: [])
+        GitHubStub.on("POST /repos/kain/site/pulls", 502, "")
+        let gh = GitHubPR(session: GitHubStub.session, token: "t")
         do {
-            _ = try await gh.push(changes, repo: "kain/site", message: "m", bot: UUID())
+            _ = try await gh.open(repo: "kain/site", head: "mux/site", base: "main", title: "x", body: "y")
             Issue.record("expected a refusal")
         } catch {
             let text = error.localizedDescription

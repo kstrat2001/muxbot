@@ -45,30 +45,46 @@ enum StartProject {
         defaults.set(on, forKey: backUpChoiceKey)
     }
 
-    /// With "Back up to GitHub" on, the project's own GitHub
-    /// repo comes first
-    /// (private unless you chose public, filled with the template's files at
-    /// its pinned commit), and only then the bot and the local project from
-    /// the same commit. When the GitHub step fails nothing is made here, and
-    /// the error says why (naming a repo that was made but couldn't be
-    /// filled). Off, it's the bot and darkmux's local project only.
+    /// With "Back up to GitHub" on, the project's own GitHub repo comes
+    /// first: an empty one (private unless you chose public). Then the bot
+    /// and darkmux's local project from the template, and darkmux pushes the
+    /// project's own history into the repo (darkmux #3681). When the repo
+    /// can't be made nothing is made here, and the error says why; a push
+    /// that fails leaves the repo recorded, and Put it on GitHub finishes
+    /// into it. Off, it's the bot and darkmux's local project only.
     static func start(_ entry: TemplateEntry, playbook: Playbook, answers: Answers, look: BotLook? = nil,
                       github: GitHubRepoMaker?, store: BotStore, runs: RunCoordinator) async throws -> Bot {
         guard answers.backUpToGitHub else {
             return await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
         }
         guard let github else { throw GitHubRepoMaker.Failure.plain(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
+        // The project is made by darkmux on the Mac, and its history goes to
+        // GitHub from there: where that can't happen now (iPhone, or not
+        // paired), no repo is made yet.
+        guard runs.deviceRuns, runs.workspaceMaker != nil || runs.connection?.token != nil else {
+            let bot = await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
+            store.append(.system, String(localized: "It goes on GitHub once darkmux has made the project on your Mac: choose Put it on GitHub in the bot's info there."),
+                         to: store.conversation(for: .bot(bot.id)))
+            return bot
+        }
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = try await github.login()
         let wanted = GitHubRepoMaker.slug(answers.repoName.isEmpty ? name : answers.repoName)
         let repoName = try await github.freeName(wanted, owner: owner)
         let made = try await github.make(name: repoName, isPrivate: !answers.isPublic,
-                                         description: answers.purpose.trimmingCharacters(in: .whitespacesAndNewlines),
-                                         from: entry)
+                                         description: answers.purpose.trimmingCharacters(in: .whitespacesAndNewlines))
         let bot = await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs) { bot in
-            store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
-            bot.githubStart = GitHubPR.Start(commit: made.startCommit, branch: made.defaultBranch,
-                                             head: "mux/\(GitHubRepoMaker.slug(name))")
+            ModelSettingsStore.shared.setPendingRepo(made.repo, bot: bot.id)
+        }
+        guard bot.workspaceName != nil else {
+            store.append(.system, String(localized: "The project isn't on GitHub yet: once it's made here, choose Finish putting it on GitHub in the bot's info."),
+                         to: store.conversation(for: .bot(bot.id)))
+            return bot
+        }
+        do {
+            _ = try await PutOnGitHub.run(bot, isPublic: answers.isPublic, github: github, token: github.token, store: store, runs: runs)
+        } catch {
+            store.append(.system, PutOnGitHub.problem(error), to: store.conversation(for: .bot(bot.id)))
         }
         return bot
     }

@@ -36,6 +36,9 @@ struct ActionCardView: View {
                     PreviewSetupCardView(message: message, setup: setup)
                 case let .setUpPlaybook(setup)?:
                     PlaybookSetupCardView(message: message, setup: setup)
+                case let .startFromGitHub(repo)?:
+                    Label("Start again from GitHub", systemImage: "arrow.down.circle").font(AppFont.headline())
+                    Text("A new copy of \(repo) on this Mac, from GitHub. The old copy stays here.").font(AppFont.body())
                 case let .app(action, _, detail)?:
                     Label(action.cardTitle(bot: botName), systemImage: action.systemImage).font(AppFont.headline())
                     if !detail.isEmpty { Text(detail).font(AppFont.body()) }

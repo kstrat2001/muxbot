@@ -100,6 +100,10 @@ struct DarkmuxClient: Sendable {
         var status: Int = 0
         /// darkmux's machine-readable reason (`code`), when it sent one.
         var code: String? = nil
+        /// What holds the work copy, on `work_copy_busy` (darkmux #3681).
+        var holder: String? = nil
+        /// The files in the way, on `merge_conflict` (darkmux #3681).
+        var paths: [String]? = nil
         var errorDescription: String? { message }
     }
 
@@ -521,7 +525,7 @@ struct DarkmuxClient: Sendable {
         return token.isEmpty ? nil : token
     }
 
-    private func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
+    func send(_ method: String, _ path: String, body: (some Encodable)? = Optional<String>.none,
                       headers: [String: String] = [:], query: [URLQueryItem] = [], timeout: TimeInterval = 5) async throws -> Data {
         // The query goes in as query items: in the path, `?` would be encoded.
         var url = baseURL.appending(path: path)
@@ -540,7 +544,8 @@ struct DarkmuxClient: Sendable {
         guard (200..<300).contains(status) else {
             let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let detail = body?["error"] as? String
-            throw ClientError(message: detail ?? "darkmux answered \(status)", status: status, code: body?["code"] as? String)
+            throw ClientError(message: detail ?? "darkmux answered \(status)", status: status, code: body?["code"] as? String,
+                              holder: body?["holder"] as? String, paths: body?["paths"] as? [String])
         }
         return data
     }

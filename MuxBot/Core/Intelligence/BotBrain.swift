@@ -62,6 +62,10 @@ enum BotAction: Sendable, Equatable, Codable {
     /// Something the app does itself that changes things ("undo that",
     /// "archive this bot"), asked in chat; `runId` is the run it's about.
     case app(AppAction, runId: UUID?, detail: String)
+    /// A project an earlier Mux Bot put on GitHub (its copy here shares no
+    /// history with GitHub's): a new work copy from GitHub, the old one
+    /// kept (muxbot#144).
+    case startFromGitHub(repo: String)
 }
 
 extension BotAction {
@@ -1318,6 +1322,10 @@ final class BotBrain {
                 store.addResource(ResourceKind.addable.contains(kind) ? kind : .note, value, to: bot)
             }
             note = "Added bot \(draft.name)."
+        case .startFromGitHub:
+            guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
+            Task { await runs.startAgainFromGitHub(bot, store: store) }
+            return
         case let .dispatch(crew, task):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             let run = store.proposeRun(task: task, crew: crew, on: bot)
@@ -1344,19 +1352,21 @@ final class BotBrain {
                 Task { await setCloneRecipe(data, bot: bot, store: store) }
                 return
             }
-            LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PreviewSetup.path: data]) { $1 } }
-            store.append(.system, String(localized: "Wrote \(PreviewSetup.path) into \(setup.folderName), uncommitted. It goes into this bot's next pull request too. Starting the preview to check it…"),
+            store.append(.system, String(localized: "Wrote the preview settings into \(setup.folderName). Starting the preview to check it…"),
                          to: store.conversation(for: chat))
-            Task { await checkPreview(bot, store: store) }
+            Task {
+                await runs.saveApproved(PreviewSetup.path, data: data, bot: bot, store: store)
+                await checkPreview(bot, store: store)
+            }
             return
         case let .setUpPlaybook(setup):
             // Written into your checkout by the card; kept for the PR, and
             // the bot's skills and persona become the approved ones.
             guard let bot = chat.botId.flatMap(store.bot(id:)), let playbook = setup.parsed else { return }
-            LocalBotState.shared.update(bot.id) { $0.prFiles = ($0.prFiles ?? [:]).merging([PlaybookSetup.path: setup.data]) { $1 } }
+            Task { await runs.saveApproved(PlaybookSetup.path, data: setup.data, bot: bot, store: store) }
             bot.skills = playbook.skills
             bot.instructions = StartProject.instructions(playbook, answers: .init(name: bot.name, purpose: setup.purpose), name: bot.name)
-            note = String(localized: "Wrote \(PlaybookSetup.path) into \(setup.folderName), uncommitted, and I now use its skills. It goes into this bot's next pull request too.")
+            note = String(localized: "Wrote the playbook into \(setup.folderName), and I now use its skills.")
         case let .app(action, runId, _):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             // Things moved on since the card was made: say so, change nothing.

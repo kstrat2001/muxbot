@@ -239,7 +239,7 @@ struct BotInfoView: View {
         } header: {
             Text("GitHub")
         } footer: {
-            Text("Makes a repo in your account with the template's files and this project's committed work, then backs up new work to it.")
+            Text("Makes a repo in your account and puts this project in it, everything saved so far, then backs up new work to it.")
         }
     }
 
@@ -247,7 +247,7 @@ struct BotInfoView: View {
         guard let token = github.token else { return }
         putProblem = nil
         do {
-            _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), pr: GitHubPR(token: token),
+            _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), token: token,
                                           store: BotStore(context: context), runs: brain.runs)
         } catch {
             putProblem = PutOnGitHub.problem(error)

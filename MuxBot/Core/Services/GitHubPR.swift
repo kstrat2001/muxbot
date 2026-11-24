@@ -1,34 +1,18 @@
 import Foundation
 
-/// Opens a pull request from a bot's branch with your GitHub sign-in:
-/// darkmux hands over the branch's changes (`/changes`), and this creates
-/// the blobs, a tree on the base commit, a commit and the branch ref through
-/// GitHub's Git Data API, then the PR. darkmux never authors PRs.
+/// Opens a pull request from a task's branch with your GitHub sign-in. The
+/// branch gets to GitHub through darkmux's own `git push` from the work
+/// copy (darkmux #3681); this only opens the PR (darkmux never authors
+/// PRs, #1463).
 struct GitHubPR: Sendable {
     struct PR: Equatable, Sendable {
         var number: Int
         var url: URL
-        /// Approved files (`extraFiles`) this commit added.
-        var added: [String] = []
-        /// Approved files left out, and why (never written over).
-        var skipped: [String: Skip] = [:]
-    }
-
-    enum Skip: Equatable, Sendable {
-        /// The bot's own changes already have this path.
-        case inChanges
-        /// The base branch already has it: it's in the repo now.
-        case inBase
     }
 
     enum Failure: Error, Equatable, LocalizedError {
         /// The Mux Bot GitHub App can't write to this repo (not installed there).
         case cantWrite(String)
-        /// Someone else pushed to the PR branch: never overwritten.
-        case branchMoved(String)
-        /// GitHub doesn't have the commit the work builds on (a 404 on it):
-        /// not an install problem.
-        case baseMissing(String)
         /// GitHub stopped taking the sign-in and it couldn't be renewed.
         case signInExpired
         /// GitHub refused with no reason of its own.
@@ -37,9 +21,6 @@ struct GitHubPR: Sendable {
         var errorDescription: String? {
             switch self {
             case let .cantWrite(repo): String(localized: "Mux Bot can't write to \(repo) yet: install the Mux Bot GitHub App on it.")
-            case let .branchMoved(branch): String(localized: "Someone else pushed to \(branch) on GitHub, so I stopped rather than overwrite it.")
-            // The commit's id stays behind Show details; never an instruction to push.
-            case .baseMissing: String(localized: "This project's work on this Mac builds on a version of the project that GitHub doesn't have yet, so I can't put it on GitHub from here.")
             case .signInExpired: GitHubAuth.expiredMessage
             case let .refused(status): GitHubPlain.sentence(status: status, signedIn: true)
             case let .github(why): String(localized: "GitHub said: \(why)")
@@ -50,132 +31,27 @@ struct GitHubPR: Sendable {
     var session: URLSession = .shared
     private let current: GitHubToken
     var token: String { current.value }
-    /// Where this Mac keeps the commit it last wrote to each bot branch.
-    var local: LocalBotState = .shared
 
-    init(session: URLSession = .shared, token: String, local: LocalBotState = .shared) {
+    init(session: URLSession = .shared, token: String) {
         self.session = session
         current = GitHubToken(token)
-        self.local = local
     }
 
-    /// The next branch name after one someone else pushed to:
-    /// "mux/site" → "mux/site-2", "mux/site-2" → "mux/site-3".
-    static func nextBranch(_ branch: String) -> String { GitHubRepoMaker.nextName(branch) }
-
-    /// Where a project that started on GitHub begins there: darkmux's own
-    /// first commit isn't on GitHub, but its files are the same as this
-    /// commit's, so the branch is built on this one, and PRs go to `branch`.
-    struct Start: Codable, Equatable, Sendable {
-        var commit: String
-        var branch: String
-        /// The branch on GitHub the bot's work goes to (`mux/<bot>`): the
-        /// local project works on its own `main`.
-        var head: String
-        /// The commit the branch goes on top of when it's new, when that
-        /// isn't `commit`: after Put it on GitHub, Put's work commit. `commit`
-        /// stays the template's start, the tree darkmux's changes are
-        /// against, so a file deleted after Put shows as deleted.
-        var parent: String? = nil
-    }
-
-    /// The pushed branch: its new commit and the approved files it holds.
-    struct Pushed: Equatable, Sendable {
-        var commit: String
-        var added: [String] = []
-        var skipped: [String: Skip] = [:]
-    }
-
-    /// Pushes the bot's branch, then opens a PR from it (or finds the one
-    /// already open).
-    func open(_ changes: DarkmuxClient.Changes, repo: String, title: String, body: String, bot: UUID,
-              extraFiles: [String: Data] = [:], start: Start? = nil) async throws -> PR {
-        let pushed = try await push(changes, repo: repo, message: title, bot: bot, extraFiles: extraFiles, start: start)
+    /// Opens a PR from `head` into `base` (or finds the one already open
+    /// for that branch).
+    func open(repo: String, head: String, base: String, title: String, body: String) async throws -> PR {
         let api = "https://api.github.com/repos/\(repo)"
-        let added = pushed.added, skipped = pushed.skipped
         struct Pull: Decodable { var number: Int; var html_url: String }
         do {
-            let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": start?.head ?? changes.branch, "base": start?.branch ?? changes.baseBranch, "body": body], repo: repo)
-            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
+            let pull: Pull = try await send("POST", "\(api)/pulls", ["title": title, "head": head, "base": base, "body": body], repo: repo)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!)
         } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("already exists") {
-            // The PR is already open for this branch; it now shows the new commit.
+            // The PR is already open for this branch; it now shows the new commits.
             let owner = repo.split(separator: "/").first.map(String.init) ?? ""
-            let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(start?.head ?? changes.branch)&state=open", nil, repo: repo)
+            let open: [Pull] = try await send("GET", "\(api)/pulls?head=\(owner):\(head)&state=open", nil, repo: repo)
             guard let pull = open.first else { throw Failure.github(why) }
-            return PR(number: pull.number, url: URL(string: pull.html_url)!, added: added, skipped: skipped)
+            return PR(number: pull.number, url: URL(string: pull.html_url)!)
         }
-    }
-
-    /// Writes the bot's branch on GitHub: the base plus every change (and
-    /// the approved files), one commit, moved forward without force. Also
-    /// the backup of committed runs, with no PR.
-    func push(_ changes: DarkmuxClient.Changes, repo: String, message: String, bot: UUID,
-              extraFiles: [String: Data] = [:], start: Start? = nil) async throws -> Pushed {
-        let api = "https://api.github.com/repos/\(repo)"
-        let baseCommit = start?.commit ?? changes.base
-        let head = start?.head ?? changes.branch
-        struct SHA: Decodable { var sha: String }
-        struct Commit: Decodable { struct Tree: Decodable { var sha: String }; var tree: Tree }
-
-        // The tree is the branch's full current state (the base plus every
-        // change), so the new commit may go on top of the branch only where
-        // this Mac left it (an earlier PR). Anything else there is someone
-        // else's work our tree would drop: stop before writing anything.
-        // Never a force push.
-        struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
-        let remote: Ref? = try await sendOptional("GET", "\(api)/git/ref/heads/\(head)", repo: repo)
-        if let remote, remote.object.sha != local[bot]?.pushedHeads?[head] {
-            throw Failure.branchMoved(head)
-        }
-
-        var entries: [[String: Any]] = []
-        for file in changes.files {
-            if file.deleted == true {
-                entries.append(["path": file.path, "mode": "100644", "type": "blob", "sha": NSNull()])
-            } else {
-                let blob: SHA = try await send("POST", "\(api)/git/blobs", ["content": file.content ?? "", "encoding": "base64"], repo: repo)
-                entries.append(["path": file.path, "mode": file.mode ?? "100644", "type": "blob", "sha": blob.sha])
-            }
-        }
-        // Files you approved for the PR (a preview recipe): exactly those
-        // bytes, never over the bot's own change or one the base has.
-        var added: [String] = []
-        var skipped: [String: Skip] = [:]
-        for (path, data) in extraFiles.sorted(by: { $0.key < $1.key }) {
-            if changes.files.contains(where: { $0.path == path }) { skipped[path] = .inChanges; continue }
-            let encoded = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
-            let existing: [String: AnyCodable]? = try await sendOptional("GET", "\(api)/contents/\(encoded)?ref=\(baseCommit)", repo: repo)
-            if existing != nil { skipped[path] = .inBase; continue }
-            let blob: SHA = try await send("POST", "\(api)/git/blobs", ["content": data.base64EncodedString(), "encoding": "base64"], repo: repo)
-            entries.append(["path": path, "mode": "100644", "type": "blob", "sha": blob.sha])
-            added.append(path)
-        }
-        let base: Commit = try await send("GET", "\(api)/git/commits/\(baseCommit)", nil, repo: repo, missing: .baseMissing(baseCommit))
-        let tree: SHA = try await send("POST", "\(api)/git/trees", ["base_tree": base.tree.sha, "tree": entries], repo: repo)
-        let parent = remote?.object.sha ?? start?.parent ?? baseCommit
-        let commit: SHA = try await send("POST", "\(api)/git/commits", ["message": message, "tree": tree.sha, "parents": [parent]], repo: repo)
-        if remote == nil {
-            let _: [String: AnyCodable] = try await send("POST", "\(api)/git/refs", ["ref": "refs/heads/\(head)", "sha": commit.sha], repo: repo)
-        } else {
-            do {
-                let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(head)", ["sha": commit.sha, "force": false], repo: repo)
-            } catch Failure.github(let why) where why.localizedCaseInsensitiveContains("not a fast forward") {
-                // Someone pushed between our look and the move.
-                throw Failure.branchMoved(head)
-            }
-        }
-        // Remembered before the PR, which can still fail: the branch is ours
-        // at this commit either way.
-        local.update(bot) { $0.pushedHeads = ($0.pushedHeads ?? [:]).merging([head: commit.sha]) { $1 } }
-        return Pushed(commit: commit.sha, added: added, skipped: skipped)
-    }
-
-    /// A GET whose 404 means "not there yet" (nil), not "can't write".
-    private func sendOptional<T: Decodable>(_ method: String, _ url: String, repo: String) async throws -> T? {
-        let (data, status) = try await load(method, url, nil)
-        if status == 404 { return nil }
-        guard status == 200 else { throw status == 403 ? Failure.cantWrite(repo) : Failure.refused(status) }
-        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private func request(_ method: String, _ url: String, _ body: [String: Any]?) throws -> URLRequest {
@@ -209,12 +85,9 @@ struct GitHubPR: Sendable {
         return (again, second)
     }
 
-    /// `missing` is what a 404 means here, when it isn't "can't write".
-    private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String,
-                                    missing: Failure? = nil) async throws -> T {
+    private func send<T: Decodable>(_ method: String, _ url: String, _ body: [String: Any]?, repo: String) async throws -> T {
         let (data, status) = try await load(method, url, body)
         guard (200..<300).contains(status) else {
-            if status == 404, let missing { throw missing }
             if status == 403 || status == 404 { throw Failure.cantWrite(repo) }
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             guard let detail = ((json?["errors"] as? [[String: Any]])?.first?["message"] as? String) ?? (json?["message"] as? String) else {

@@ -186,6 +186,25 @@ enum DarkmuxPlain {
             return String(localized: "darkmux couldn't make this bot's branch in the work copy. Show details has git's reason.")
         case "unavailable":
             return String(localized: "darkmux on your Mac can't answer that right now. Try again in a moment.")
+        // The work copy's git, through darkmux (darkmux #3681).
+        case "work_copy_busy":
+            return String(localized: "Wait for the change that's going now to finish, then try again.")
+        case "remote_moved":
+            return String(localized: "GitHub has changes to this task that this Mac doesn't have yet, so nothing was sent over them. Look at them with See it on GitHub.")
+        case "merge_conflict":
+            return String(localized: "The project's main version changed the same lines as this task, so nothing was brought in. Ask the Coder to bring them together, or change them on GitHub.")
+        case "dirty":
+            return String(localized: "This project has changes that aren't saved yet, so nothing changed. Let the run finish, then try again.")
+        case "no_origin":
+            return String(localized: "This project isn't on GitHub yet.")
+        case "remote_not_empty":
+            return String(localized: "That GitHub repo already has files in it, so the project wasn't put there.")
+        case "token_host_refused":
+            return String(localized: "This project's copy online isn't on GitHub, so Mux Bot can't send it there.")
+        case "no_upstream":
+            return String(localized: "This task hasn't been sent to GitHub yet.")
+        case "push_failed", "fetch_failed":
+            return String(localized: "GitHub didn't take that from darkmux. Show details has why.")
         default: break
         }
         switch client.status {

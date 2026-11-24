@@ -22,17 +22,6 @@ final class LocalBotState: @unchecked Sendable {
         var previewPaneWidth: Double?
         /// Runs whose "needs you" you hid here (the banner's ×), by id.
         var dismissedRuns: [String]?
-        /// The commit this Mac last wrote to each of the bot's GitHub
-        /// branches, by branch name: Open PR moves a branch only from there,
-        /// never past a commit someone else pushed (`GitHubPR`).
-        var pushedHeads: [String: String]?
-        /// Files you approved for the bot's pull requests (path → the exact
-        /// bytes), added to each PR's commit until the base branch has them
-        /// (`PreviewSetup`).
-        var prFiles: [String: Data]?
-        /// A project started on GitHub: its start commit there, its default
-        /// branch and the branch the bot's work goes to (`GitHubPR.Start`).
-        var githubStart: GitHubPR.Start?
         /// The bot's runs started from this device (by id): this Mac's
         /// darkmux has them. Others (synced from another Mac) are never
         /// followed, stopped or undone from here.
@@ -40,16 +29,10 @@ final class LocalBotState: @unchecked Sendable {
         /// Each run's darkmux work ids, oldest first (the run, then each
         /// Tweak): Undo reverts them all, newest first.
         var runWorkIds: [String: [String]]?
-        /// The GitHub branch this Mac pushes the bot's work to when it isn't
-        /// darkmux's branch name: someone else pushed to that one, so the
-        /// work moved to the next free name (`RunCoordinator.pushMovingOn`).
-        var pushHead: String?
-        /// Put it on GitHub made the repo but hasn't pushed the project's
-        /// work into it yet: Put resumes into that repo, and backups wait.
-        var putPending: Bool?
-        /// Put it on GitHub made this repo but couldn't fill it: Put again
-        /// fills it, never a second one.
-        var putMadeRepo: String?
+        /// (Before muxbot#144) Files you approved, kept here for the next pull
+        /// request. Read once to move each into its work copy
+        /// (`RunCoordinator.moveApprovedFiles`), then removed.
+        var prFiles: [String: Data]?
         /// Runs finished before this are already on GitHub (Put it on GitHub
         /// pushed them to the default branch): Open PR doesn't offer them.
         var shippedThrough: Date?
@@ -67,8 +50,8 @@ final class LocalBotState: @unchecked Sendable {
 
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil && previewPaneWidth == nil
-                && (dismissedRuns ?? []).isEmpty && (pushedHeads ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && githubStart == nil
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && pushHead == nil && putPending == nil && putMadeRepo == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
+                && (dismissedRuns ?? []).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
                 && task == nil && review == nil
         }
     }

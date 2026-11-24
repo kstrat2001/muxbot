@@ -14,7 +14,6 @@ struct FailingFileGitHub: GitHubClient {
 @Suite(.serialized) @MainActor
 struct GitHubSweep2Tests {
     static let template = OwnRepoTests.template
-    private let treeKey = "GET /repos/kstrat2001/muxbot-template-book/git/trees/e044900cd94d086c841616b05ed63638aa402be4"
 
     // 1: reads renew an expired sign-in too.
 
@@ -93,27 +92,7 @@ struct GitHubSweep2Tests {
         }
     }
 
-    // 6: the new repo's first commit may not be there yet.
-
-    @Test func fillingWaitsForGitHubsFirstCommit() async throws {
-        GitHubStub.reset()
-        GitHubStub.on(treeKey, 200, #"{"tree":[{"path":"book.json","mode":"100644","type":"blob","sha":"aaa"}],"truncated":false}"#)
-        GitHubStub.on("POST /user/repos", 201, #"{"full_name":"kain/tides","html_url":"https://github.com/kain/tides","default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/git/blobs/aaa", 200, #"{"content":"e30K","encoding":"base64"}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/blobs", 409, #"{"message":"Git Repository is empty."}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/blobs", 201, #"{"sha":"n1"}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/trees", 201, #"{"sha":"t1"}"#)
-        GitHubStub.on("GET /repos/kain/tides/git/ref/heads/main", 404, #"{"message":"Not Found"}"#)
-        GitHubStub.on("GET /repos/kain/tides/git/ref/heads/main", 200, #"{"object":{"sha":"init0"}}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/commits", 201, #"{"sha":"start1"}"#)
-        GitHubStub.on("PATCH /repos/kain/tides/git/refs/heads/main", 200, #"{"ref":"refs/heads/main"}"#)
-        var maker = GitHubRepoMaker(session: GitHubStub.session, token: "t")
-        maker.pause = { _ in }
-        let made = try await maker.make(name: "tides", isPrivate: true, description: "", from: Self.template)
-        #expect(made.startCommit == "start1")
-    }
-
-    // 2: a backed-up template project needs its GitHub start.
+    // 2: a template project that is on GitHub is the copy there.
 
     private func templateBot(_ store: BotStore) -> Bot {
         let bot = store.add(name: "Tides", instructions: "")
@@ -122,75 +101,32 @@ struct GitHubSweep2Tests {
         return bot
     }
 
-    @Test func itsProjectWaitsForItsGitHubStart() async {
+    /// Made on iPhone and backed up: on this Mac its work copy is a clone of
+    /// its repo, whose history is the project's own (darkmux #3681).
+    @Test func aBackedUpTemplateProjectIsClonedFromGitHub() async {
         let store = TestStore.fresh()
         let bot = templateBot(store)
         let runs = RunCoordinator()
         runs.templateSource = { _ in Self.template }
-        let made = Recorder()
-        runs.workspaceMaker = { _ in made.add("x"); return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", head: "h", repo: nil, created: true, fetchError: nil) }
-        runs.startFinder = { _, _ in nil }
+        var asked: DarkmuxClient.WorkspaceBody?
+        runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "tides-1", branch: "mux/tides-1", head: "h", repo: "github.com/kain/tides", created: true, fetchError: nil) }
         await runs.setUpWorkCopy(for: bot, store: store)
-        #expect(made.values.isEmpty, "no project that could never be backed up")
-        guard case let .failed(why)? = runs.workCopySetup[bot.id] else { Issue.record("not failed"); return }
-        #expect(why.contains("GitHub"), "\(why)")
+        #expect(asked?.repoURL == "https://github.com/kain/tides")
+        #expect(asked?.template != true, "never a second, unrelated history")
+        #expect(bot.workspaceName == "tides-1")
     }
 
-    @Test func aBackupFindsTheStartItWasMissing() async {
-        let store = TestStore.fresh()
-        let bot = templateBot(store)
-        bot.workspaceName = "tides-1"
-        let runs = RunCoordinator()
-        runs.templateSource = { _ in Self.template }
-        runs.githubToken = { "ghu" }
-        runs.startFinder = { _, entry in (GitHubPR.Start(commit: "s1", branch: "main", head: "mux/tides"), entry.ref) }
-        runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "b", baseBranch: "main", head: "h", branch: "main",
-                                                           files: [.init(path: "a.md", mode: nil, content: "eA==", deleted: nil)]) }
-        let heads = Recorder()
-        runs.prPusher = { _, _, _, _, start in heads.add(start?.head ?? "none"); return GitHubPR.Pushed(commit: "c") }
-        await runs.backUp(bot, store: store)
-        #expect(heads.values == ["mux/tides"], "never darkmux's local main")
-        #expect(bot.githubStart?.commit == "s1")
-    }
-
-    @Test func aTemplateProjectIsNeverPushedToItsLocalBranch() {
-        let store = TestStore.fresh()
-        let bot = templateBot(store)
-        let runs = RunCoordinator()
-        let changes = DarkmuxClient.Changes(base: "b", baseBranch: "main", head: "h", branch: "main", files: [])
-        #expect(runs.pushStart(bot, changes: changes) == nil)
-        #expect(!runs.canPush(bot), "no start on GitHub: Open PR refuses plainly")
-    }
-
-    // 3 + 4: Put keeps the template's tree as the base.
-
-    @Test func afterPutTheBaseIsTheTemplateAndThePutIsTheParent() async throws {
+    @Test func aLocalTemplateProjectIsStillMadeFromItsTemplate() async {
         let store = TestStore.fresh()
         let bot = store.add(name: "Tides", instructions: "")
         bot.useCaseId = "book"
-        bot.workspaceName = "tides-1"
         let runs = RunCoordinator()
-        runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
-                                                           files: [.init(path: "notes.md", mode: nil, content: "eA==", deleted: nil)]) }
-        let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!, defaultBranch: "main", startCommit: "s1")
-        _ = try await PutOnGitHub.run(bot, isPublic: false, make: { made }, push: { _, _, _, _, _ in GitHubPR.Pushed(commit: "work1") },
-                                      local: LocalBotState(fileURL: nil), store: store, runs: runs)
-        #expect(bot.githubStart == GitHubPR.Start(commit: "s1", branch: "main", head: "mux/tides", parent: "work1"))
-        // notes.md was deleted after Put: the push's tree is built on the
-        // template, so the deletion shows; its parent is Put's commit.
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides/git/commits/s1", 200, #"{"sha":"s1","tree":{"sha":"tree-s1"}}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/trees", 201, #"{"sha":"t2"}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/commits", 201, #"{"sha":"c2"}"#)
-        GitHubStub.on("POST /repos/kain/tides/git/refs", 201, #"{"ref":"refs/heads/mux/tides"}"#)
-        let gh = GitHubPR(session: GitHubStub.session, token: "t", local: LocalBotState(fileURL: nil))
-        let deleted = DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
-                                            files: [.init(path: "notes.md", mode: nil, content: nil, deleted: true)])
-        _ = try await gh.push(deleted, repo: "kain/tides", message: "m", bot: bot.id, start: bot.githubStart)
-        let tree = GitHubStub.seen.first { $0.method == "POST" && $0.path.hasSuffix("/git/trees") }?.body
-        #expect(tree?["base_tree"] as? String == "tree-s1")
-        let parents = GitHubStub.seen.first { $0.method == "POST" && $0.path.hasSuffix("/git/commits") }?.body?["parents"] as? [String]
-        #expect(parents == ["work1"])
+        runs.templateSource = { _ in Self.template }
+        var asked: DarkmuxClient.WorkspaceBody?
+        runs.workspaceMaker = { body in asked = body; return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", head: "h", repo: nil, created: true, fetchError: nil) }
+        await runs.setUpWorkCopy(for: bot, store: store)
+        #expect(asked?.template == true)
+        #expect(asked?.ref == Self.template.ref)
     }
 
     @Test func aRunThatFinishesDuringPutIsBackedUpAfter() async throws {
@@ -200,11 +136,12 @@ struct GitHubSweep2Tests {
         bot.workspaceName = "tides-1"
         let runs = RunCoordinator()
         runs.githubToken = { "ghu" }
-        runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
-                                                           files: [.init(path: "a.md", mode: nil, content: "eA==", deleted: nil)]) }
-        let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!, defaultBranch: "main", startCommit: "s1")
+        // No remote until Put's push lands, then darkmux's status has it.
+        let landed = Counter()
+        runs.gitStatusSource = { _ in OwnRepoTests.status(origin: landed.count > 0 ? "github.com/kain/tides" : nil) }
+        let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!)
         var late: BotRun?
-        let push: PutOnGitHub.Push = { _, _, _, _, _ in
+        let push: PutOnGitHub.Push = { _, repo in
             // A run finishes while Put pushes the work it read before.
             let run = store.proposeRun(task: "late", crew: .coder, on: bot)
             store.apply(.approve, to: run)
@@ -213,51 +150,24 @@ struct GitHubSweep2Tests {
             try? await Task.sleep(for: .milliseconds(5))
             store.apply(.finish(summary: "done"), to: run)
             late = run
-            return GitHubPR.Pushed(commit: "work1")
+            landed.add()
+            return .init(branch: "main", head: "h1", remote: "github.com/\(repo)", addedOrigin: true)
         }
         let backups = Recorder()
-        runs.prPusher = { _, _, _, _, _ in backups.add("x"); return GitHubPR.Pushed(commit: "c") }
-        _ = try await PutOnGitHub.run(bot, isPublic: false, make: { made }, push: push, local: LocalBotState(fileURL: nil), store: store, runs: runs)
+        runs.gitPusher = { _, _, _ in backups.add("x"); return .init(branch: "mux/tides-1", head: "h2", remote: "github.com/kain/tides", addedOrigin: false) }
+        _ = try await PutOnGitHub.run(bot, isPublic: false, make: { made }, push: push, store: store, runs: runs)
         #expect(backups.values.count == 1, "backed up once after Put")
-        #expect(runs.unshippedRuns(bot, store: store).contains { $0.id == late?.id }, "and it's still offered for a PR")
-    }
-
-    // 7: leftovers.
-
-    @Test func aRepoMadeButNotFilledDuringPutResumesIntoIt() async throws {
-        let store = TestStore.fresh()
-        let bot = store.add(name: "Tides", instructions: "")
-        bot.useCaseId = "book"
-        bot.workspaceName = "tides-1"
-        let runs = RunCoordinator()
-        runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main", files: []) }
-        do {
-            _ = try await PutOnGitHub.run(bot, isPublic: false, make: { throw GitHubRepoMaker.Failure.madeButNotFilled(repo: "kain/tides", why: "busy") },
-                                          push: { _, _, _, _, _ in GitHubPR.Pushed(commit: "w") }, local: LocalBotState(fileURL: nil), store: store, runs: runs)
-            Issue.record("expected a failure")
-        } catch {
-            #expect(!error.localizedDescription.contains("another name"), "\(error.localizedDescription)")
-            #expect(error.localizedDescription.contains("kain/tides"))
-        }
-        #expect(PutOnGitHub.canResume(bot))
-        let refilled = Recorder()
-        let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!, defaultBranch: "main", startCommit: "s1")
-        _ = try await PutOnGitHub.run(bot, isPublic: false, make: { Issue.record("no second repo"); return made },
-                                      push: { _, _, _, _, _ in GitHubPR.Pushed(commit: "w") },
-                                      refill: { repo in refilled.add(repo); return made }, local: LocalBotState(fileURL: nil), store: store, runs: runs)
-        #expect(refilled.values == ["kain/tides"])
-        #expect(bot.repoSlugs == ["kain/tides"])
+        #expect(runs.unshippedRuns(bot, store: store).contains { $0.id == late?.id }, "and it's still offered for a review")
     }
 
     @Test func aBackupFailureIsPlainWithDarkmuxsWordsBehindDetails() async {
         let store = TestStore.fresh()
-        let bot = store.add(name: "Tides", instructions: "")
-        store.addResource(.repo, "https://github.com/kain/tides", to: bot)
+        let bot = templateBot(store)
         bot.workspaceName = "tides-1"
-        bot.githubStart = GitHubPR.Start(commit: "s1", branch: "main", head: "mux/tides")
         let runs = RunCoordinator()
         runs.githubToken = { "ghu" }
-        runs.changesFetcher = { _ in throw DarkmuxClient.ClientError(message: "fatal: bad object HEAD", status: 500) }
+        runs.gitStatusSource = { _ in OwnRepoTests.status() }
+        runs.gitPusher = { _, _, _ in throw DarkmuxClient.ClientError(message: "fatal: bad object HEAD", status: 502, code: "push_failed") }
         await runs.backUp(bot, store: store)
         let line = (store.conversation(for: .bot(bot.id)).messages ?? []).last
         #expect(line?.content.contains("fatal") == false, "\(line?.content ?? "")")

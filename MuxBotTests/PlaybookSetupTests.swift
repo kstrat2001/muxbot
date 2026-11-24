@@ -114,15 +114,19 @@ struct PlaybookSetupOfferTests {
         #expect(cards(store, clone).isEmpty, "nowhere to write it")
     }
 
-    @Test func approvingUsesItsSkillsAndKeepsTheFileForThePR() async throws {
+    @Test func approvingUsesItsSkillsAndSavesTheFileWithTheProjectsChanges() async throws {
         let store = TestStore.fresh()
         let b = bot(store)
+        b.workspaceName = "de-1"
         let brain = brain(checkout: URL(fileURLWithPath: "/tmp/de"), draft: ("You look after DE, an AdonisJS app.", ""))
+        let saved = Recorder()
+        brain.runs.fileAdder = { workspace, path, _ in saved.add("\(workspace) \(path)"); return .init(path: path, workId: "w-1", commit: "abc1234", branch: "mux/de-1") }
         await brain.offerPlaybookSetup(for: b, purpose: "my site", store: store)
         let card = try #require(cards(store, b).first)
         guard case let .setUpPlaybook(setup)? = card.action else { Issue.record("no card"); return }
         brain.resolve(card, approve: true, store: store)
-        #expect(LocalBotState.shared[b.id]?.prFiles?[PlaybookSetup.path] == setup.data)
+        for _ in 0..<100 where saved.values.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(saved.values == ["de-1 \(PlaybookSetup.path)"], "committed into the work copy (darkmux #3688)")
         #expect(b.skills == setup.parsed?.skills)
         #expect(b.instructions.hasPrefix("You look after DE, an AdonisJS app."))
         #expect(b.instructions.contains("my site"))

@@ -179,12 +179,12 @@ struct SeamSweep2Tests {
         #expect(runs.livePreviews[bot.id]?.status == .unavailable(.previewsOff))
     }
 
-    // 7: a clone's branch is the default branch: Open PR uses mux/<bot>.
+    // 7: darkmux never pushes a clone's default branch (`no_own_branch`,
+    // darkmux #3681); the app says so plainly.
 
-    @Test func aCloneOnItsDefaultBranchPushesToItsOwnBranch() {
-        let (_, bot, runs) = setUp()
-        let changes = DarkmuxClient.Changes(base: "b0", baseBranch: "main", head: "h", branch: "main", files: [])
-        #expect(runs.pushStart(bot, changes: changes)?.head == "mux/site")
+    @Test func aPushFromTheDefaultBranchIsRefusedPlainly() {
+        let text = DarkmuxPlain.sentence(DarkmuxClient.ClientError(message: "workspace x is on main", status: 409, code: "no_own_branch"))
+        #expect(text.contains("its own Mux Bot branch"), "\(text)")
     }
 
     // 8: pairing failures are plain.

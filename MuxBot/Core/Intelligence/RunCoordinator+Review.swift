@@ -69,6 +69,7 @@ extension RunCoordinator {
     /// task here too.
     func refreshReview(_ bot: Bot, store: BotStore, github: GitHubAuth) async {
         guard let state = review(for: bot), let repo = bot.repoSlugs.first, let token = github.token else { return }
+        await refreshTaskStatus(bot, store: store)
         do {
             let look = try await GitHubReview(session: githubSession ?? .shared, token: token).look(repo: repo, number: state.number)
             let standing = look.standing
@@ -89,26 +90,28 @@ extension RunCoordinator {
         }
     }
 
-    /// The facts `TaskState` is made of, from what this app reads today.
-    /// Until darkmux reports the work copy's own status (darkmux #3681),
-    /// the work copy's head is what was last sent to the review's branch,
-    /// and "busy" is a run, an Undo, a review being opened, a push or a Put
-    /// on GitHub going for this bot.
+    /// The facts `TaskState` is made of: darkmux's `status` of the work
+    /// copy (darkmux #3681) and the review on GitHub, never what one device
+    /// remembers. "Busy" is also a run, an Undo, a review being opened, a
+    /// push or a Put on GitHub this app has going.
     func taskFacts(_ bot: Bot, store: BotStore) -> TaskState.Facts {
         let runs = bot.runs ?? []
         var facts = TaskState.Facts()
-        facts.busy = runs.contains { $0.phase == .running || deciding.contains($0.id) }
+        let status = taskStatuses[bot.id]
+        facts.reachable = !taskStatusUnreachable.contains(bot.id)
+        facts.busy = status?.busy != nil || runs.contains { $0.phase == .running || deciding.contains($0.id) }
             || openingPR.contains(bot.id) || isPushing(bot.id) || puttingOnGitHub.contains(bot.id)
-        facts.pending = unshippedRuns(bot, store: store).count
+        facts.head = status?.head
+        facts.pending = status?.pending ?? 0
+        facts.ahead = status.map { $0.ahead ?? $0.pending } ?? 0
         if review(for: bot) != nil, let standing = reviewStandings[bot.id] {
             let head = reviewHeads[bot.id]
-            let status: TaskState.Review.Status = switch standing {
+            let reviewStatus: TaskState.Review.Status = switch standing {
             case .merged: .merged
             case .closed: .closed
             default: .open
             }
-            facts.review = .init(status: status, head: head?.sha ?? "", standing: standing)
-            facts.head = head.flatMap { LocalBotState.shared[bot.id]?.pushedHeads?[$0.ref] }
+            facts.review = .init(status: reviewStatus, head: head?.sha ?? "", standing: standing)
         }
         return facts
     }
@@ -166,6 +169,12 @@ extension RunCoordinator {
             }
             return
         }
+        // Changes GitHub doesn't have yet are sent first, then the checks
+        // look again.
+        if taskState(bot, store: store) == .notSent {
+            await updateReview(bot, store: store)
+            await refreshReview(bot, store: store, github: github)
+        }
         // The checks, then the merge at once (no confirmation, Kain
         // 2026-11-16): anything in the way is said, and nothing is merged.
         if let why = taskState(bot, store: store).refusal(.merge, standing: standing) {
@@ -187,52 +196,36 @@ extension RunCoordinator {
     }
 
     /// The task's changes joined the project: the review closes and the
-    /// next change starts a new task. A project made from a template keeps
-    /// its work copy (it already holds everything just merged) and its next
-    /// review goes on top of the merge; any other gets a fresh work copy
-    /// from the project's main version.
+    /// next change starts a new task, in a fresh work copy from the
+    /// project's main version.
     func afterMerge(_ bot: Bot, mergeSHA: String?, store: BotStore) async {
         guard review(for: bot) != nil else { return }
         let thread = store.conversation(for: .bot(bot.id))
-        let fromMain = bot.githubStart == nil
         LocalBotState.shared.update(bot.id) {
             $0.review = nil
             $0.task = ($0.task ?? 1) + 1
             $0.shippedThrough = .now
-            $0.pushHead = nil
         }
         reviewStandings[bot.id] = nil
         reviewHeads[bot.id] = nil
-        store.append(.system, TaskReview.nextTaskLine(fromMain: fromMain), to: thread)
-        if var start = bot.githubStart {
-            start.head = GitHubPR.nextBranch(start.head)
-            if let mergeSHA { start.parent = mergeSHA }
-            bot.githubStart = start
-            return
-        }
+        store.append(.system, TaskReview.nextTaskLine(fromMain: true), to: thread)
         // Until the new work copy is made, no run goes to the merged one.
         bot.workspaceName = nil
+        taskStatuses[bot.id] = nil
         store.save()
         await setUpWorkCopy(for: bot, store: store)
     }
 
-    /// A change saved while its task is in review joins the review. A
-    /// template project's backup already writes there; any other is pushed
-    /// to the review's branch here.
+    /// A change saved while its task is in review joins the review: the
+    /// task's branch goes to GitHub again through darkmux.
     func updateReview(_ bot: Bot, store: BotStore) async {
-        guard review(for: bot) != nil, bot.githubStart == nil, let repo = bot.repoSlugs.first,
-              let workspace = bot.workspaceName, let token = githubToken?() else { return }
+        guard review(for: bot) != nil, bot.workspaceName != nil, ModelSettingsStore.shared.pendingRepo(bot: bot.id) == nil,
+              let token = githubToken?() else { return }
         await oneAtATime(bot.id) { [self] in
             do {
-                let changes = try await changes(for: workspace)
-                guard !nothingToPush(bot, changes) else { return }
-                let session = githubSession ?? .shared
-                let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
-                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, extraFiles: approved, start: $4) }
-                _ = try await pushMovingOn(bot, changes: changes, store: store) {
-                    try await pusher(changes, repo, String(localized: "Update \(bot.name)'s review"), bot.id, $0)
-                }
+                _ = try await pushTask(bot, store: store, github: token)
             } catch {
+                if Self.saidWithItsCard(error) { return }
                 let said = Self.plain(error)
                 let line = store.append(.system, String(localized: "Couldn't add this change to the review on GitHub: \(said.sentence)"),
                                         to: store.conversation(for: .bot(bot.id)))
