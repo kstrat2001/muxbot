@@ -257,6 +257,8 @@ struct GitHubRunSweepTests {
         old.keptCommit = "k1"
         store.apply(.finish(summary: "done"), to: old)
         let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!)
+        // Not on GitHub yet: the work copy has no remote.
+        runs.gitStatusSource = { _ in Self.status(origin: nil, ahead: nil) }
         let pushes = Recorder()
         let push: PutOnGitHub.Push = { _, repo in
             pushes.add(repo)

@@ -136,7 +136,9 @@ struct GitHubSweep2Tests {
         bot.workspaceName = "tides-1"
         let runs = RunCoordinator()
         runs.githubToken = { "ghu" }
-        runs.gitStatusSource = { _ in OwnRepoTests.status() }
+        // No remote until Put's push lands, then darkmux's status has it.
+        let landed = Counter()
+        runs.gitStatusSource = { _ in OwnRepoTests.status(origin: landed.count > 0 ? "github.com/kain/tides" : nil) }
         let made = GitHubRepoMaker.Made(repo: "kain/tides", url: URL(string: "https://github.com/kain/tides")!)
         var late: BotRun?
         let push: PutOnGitHub.Push = { _, repo in
@@ -148,6 +150,7 @@ struct GitHubSweep2Tests {
             try? await Task.sleep(for: .milliseconds(5))
             store.apply(.finish(summary: "done"), to: run)
             late = run
+            landed.add()
             return .init(branch: "main", head: "h1", remote: "github.com/\(repo)", addedOrigin: true)
         }
         let backups = Recorder()
