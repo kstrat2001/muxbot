@@ -58,6 +58,15 @@ enum StartProject {
             return await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
         }
         guard let github else { throw GitHubRepoMaker.Failure.plain(String(localized: "Sign in with GitHub to back the project up there, or switch Back up to GitHub off.")) }
+        // The project is made by darkmux on the Mac, and its history goes to
+        // GitHub from there: where that can't happen now (iPhone, or not
+        // paired), no repo is made yet.
+        guard runs.deviceRuns, runs.workspaceMaker != nil || runs.connection?.token != nil else {
+            let bot = await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs)
+            store.append(.system, String(localized: "It goes on GitHub once darkmux has made the project on your Mac: choose Put it on GitHub in the bot's info there."),
+                         to: store.conversation(for: .bot(bot.id)))
+            return bot
+        }
         let name = answers.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let owner = try await github.login()
         let wanted = GitHubRepoMaker.slug(answers.repoName.isEmpty ? name : answers.repoName)
@@ -65,15 +74,17 @@ enum StartProject {
         let made = try await github.make(name: repoName, isPrivate: !answers.isPublic,
                                          description: answers.purpose.trimmingCharacters(in: .whitespacesAndNewlines))
         let bot = await start(entry, playbook: playbook, answers: answers, look: look, store: store, runs: runs) { bot in
-            store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
-            LocalBotState.shared.update(bot.id) { $0.putPending = true }
+            ModelSettingsStore.shared.setPendingRepo(made.repo, bot: bot.id)
         }
-        if bot.workspaceName != nil {
-            do {
-                _ = try await PutOnGitHub.run(bot, isPublic: answers.isPublic, github: github, token: github.token, store: store, runs: runs)
-            } catch {
-                store.append(.system, PutOnGitHub.problem(error), to: store.conversation(for: .bot(bot.id)))
-            }
+        guard bot.workspaceName != nil else {
+            store.append(.system, String(localized: "The project isn't on GitHub yet: once it's made here, choose Finish putting it on GitHub in the bot's info."),
+                         to: store.conversation(for: .bot(bot.id)))
+            return bot
+        }
+        do {
+            _ = try await PutOnGitHub.run(bot, isPublic: answers.isPublic, github: github, token: github.token, store: store, runs: runs)
+        } catch {
+            store.append(.system, PutOnGitHub.problem(error), to: store.conversation(for: .bot(bot.id)))
         }
         return bot
     }

@@ -1352,7 +1352,7 @@ final class BotBrain {
                 Task { await setCloneRecipe(data, bot: bot, store: store) }
                 return
             }
-            store.append(.system, String(localized: "Wrote \(PreviewSetup.path) into \(setup.folderName), uncommitted. Starting the preview to check it…"),
+            store.append(.system, String(localized: "Wrote the preview settings into \(setup.folderName). Starting the preview to check it…"),
                          to: store.conversation(for: chat))
             Task {
                 await runs.saveApproved(PreviewSetup.path, data: data, bot: bot, store: store)
@@ -1366,7 +1366,7 @@ final class BotBrain {
             Task { await runs.saveApproved(PlaybookSetup.path, data: setup.data, bot: bot, store: store) }
             bot.skills = playbook.skills
             bot.instructions = StartProject.instructions(playbook, answers: .init(name: bot.name, purpose: setup.purpose), name: bot.name)
-            note = String(localized: "Wrote \(PlaybookSetup.path) into \(setup.folderName), uncommitted, and I now use its skills.")
+            note = String(localized: "Wrote the playbook into \(setup.folderName), and I now use its skills.")
         case let .app(action, runId, _):
             guard let bot = chat.botId.flatMap(store.bot(id:)) else { return }
             // Things moved on since the card was made: say so, change nothing.

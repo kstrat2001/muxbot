@@ -251,6 +251,14 @@ struct ReviewCardView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            // Changes GitHub doesn't have yet: they're sent on their own,
+            // and this sends them now (`TaskState.Action.send`).
+            if brain.runs.taskState(bot, store: store) == .notSent, !brain.runs.isPushing(bot.id) {
+                Button("Send changes", systemImage: "arrow.up.circle") {
+                    Task { await brain.runs.updateReview(bot, store: store) }
+                }
+                .buttonStyle(.bordered)
+            }
             Button("See it on GitHub", systemImage: "arrow.up.forward.square") { openURL(state.url) }
                 .buttonStyle(.bordered)
             if canPreview { PreviewToggle() }

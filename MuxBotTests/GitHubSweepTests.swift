@@ -204,7 +204,7 @@ struct GitHubRunSweepTests {
         await runs.backUp(bot, store: store)
         #expect(tries.count == 1, "one try, no other branch")
         let said = (store.conversation(for: .bot(bot.id)).messages ?? []).map(\.content)
-        #expect(said.contains { $0.contains("Bring them in first") }, "\(said)")
+        #expect(said.contains { $0.contains("nothing was sent over them") }, "\(said)")
     }
 
     /// GitHub has everything: nothing is sent.
@@ -221,7 +221,8 @@ struct GitHubRunSweepTests {
     @Test func noBackupWhileAPutIsUnfinished() async {
         let (store, bot, runs) = setUp()
         store.addResource(.repo, "https://github.com/kain/tides", to: bot)
-        LocalBotState.shared.update(bot.id) { $0.putPending = true }
+        ModelSettingsStore.shared.setPendingRepo("kain/tides", bot: bot.id)
+        defer { ModelSettingsStore.shared.setPendingRepo(nil, bot: bot.id) }
         let pushes = Overlap()
         runs.gitPusher = { _, _, _ in pushes.begin(); pushes.end(); return Self.pushed }
         await runs.backUp(bot, store: store)
@@ -242,6 +243,8 @@ struct GitHubRunSweepTests {
         #expect(tries.count == 0)
         let cards = (store.conversation(for: .bot(bot.id)).messages ?? []).filter { $0.kind == .actionCard }
         #expect(cards.count == 1, "offered once")
+        let lines = (store.conversation(for: .bot(bot.id)).messages ?? []).filter { $0.content.contains("earlier Mux Bot") }
+        #expect(lines.count == 1, "said once, with the card: \(lines.map(\.content))")
         #expect(cards.first?.action == .startFromGitHub(repo: "kain/tides"))
     }
 
@@ -266,13 +269,16 @@ struct GitHubRunSweepTests {
         } catch {
             #expect(error.localizedDescription.contains("kain/tides"))
         }
-        #expect(bot.repoSlugs == ["kain/tides"], "the repo is recorded as soon as it's made")
+        #expect(bot.repoSlugs.isEmpty, "not the bot's repo until the push lands: no device clones it empty")
+        #expect(PutOnGitHub.pendingRepo(bot) == "kain/tides", "kept for any device to finish into")
         #expect(PutOnGitHub.canResume(bot), "Put resumes the push into it")
         let makes = Overlap()
         _ = try await PutOnGitHub.run(bot, isPublic: false, make: { makes.begin(); makes.end(); return made }, push: push, store: store, runs: runs)
         #expect(makes.count == 0, "no second repo")
         #expect(pushes.values == ["kain/tides", "kain/tides"], "both into the same repo")
         #expect(!PutOnGitHub.canResume(bot))
+        #expect(bot.repoSlugs == ["kain/tides"], "recorded once the push landed")
+        #expect(PutOnGitHub.pendingRepo(bot) == nil)
         #expect(runs.unshippedRuns(bot, store: store).isEmpty, "earlier work isn't offered again")
     }
 }

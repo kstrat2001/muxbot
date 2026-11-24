@@ -4,12 +4,6 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct OpenPRTests {
-    private let changes = DarkmuxClient.Changes(
-        base: "b0b0", baseBranch: "main", head: "h1h1", branch: "mux/hcr-3cfe8f",
-        files: [
-            .init(path: "inertia/pages/pricing.tsx", mode: "100644", content: "Y2hhbmdlZAo=", deleted: nil),
-            .init(path: "gone.txt", mode: nil, content: nil, deleted: true),
-        ])
     @Test func changesFromDarkmuxDecode() throws {
         let json = #"{"base":"b0b0","base_branch":"main","head":"h1h1","branch":"mux/hcr-3cfe8f","files":[{"path":"a.txt","mode":"100644","content":"YQ=="},{"path":"gone.txt","deleted":true}]}"#
         let c = try JSONDecoder().decode(DarkmuxClient.Changes.self, from: Data(json.utf8))
@@ -81,7 +75,9 @@ struct OpenPRTests {
 
 @Suite(.serialized) @MainActor
 struct OpenPRAvailabilityTests {
-    @Test func openPRShowsForCommittedRunsNotYetInAPR() {
+    /// Review & merge keys on darkmux's status (muxbot#144): any change the
+    /// main version lacks, a run's or not (a file you approved, a hand edit).
+    @Test func reviewShowsWhenDarkmuxReportsPendingChanges() async {
         let store = TestStore.fresh()
         let bot = store.add(name: "hcr", instructions: "Site")
         store.addResource(.repo, "https://github.com/kstrat2001/hcr", to: bot)
@@ -89,18 +85,23 @@ struct OpenPRAvailabilityTests {
         let keychain = MemoryKeychain(); keychain.items[GitHubAuth.tokenKey] = "ghu_abc"
         let github = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain)
         let runs = RunCoordinator()
-        #expect(!runs.canOpenPR(bot, store: store, github: github), "nothing committed yet")
-        let run = store.proposeRun(task: "Fix #10", crew: .coder, on: bot)
-        store.apply(.approve, to: run); run.changedFiles = ["a +1 −0"]; run.keptCommit = "abc1234"
-        store.apply(.finish(summary: "Done."), to: run)
-        run.finishedAt = Date().addingTimeInterval(-60)
-        #expect(runs.canOpenPR(bot, store: store, github: github))
-        store.append(.system, "Opened PR #12: https://github.com/kstrat2001/hcr/pull/12", kind: .prCard, runId: run.id, to: store.conversation(for: .bot(bot.id)))
-        #expect(!runs.canOpenPR(bot, store: store, github: github), "already in a PR")
-        store.apply(.discard, to: run)
-        let undone = store.proposeRun(task: "x", crew: .coder, on: bot)
-        _ = undone
-        #expect(runs.unshippedRuns(bot, store: store).isEmpty)
+        let pending = Counter()
+        runs.gitStatusSource = { _ in
+            .init(branch: "mux/hcr-1", head: "h", origin: "github.com/kstrat2001/hcr", defaultBranch: "main", base: "b0",
+                  pending: pending.count, upstream: nil, ahead: nil, behind: nil, behindMain: 0, dirty: false, busy: nil)
+        }
+        #expect(!runs.canOpenPR(bot, store: store, github: github), "nothing read from darkmux yet")
+        await runs.refreshTaskStatus(bot)
+        #expect(!runs.canOpenPR(bot, store: store, github: github), "nothing pending")
+        pending.add()
+        await runs.refreshTaskStatus(bot)
+        #expect(runs.canOpenPR(bot, store: store, github: github), "a change with no run, such as an approved file")
+        LocalBotState.shared.update(bot.id) { $0.review = TaskReview.State(number: 12, url: URL(string: "https://github.com/kstrat2001/hcr/pull/12")!, title: "x") }
+        #expect(!runs.canStartReview(bot, store: store, github: github), "already in review")
+        LocalBotState.shared.update(bot.id) { $0.review = nil }
+        ModelSettingsStore.shared.setPendingRepo("kstrat2001/hcr", bot: bot.id)
+        #expect(!runs.canOpenPR(bot, store: store, github: github), "still being put on GitHub")
+        ModelSettingsStore.shared.setPendingRepo(nil, bot: bot.id)
         let signedOut = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: MemoryKeychain())
         #expect(!runs.canOpenPR(bot, store: store, github: signedOut))
     }

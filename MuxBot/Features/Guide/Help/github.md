@@ -1,6 +1,6 @@
 # GitHub
 
-Mux Bot reads your repos' issues and pull requests, and opens pull requests for a bot's committed runs.
+Mux Bot reads your repos' issues and pull requests, and opens pull requests for a bot's saved changes. darkmux sends the changes to GitHub from your Mac, with your sign-in.
 
 ## Signing in
 
@@ -8,4 +8,4 @@ Sign in with GitHub in Settings. GitHub shows a code to enter on its site. The s
 
 ## Opening a pull request
 
-A line right above where you type shows a bot's pending changes: how many, in how many files, and the lines added and removed, with See changes, Undo and Review & merge. Review & merge asks you for a title and pick who checks it: the Reviewer crew, which runs once on this Mac and gives you a numbered list with Fix this on each item, or you yourself. It opens a pull request on GitHub first. The review then takes the place of that line above where you type, with Merge once GitHub says the change can go in. When the project's rules need another person's review first, or the project changed in the same places, the card says so with a link to GitHub. After a merge, your next change starts a new task from the project's main version. If the Mux Bot GitHub app isn't installed on the repo, the thread says so with the link to install it.
+A line right above where you type shows a bot's pending changes: how many, in how many files, and the lines added and removed, with See changes, Undo and Review & merge. Review & merge asks you for a title and pick who checks it: the Reviewer crew, which runs once on this Mac and gives you a numbered list with Fix this on each item, or you yourself. It opens a pull request on GitHub first. The review then takes the place of that line above where you type, with Merge once GitHub says the change can go in. When the project's rules need another person's review first, or the project changed in the same places, the card says so with a link to GitHub. Changes that haven't reached GitHub yet are sent on their own, and before a merge. After a merge, your next change starts a new task from the project's main version. If the Mux Bot GitHub app isn't installed on the repo, the thread says so with the link to install it.

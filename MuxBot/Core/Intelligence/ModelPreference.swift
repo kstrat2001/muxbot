@@ -163,6 +163,25 @@ final class ModelSettingsStore: @unchecked Sendable {
     }
 }
 
+/// (muxbot#144) A repo the app made for a template project that darkmux
+/// hasn't pushed the project into yet. Shared with your other devices like
+/// the model settings (it's about the project, not this device), so any of
+/// them finishes into that repo and none makes a second one. It's never a
+/// repo resource until the push lands: until then no device clones the
+/// empty repo or thinks the project is on GitHub.
+extension ModelSettingsStore {
+    private func pendingRepoKey(_ bot: UUID) -> String { "bots.pendingRepo.\(bot.uuidString)" }
+
+    func pendingRepo(bot: UUID) -> String? {
+        backing.string(forKey: pendingRepoKey(bot)).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    func setPendingRepo(_ repo: String?, bot: UUID) {
+        if let repo { backing.set(repo, forKey: pendingRepoKey(bot)) } else { backing.removeObject(forKey: pendingRepoKey(bot)) }
+        flush()
+    }
+}
+
 /// The model a run goes with, and why; what the dispatch card shows.
 struct ModelChoice: Equatable, Sendable {
     /// nil leaves it to darkmux.

@@ -69,7 +69,7 @@ extension RunCoordinator {
     /// task here too.
     func refreshReview(_ bot: Bot, store: BotStore, github: GitHubAuth) async {
         guard let state = review(for: bot), let repo = bot.repoSlugs.first, let token = github.token else { return }
-        await refreshTaskStatus(bot)
+        await refreshTaskStatus(bot, store: store)
         do {
             let look = try await GitHubReview(session: githubSession ?? .shared, token: token).look(repo: repo, number: state.number)
             let standing = look.standing
@@ -102,7 +102,7 @@ extension RunCoordinator {
         facts.busy = status?.busy != nil || runs.contains { $0.phase == .running || deciding.contains($0.id) }
             || openingPR.contains(bot.id) || isPushing(bot.id) || puttingOnGitHub.contains(bot.id)
         facts.head = status?.head
-        facts.pending = status?.pending ?? unshippedRuns(bot, store: store).count
+        facts.pending = status?.pending ?? 0
         facts.ahead = status.map { $0.ahead ?? $0.pending } ?? 0
         // Just merged: nothing in this task until its next run starts fresh.
         if LocalBotState.shared[bot.id]?.startFresh == true {
@@ -173,6 +173,12 @@ extension RunCoordinator {
                 store.append(.system, String(localized: "Couldn't reach GitHub to check this review first, so nothing was merged. Try again in a moment."), to: thread)
             }
             return
+        }
+        // Changes GitHub doesn't have yet are sent first, then the checks
+        // look again.
+        if taskState(bot, store: store) == .notSent {
+            await updateReview(bot, store: store)
+            await refreshReview(bot, store: store, github: github)
         }
         // The checks, then the merge at once (no confirmation, Kain
         // 2026-11-16): anything in the way is said, and nothing is merged.
@@ -276,11 +282,13 @@ extension RunCoordinator {
     /// A change saved while its task is in review joins the review: the
     /// task's branch goes to GitHub again through darkmux.
     func updateReview(_ bot: Bot, store: BotStore) async {
-        guard review(for: bot) != nil, bot.workspaceName != nil, let token = githubToken?() else { return }
+        guard review(for: bot) != nil, bot.workspaceName != nil, ModelSettingsStore.shared.pendingRepo(bot: bot.id) == nil,
+              let token = githubToken?() else { return }
         await oneAtATime(bot.id) { [self] in
             do {
                 _ = try await pushTask(bot, store: store, github: token)
             } catch {
+                if Self.saidWithItsCard(error) { return }
                 let said = Self.plain(error)
                 let line = store.append(.system, String(localized: "Couldn't add this change to the review on GitHub: \(said.sentence)"),
                                         to: store.conversation(for: .bot(bot.id)))

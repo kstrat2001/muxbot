@@ -116,7 +116,7 @@ struct BotThreadView: View {
         .onAppear {
             markRead()
             // Back within the grace period: the preview keeps running.
-            if let bot { brain.runs.enterThread(bot) }
+            if let bot { brain.runs.enterThread(bot, store: BotStore(context: modelContext)) }
         }
         .task(id: "\(router.showPreview)-\(connection.isPaired)-\(brain.connection != nil)") {
             // darkmux runs the preview from the repo's recipe when you open it
