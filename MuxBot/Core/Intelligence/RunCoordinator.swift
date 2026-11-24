@@ -20,6 +20,14 @@ final class RunCoordinator {
             if connection != nil { connectionAttached() }
         }
     }
+    /// What this Mac's darkmux says it can do (`GET /client/whoami`'s
+    /// `capabilities`), read once per pairing; nil until read.
+    var darkmuxCapabilities: Set<String>?
+    /// Tests answer whoami's capabilities here.
+    @ObservationIgnored var capabilitiesSource: (() async throws -> Set<String>)?
+    /// Runs that went to a role darkmux runs with a read-only work copy
+    /// (darkmux #3682): they can't change the project, so nothing is put back.
+    @ObservationIgnored var readOnlyRuns: Set<UUID> = []
     /// Posts "result ready" / "didn't finish" notifications.
     var notifier: NotificationService?
     var recipes = RecipeStore()
@@ -437,7 +445,7 @@ final class RunCoordinator {
         // A crew that only reports never changes the project: its files are
         // put back, and nothing goes to GitHub.
         if status.commit != nil, !run.crew.changesFiles {
-            Task { await self.revertUnasked(run, store: store) }
+            if !readOnlyRuns.contains(run.id) { Task { await self.revertUnasked(run, store: store) } }
             return
         }
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
@@ -703,7 +711,8 @@ final class RunCoordinator {
     /// Asks darkmux again for the run's crew's models, so a server turned on
     /// meanwhile clears the card.
     func recheckModels(for run: BotRun) async {
-        let role = run.crew.darkmuxRole ?? "coder"
+        _ = await capabilities()
+        let role = role(for: run.crew) ?? "coder"
         let listed = await listedProfiles(role: role)
         guard !listed.isEmpty else { return }
         listedByRole[role] = listed
@@ -1001,6 +1010,8 @@ final class RunCoordinator {
 
     /// The darkmux connection is here: start the previews that were waiting.
     func connectionAttached() {
+        // A new pairing may be a different darkmux: what it can do is read again.
+        darkmuxCapabilities = nil
         let waiting = waitingPreviews.values
         waitingPreviews = [:]
         for bot in waiting {
@@ -1759,7 +1770,7 @@ final class RunCoordinator {
         recordWork(workId, for: run)
         store.save()
         // A crew that only reports never leaves edits behind either.
-        if !run.crew.changesFiles { Task { await self.revertUnasked(run, store: store) } }
+        if !run.crew.changesFiles, !readOnlyRuns.contains(run.id) { Task { await self.revertUnasked(run, store: store) } }
     }
 
     static func leftBehindLine(_ files: [String?], tweak: Bool) -> String {
@@ -1891,7 +1902,7 @@ final class RunCoordinator {
     /// Returns false otherwise.
     private func startRealRun(_ run: BotRun, message: String, store: BotStore, continues: String? = nil) -> Bool {
         guard let connection, let token = connection.token,
-              let role = run.crew.darkmuxRole, let bot = run.bot,
+              let mapped = run.crew.darkmuxRole, let bot = run.bot,
               let workspace = bot.workspaceName else { return false }
         let submit = workSubmitter ?? { role, message, profile, workspace, continues in
             try await connection.client.submitWork(token: token, role: role, message: message, profile: profile,
@@ -1909,6 +1920,11 @@ final class RunCoordinator {
                 if runProfiles[run.id] == nil { await chooseProfile(for: run) }
                 // Stopped while the model was chosen: it never reaches darkmux.
                 guard run.phase == .running else { return }
+                // A darkmux that runs reporting crews read-only (darkmux #3682)
+                // gets them as its read-only roles.
+                _ = await capabilities()
+                let role = role(for: run.crew) ?? mapped
+                if runsReadOnly(run.crew) { readOnlyRuns.insert(run.id) }
                 let brief = Self.workBrief(message, crew: run.crew, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
                 let workId: String, profile: String?
                 do {
@@ -2058,7 +2074,7 @@ final class RunCoordinator {
     func listed(for run: BotRun) -> [DarkmuxClient.ProfileInfo] { listed(crew: run.crew) }
 
     func listed(crew: CrewRole) -> [DarkmuxClient.ProfileInfo] {
-        crew.darkmuxRole.flatMap { listedByRole[$0] } ?? lastListed
+        role(for: crew).flatMap { listedByRole[$0] } ?? lastListed
     }
 
     /// Settings › Models as they apply to runs on this machine.
@@ -2081,7 +2097,8 @@ final class RunCoordinator {
     /// (the bug card's picker beside Fix it now).
     func modelChoice(crew: CrewRole, bot: Bot?, previous: String? = nil, next: Bool = false) async -> ModelChoice {
         // Each crew's own models: darkmux lists a role's (`?role=`).
-        let role = crew.darkmuxRole ?? "coder"
+        _ = await capabilities()
+        let role = role(for: crew) ?? "coder"
         // The card's Change menu lists by fit; never waits on the site.
         Task { await loadFitOrder() }
         let listed = await listedProfiles(role: role)
