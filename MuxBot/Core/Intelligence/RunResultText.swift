@@ -190,7 +190,7 @@ enum DarkmuxPlain {
         case "work_copy_busy":
             return String(localized: "Wait for the change that's going now to finish, then try again.")
         case "remote_moved":
-            return String(localized: "GitHub has changes to this task that this Mac doesn't have yet. Bring them in first, then send again.")
+            return String(localized: "GitHub has changes to this task that this Mac doesn't have yet, so nothing was sent over them. Look at them with See it on GitHub.")
         case "merge_conflict":
             return String(localized: "The project's main version changed the same lines as this task, so nothing was brought in. Ask the Coder to bring them together, or change them on GitHub.")
         case "dirty":

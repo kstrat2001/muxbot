@@ -9,8 +9,12 @@ import Foundation
 enum PutOnGitHub {
     /// Only a template project with a work copy here and no repo yet.
     static func canPut(_ bot: Bot) -> Bool {
-        !bot.useCaseId.isEmpty && bot.repoSlugs.isEmpty && bot.workspaceName != nil
+        !bot.useCaseId.isEmpty && bot.repoSlugs.isEmpty && bot.workspaceName != nil && pendingRepo(bot) == nil
     }
+
+    /// The repo Put made that darkmux hasn't pushed the project into yet,
+    /// shared with your other devices (`ModelSettingsStore.pendingRepo`).
+    static func pendingRepo(_ bot: Bot) -> String? { ModelSettingsStore.shared.pendingRepo(bot: bot.id) }
 
     /// Sends the project into `repo` (tests); else darkmux's push.
     typealias Push = @MainActor (Bot, String) async throws -> DarkmuxClient.GitPushed?
@@ -18,7 +22,7 @@ enum PutOnGitHub {
     /// Put made the repo but the work isn't in it yet: Put finishes into
     /// that repo, never a second one.
     static func canResume(_ bot: Bot) -> Bool {
-        bot.workspaceName != nil && LocalBotState.shared[bot.id]?.putPending == true && !bot.repoSlugs.isEmpty
+        bot.workspaceName != nil && pendingRepo(bot) != nil
     }
 
     static func run(_ bot: Bot, isPublic: Bool, github: GitHubRepoMaker, token: String,
@@ -33,9 +37,11 @@ enum PutOnGitHub {
         }, store: store, runs: runs)
     }
 
-    /// Makes the empty repo (`make`), records it at once, then has darkmux
-    /// push the project into it. A push that fails leaves the repo
-    /// recorded, so Put again finishes into it.
+    /// Makes the empty repo (`make`), keeps it as the pending repo at once
+    /// (shared with your other devices), then has darkmux push the project
+    /// into it. Only once the push landed is it the bot's repo. A push that
+    /// fails leaves it pending, so Put again (on any device) finishes into
+    /// it; one that landed though the answer was lost is just recorded.
     static func run(_ bot: Bot, isPublic: Bool, make: @escaping @MainActor () async throws -> GitHubRepoMaker.Made, push: @escaping Push,
                     store: BotStore, runs: RunCoordinator) async throws -> GitHubRepoMaker.Made {
         let resuming = canResume(bot)
@@ -51,22 +57,27 @@ enum PutOnGitHub {
         // isn't in it, so it's backed up after and still offered for a review.
         let readAt = Date()
         let made: GitHubRepoMaker.Made
-        if resuming, let repo = bot.repoSlugs.first {
+        if resuming, let repo = pendingRepo(bot) {
             made = .init(repo: repo, url: URL(string: "https://github.com/\(repo)")!)
         } else {
             made = try await make()
-            // Recorded as soon as it exists: a failed push next never leaves
-            // a repo this app forgot, and trying again makes no second one.
-            store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
-            LocalBotState.shared.update(bot.id) { $0.putPending = true }
-            store.save()
+            // Kept as soon as it exists: a failed push next never leaves a
+            // repo this app forgot, and trying again makes no second one.
+            ModelSettingsStore.shared.setPendingRepo(made.repo, bot: bot.id)
         }
-        do {
-            _ = try await push(bot, made.repo)
-        } catch {
-            throw GitHubRepoMaker.Failure.notPushedYet(repo: made.repo, why: RunCoordinator.plain(error).sentence)
+        // A push that landed though its answer was lost: the work copy has
+        // that remote already, so there's nothing to send again.
+        let landed = (try? await runs.taskStatus(bot))?.origin == "github.com/\(made.repo)"
+        if !landed {
+            do {
+                _ = try await push(bot, made.repo)
+            } catch {
+                throw GitHubRepoMaker.Failure.notPushedYet(repo: made.repo, why: RunCoordinator.plain(error).sentence)
+            }
         }
-        LocalBotState.shared.update(bot.id) { $0.putPending = nil; $0.shippedThrough = readAt }
+        store.addResource(.repo, "https://github.com/\(made.repo)", to: bot)
+        ModelSettingsStore.shared.setPendingRepo(nil, bot: bot.id)
+        LocalBotState.shared.update(bot.id) { $0.shippedThrough = readAt }
         store.save()
         store.append(.system, String(localized: "Put on GitHub: \(made.url.absoluteString). New work is backed up there after each change."),
                      to: store.conversation(for: .bot(bot.id)))

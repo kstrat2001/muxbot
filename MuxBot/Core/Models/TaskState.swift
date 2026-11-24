@@ -120,7 +120,7 @@ enum TaskState: Equatable, Sendable {
         case .undo:
             switch self {
             case .changed, .notSent, .inReview, .mainMoved, .closed: return nil
-            case .changedOnGitHub: return String(localized: "Someone changed this review on GitHub. Bring in their changes before undoing anything here.")
+            case .changedOnGitHub: return String(localized: "Someone changed this review on GitHub, so nothing is undone here until their changes are looked at. See it on GitHub.")
             case .merged: return String(localized: "These changes are already in the project. Undo them in a new task.")
             default: return String(localized: "There's nothing to undo yet.")
             }

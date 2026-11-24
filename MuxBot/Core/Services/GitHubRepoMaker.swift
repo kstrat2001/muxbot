@@ -18,9 +18,6 @@ struct GitHubRepoMaker: Sendable {
         case cantCreate
         /// No free name close to the one asked for.
         case noFreeName(String)
-        /// Something didn't fit: a template tree GitHub cut short, a
-        /// submodule.
-        case template(String)
         /// Put it on GitHub made the repo (and recorded it), but the
         /// project's work isn't in it yet: Put again finishes into it.
         case notPushedYet(repo: String, why: String)
@@ -38,8 +35,6 @@ struct GitHubRepoMaker: Sendable {
                 String(localized: "Mux Bot's GitHub App can't create repositories for your account yet. If GitHub has asked you to approve updated permissions for it, approve them, then try again. A new project can also start on this Mac only: switch Back up to GitHub off.")
             case let .noFreeName(name):
                 String(localized: "You already have repos named \(name) and the next few after it. Pick another name.")
-            case let .template(why):
-                String(localized: "The template can't be copied: \(why)")
             case let .notPushedYet(repo, why):
                 String(localized: "I made github.com/\(repo), but couldn't put this project's work in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
             case .signInExpired:

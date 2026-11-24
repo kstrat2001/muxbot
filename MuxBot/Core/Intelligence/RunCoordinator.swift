@@ -506,7 +506,7 @@ final class RunCoordinator {
     /// its branch there through darkmux's own push. Says so only when it
     /// fails.
     func backUp(_ bot: Bot, store: BotStore) async {
-        guard isBackedUp(bot), bot.workspaceName != nil, LocalBotState.shared[bot.id]?.putPending != true,
+        guard isBackedUp(bot), bot.workspaceName != nil, ModelSettingsStore.shared.pendingRepo(bot: bot.id) == nil,
               gitPusher != nil || connection?.token != nil else { return }
         guard let token = githubToken?() else {
             // Said once per bot, until a backup goes through again.
@@ -522,6 +522,7 @@ final class RunCoordinator {
             do {
                 _ = try await pushTask(bot, store: store, github: token)
             } catch {
+                if Self.saidWithItsCard(error) { return }
                 let said = Self.plain(error)
                 let line = store.append(.system, String(localized: "Couldn't back up this work to GitHub: \(said.sentence)"),
                                         to: store.conversation(for: .bot(bot.id)))
@@ -984,6 +985,7 @@ final class RunCoordinator {
     /// `previewStopGrace`, unless you come back first.
     func leavePreview(for bot: Bot) {
         onScreen.remove(bot.id)
+        stopWatchingStatus(bot.id)
         // A preview this app asked for (Add folder may have no work copy name
         // yet) stops too.
         guard bot.workspaceName != nil || previewWorkspaces[bot.id] != nil else { return }
@@ -998,13 +1000,17 @@ final class RunCoordinator {
     }
 
     /// Bots whose thread is on screen now.
-    private var onScreen: Set<UUID> = []
+    var onScreen: Set<UUID> = []
 
     /// You opened the bot's thread: its preview may run, and a stop waiting
     /// out its grace is called off.
-    func enterThread(_ bot: Bot) {
+    func enterThread(_ bot: Bot, store: BotStore? = nil) {
         onScreen.insert(bot.id)
         returnToPreview(for: bot)
+        // What darkmux can do is read again (it may have been updated), and
+        // the task's status kept fresh while the thread shows.
+        darkmuxCapabilities = nil
+        if let store { watchStatus(bot, store: store) }
     }
 
     /// Tells the preview a bot's preview stopped (the app's controller lets
@@ -1146,9 +1152,10 @@ final class RunCoordinator {
         }
         var template = template
         // A template bot made while unpaired or on iPhone: its project is
-        // made here from the same template, at its pinned commit. One that
-        // is on GitHub already is the copy there (`workspaceRequest` clones
-        // its repo), whose history is the project's own (darkmux #3681).
+        // made here from the same template, at its pinned commit. Once it's
+        // on GitHub (a repo resource, recorded only after darkmux's first
+        // push landed) it's the copy there (`workspaceRequest` clones its
+        // repo), whose history is the project's own (darkmux #3681).
         if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil, bot.repoSlugs.isEmpty {
             workCopySetup[bot.id] = .settingUp
             let id = bot.useCaseId
@@ -1367,7 +1374,7 @@ final class RunCoordinator {
     /// review's branch, so GitHub never keeps work that was undone here, and
     /// Merge never takes it (#137).
     func sendToGitHub(_ bot: Bot, store: BotStore) async {
-        if review(for: bot) != nil { await updateReview(bot, store: store) } else if isBackedUp(bot) { await backUp(bot, store: store) }
+        if review(for: bot) != nil { await updateReview(bot, store: store) } else if isBackedUp(bot) { await backUp(bot, store: store) } else { await refreshTaskStatus(bot) }
     }
 
     /// What the thread says when darkmux couldn't place the text.
@@ -1528,6 +1535,9 @@ final class RunCoordinator {
     static let staleBase = String(localized: "darkmux couldn't get the latest from GitHub, so this work copy may be behind it.")
     /// darkmux runs two at a time for this app (429 too_many_requests).
     static let waitingForSlot = String(localized: "Waiting for a free slot: darkmux runs two of this app's runs at a time. It starts when one finishes.")
+    /// (darkmux #3681) Something quick holds the project (sending it to
+    /// GitHub, an Undo, a hand edit): the run starts once it's done.
+    static let waitingForCopy = String(localized: "Waiting for the change that's going now to finish. This starts right after.")
 
     /// Runs darkmux had no room for, oldest first, with what to send.
     private var queued: [(run: BotRun, message: String, continues: String?)] = []
@@ -1739,13 +1749,24 @@ final class RunCoordinator {
     var githubToken: (@MainActor () -> String?)?
     /// darkmux's branch changes for a workspace (tests); else darkmux.
     var changesFetcher: ((String) async throws -> DarkmuxClient.Changes)?
-    /// Pushes a backup (tests); else `GitHubPR.push`.
     /// darkmux's `status` of each bot's work copy, as last read (this launch).
     var taskStatuses: [UUID: DarkmuxClient.GitStatus] = [:]
     /// Bots whose work copy's darkmux didn't answer the last status read.
     var taskStatusUnreachable: Set<UUID> = []
     /// Bots offered "Start again from GitHub" this launch.
     @ObservationIgnored var offeredStartFromGitHub: Set<UUID> = []
+    /// How long a push waits between tries while something quick holds the
+    /// work copy (tests shorten it).
+    @ObservationIgnored var busyRetryInterval: Duration = .seconds(3)
+    /// Each thread on screen's status watch (`watchStatus`).
+    @ObservationIgnored var statusWatches: [UUID: Task<Void, Never>] = [:]
+    /// Bots whose last push GitHub refused because its branch had commits
+    /// the work copy lacks: no automatic resend until one goes through.
+    @ObservationIgnored var remoteMoved: Set<UUID> = []
+    /// When unsent work was last sent on its own, by bot.
+    @ObservationIgnored var lastResend: [UUID: Date] = [:]
+    /// Bots whose earlier approved files are being moved into their work copy.
+    @ObservationIgnored var movingApproved: Set<UUID> = []
     /// Tests stand in for darkmux's git route here (`status`, `push`):
     /// nil uses the client.
     var gitStatusSource: ((String) async throws -> DarkmuxClient.GitStatus)?
@@ -1859,7 +1880,7 @@ final class RunCoordinator {
                 let workId: String, profile: String?
                 do {
                     (workId, profile) = try await submit(role, brief, runProfiles[run.id], workspace, continues)
-                } catch let error as DarkmuxClient.ClientError where continues != nil && [404, 409].contains(error.status) {
+                } catch let error as DarkmuxClient.ClientError where continues != nil && [404, 409].contains(error.status) && !Self.waitsFor(error) {
                     // darkmux won't continue that run (too old, or it restarted):
                     // the change goes as a fresh run on the same work copy.
                     (workId, profile) = try await submit(role, brief, runProfiles[run.id], workspace, nil)
@@ -1877,13 +1898,13 @@ final class RunCoordinator {
                 starting.remove(run.id)
                 store.append(.system, Self.runningLine(crew: run.crew, profile: profile.map { modelLine($0, for: run) }), to: thread)
                 await follow(run, workId: workId, store: store)
-            } catch let error as DarkmuxClient.ClientError where error.status == 429 {
+            } catch let error as DarkmuxClient.ClientError where error.status == 429 || Self.waitsFor(error) {
                 // darkmux is running two of this app's runs: wait for a slot.
                 // Said once per wait: a retry darkmux refuses again is quiet
                 // and keeps its place at the front of the line.
                 if saidWaiting.insert(run.id).inserted {
                     queued.append((run, message, continues))
-                    store.append(.system, Self.waitingForSlot, to: thread)
+                    store.append(.system, error.status == 429 ? Self.waitingForSlot : Self.waitingForCopy, to: thread)
                 } else {
                     queued.insert((run, message, continues), at: 0)
                 }
@@ -2272,10 +2293,13 @@ final class RunCoordinator {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Open PR shows when you're signed in to GitHub and the bot's branch has
-    /// committed runs that aren't in a PR yet.
+    /// Review & merge can start when you're signed in to GitHub, the bot has
+    /// its repo (not one still being put on GitHub), and darkmux's status
+    /// says the task has changes the project's main version lacks (a run's,
+    /// a hand edit, a file you approved), whatever made them.
     func canOpenPR(_ bot: Bot, store: BotStore, github: GitHubAuth) -> Bool {
-        github.token != nil && bot.workspaceName != nil && !bot.repoSlugs.isEmpty && !unshippedRuns(bot, store: store).isEmpty
+        github.token != nil && bot.workspaceName != nil && !bot.repoSlugs.isEmpty
+            && ModelSettingsStore.shared.pendingRepo(bot: bot.id) == nil && (taskStatuses[bot.id]?.pending ?? 0) > 0
     }
 
     /// Opens (or updates) the PR for the task: darkmux pushes the task's
@@ -2285,10 +2309,13 @@ final class RunCoordinator {
     func openPR(for bot: Bot, store: BotStore, github: GitHubAuth, title: String? = nil) async -> GitHubPR.PR? {
         let thread = store.conversation(for: .bot(bot.id))
         guard let token = github.token else {
-            store.append(.system, "Sign in with GitHub (Settings › GitHub) to start a review.", to: thread); return nil
+            store.append(.system, String(localized: "Sign in with GitHub (Settings › GitHub) to start a review."), to: thread); return nil
         }
         guard bot.workspaceName != nil, let repo = bot.repoSlugs.first, gitPusher != nil || connection?.token != nil else {
-            store.append(.system, "This bot needs a work copy and a GitHub repo to start a review.", to: thread); return nil
+            store.append(.system, String(localized: "This bot needs a work copy and a GitHub repo to start a review."), to: thread); return nil
+        }
+        if ModelSettingsStore.shared.pendingRepo(bot: bot.id) != nil {
+            store.append(.system, String(localized: "This project is still being put on GitHub. Finish that in the bot's info first."), to: thread); return nil
         }
         openingPR.insert(bot.id)
         defer { openingPR.remove(bot.id) }
@@ -2324,6 +2351,7 @@ final class RunCoordinator {
             let install = await github.installState(for: repo)
             store.append(.system, Self.cantWriteText(repo, install), to: thread)
         } catch {
+            if Self.saidWithItsCard(error) { return nil }
             let said = Self.plain(error)
             let line = store.append(.system, String(localized: "Couldn't start the review: \(said.sentence)"), to: thread)
             messageDetails[line.id] = said.details

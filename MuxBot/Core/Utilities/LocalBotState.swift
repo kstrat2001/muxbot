@@ -29,9 +29,10 @@ final class LocalBotState: @unchecked Sendable {
         /// Each run's darkmux work ids, oldest first (the run, then each
         /// Tweak): Undo reverts them all, newest first.
         var runWorkIds: [String: [String]]?
-        /// Put it on GitHub made the repo but hasn't pushed the project's
-        /// work into it yet: Put resumes into that repo, and backups wait.
-        var putPending: Bool?
+        /// (Before muxbot#144) Files you approved, kept here for the next pull
+        /// request. Read once to move each into its work copy
+        /// (`RunCoordinator.moveApprovedFiles`), then removed.
+        var prFiles: [String: Data]?
         /// Runs finished before this are already on GitHub (Put it on GitHub
         /// pushed them to the default branch): Open PR doesn't offer them.
         var shippedThrough: Date?
@@ -50,7 +51,7 @@ final class LocalBotState: @unchecked Sendable {
         var isEmpty: Bool {
             workspaceName == nil && workspaceMachine == nil && folderBookmark == nil && folderName == nil && previewViewport == nil && previewPaneWidth == nil
                 && (dismissedRuns ?? []).isEmpty
-                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && putPending == nil && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
+                && (localRuns ?? []).isEmpty && (runWorkIds ?? [:]).isEmpty && (prFiles ?? [:]).isEmpty && shippedThrough == nil && (tweakBases ?? [:]).isEmpty && (runPairings ?? [:]).isEmpty
                 && task == nil && review == nil
         }
     }

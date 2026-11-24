@@ -32,8 +32,8 @@ enum RunBlocker: Equatable, Sendable {
 
     @MainActor
     static func check(paired: Bool, crew: CrewRole, bot: Bot, deviceRuns: Bool = deviceRuns, excluding run: UUID? = nil) -> RunBlocker? {
-        // A template bot with no project here, backed up to GitHub or not:
-        // it's made from its template, never cloned from its own repo.
+        // A template bot with no project here: made from its template, or,
+        // once it's on GitHub, as a copy of its repo there (muxbot#144).
         let templateOnly = !bot.useCaseId.isEmpty && bot.workspaceName == nil && bot.folderBookmark == nil
         guard deviceRuns else { return templateOnly ? .projectNotMade(bot.name, here: false) : .notOnThisDevice }
         guard paired else { return .unpaired }
@@ -57,7 +57,7 @@ enum RunBlocker: Equatable, Sendable {
         case .noCode: "this bot has no code to work on yet: add a folder or a GitHub repo in its info"
         case let .projectNotMade(name, here: true): "\(name)'s project isn't made on this Mac yet"
         case let .projectNotMade(name, here: false):
-            "\(name)'s project is made on your Mac, from its template, once Mux Bot there is paired with darkmux. Open \(name) in Mux Bot on your Mac"
+            "\(name)'s project is made on your Mac once Mux Bot there is paired with darkmux. Open \(name) in Mux Bot on your Mac"
         case let .needsWorkCopy(what): "\(what) needs a work copy on this Mac"
         case .notOnThisDevice: "runs start from the Mac app for now"
         case .runWorking: "a run is still working in this bot's work copy: wait for it, or stop it"
