@@ -247,7 +247,7 @@ struct BotInfoView: View {
         guard let token = github.token else { return }
         putProblem = nil
         do {
-            _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), pr: GitHubPR(token: token),
+            _ = try await PutOnGitHub.run(bot, isPublic: putPublic, github: GitHubRepoMaker(token: token), token: token,
                                           store: BotStore(context: context), runs: brain.runs)
         } catch {
             putProblem = PutOnGitHub.problem(error)

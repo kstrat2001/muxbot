@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import MuxBot
 
-/// #144 step 2: Merge runs the task's checks and merges at once, pinned to
-/// the head GitHub has; anything in the way is said and nothing is merged.
+/// #144 steps 2 and 3: Merge runs the task's checks and merges at once,
+/// pinned to the head GitHub has, which must be the head darkmux reports for
+/// the work copy; anything in the way is said and nothing is merged.
 @Suite(.serialized) @MainActor
 struct TaskStateWiringTests {
     private let repo = "kain/site"
@@ -16,9 +17,16 @@ struct TaskStateWiringTests {
         store.addResource(.repo, "https://github.com/\(repo)", to: bot)
         LocalBotState.shared.update(bot.id) {
             $0.review = TaskReview.State(number: 7, url: URL(string: "https://github.com/\(repo)/pull/7")!, title: "Warmer")
-            if let sent { $0.pushedHeads = ["mux/site": sent] }
         }
         let runs = RunCoordinator()
+        // darkmux's status of the work copy (darkmux #3681): its head, and
+        // GitHub's branch has it all.
+        runs.gitStatusSource = { _ in
+            try JSONDecoder().decode(DarkmuxClient.GitStatus.self, from: Data("""
+                {"branch":"mux/site","head":\(sent.map { "\"\($0)\"" } ?? "null"),"origin":"github.com/kain/site","default_branch":"main",
+                 "pending":\(sent == nil ? 0 : 1),"ahead":0,"dirty":false}
+                """.utf8))
+        }
         runs.githubSession = GitHubStub.session
         let keychain = MemoryKeychain(); keychain.items[GitHubAuth.tokenKey] = "ghu_abc"
         let github = GitHubAuth(clientID: "Iv23test", session: GitHubStub.session, keychain: keychain, sleep: { _ in })
@@ -73,7 +81,7 @@ struct TaskStateWiringTests {
         #expect(said(store, bot).contains(TaskReview.Standing.conflict.sentence!))
     }
 
-    @Test func theFactsComeFromGitHubAndWhatWasSent() async {
+    @Test func theFactsComeFromGitHubAndDarkmux() async {
         let (store, bot, runs, github) = setUp(sent: "abc")
         pull(head: "abc")
         await runs.refreshReview(bot, store: store, github: github)

@@ -47,7 +47,6 @@ struct ClonePreviewSetupTests {
         let recipe = try JSONDecoder().decode(DarkmuxClient.ApprovedRecipe.self, from: data)
         #expect(recipe.schemaVersion == "1.0")
         #expect(recipe.command == setup.command.value)
-        #expect(LocalBotState.shared[bot.id]?.prFiles?[PreviewSetup.path] == nil, "nothing written for a pull request")
     }
 
     @Test func aBotWithNoWorkCopyStillNeedsItsCheckout() {

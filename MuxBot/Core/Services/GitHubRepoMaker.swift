@@ -1,20 +1,14 @@
 import Foundation
 
-/// Makes a new project's own GitHub repo with your sign-in: a repo in your
-/// account (private unless you choose public), filled with the template's
-/// files as of its pinned commit as one commit. No fork and no link back to
-/// the template. GitHub's Git Data API can't write to an empty repo, so the
-/// repo starts with GitHub's own first commit and the template's files go on
-/// top of it (replacing that commit's README), moving the default branch
-/// forward without force.
+/// Makes a new project's own GitHub repo with your sign-in: an empty repo
+/// in your account (private unless you choose public). The project's first
+/// push from darkmux (darkmux #3681) fills it with the project's own
+/// history, so GitHub and the work copy share one history from the start.
 struct GitHubRepoMaker: Sendable {
     struct Made: Equatable, Sendable {
         /// `owner/name`.
         var repo: String
         var url: URL
-        var defaultBranch: String
-        /// The commit holding the template's files: the project's start.
-        var startCommit: String
     }
 
     enum Failure: Error, Equatable, LocalizedError {
@@ -27,15 +21,9 @@ struct GitHubRepoMaker: Sendable {
         /// Something didn't fit: a template tree GitHub cut short, a
         /// submodule.
         case template(String)
-        /// The repo was made but its files couldn't be added: it's there,
-        /// empty but for GitHub's first commit.
-        case madeButNotFilled(repo: String, why: String)
         /// Put it on GitHub made the repo (and recorded it), but the
         /// project's work isn't in it yet: Put again finishes into it.
         case notPushedYet(repo: String, why: String)
-        /// Put it on GitHub made the repo but couldn't fill it: Put again
-        /// fills that repo, never a second one.
-        case notFilledYet(repo: String, why: String)
         /// GitHub stopped taking the sign-in and it couldn't be renewed.
         case signInExpired
         /// GitHub refused a request; `message` is its own reason.
@@ -52,12 +40,8 @@ struct GitHubRepoMaker: Sendable {
                 String(localized: "You already have repos named \(name) and the next few after it. Pick another name.")
             case let .template(why):
                 String(localized: "The template can't be copied: \(why)")
-            case let .madeButNotFilled(repo, why):
-                String(localized: "I made github.com/\(repo), but couldn't add the template's files to it (\(why)). It's empty: delete it on GitHub or try again with another name.")
             case let .notPushedYet(repo, why):
                 String(localized: "I made github.com/\(repo), but couldn't put this project's work in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
-            case let .notFilledYet(repo, why):
-                String(localized: "I made github.com/\(repo), but couldn't put the template's files in it yet (\(why)). Choose Finish putting it on GitHub to try again; it goes into the same repo.")
             case .signInExpired:
                 GitHubAuth.expiredMessage
             case let .refused(status, message):
@@ -109,81 +93,6 @@ struct GitHubRepoMaker: Sendable {
         return ascii.isEmpty ? "project" : String(ascii.prefix(90))
     }
 
-    /// A repo made from `template`: where the bot's work builds on GitHub,
-    /// and the template commit it started from (the pinned one, or the
-    /// older pin it was made at). The start is the repo's second commit
-    /// (`fill` puts it on GitHub's own first one) and must say "Start from
-    /// <template>@<commit>": a later commit with that message is never
-    /// taken for it. A commit named there that isn't the current pin counts
-    /// only when it's in the template's own history. nil otherwise.
-    func findStart(repo: String, template: TemplateEntry, botName: String) async throws -> (start: GitHubPR.Start, ref: String)? {
-        struct Repo: Decodable { var default_branch: String? }
-        struct SHA: Decodable { var sha: String }
-        struct Compared: Decodable { var status: String }
-        let info: Repo = try await send("GET", "https://api.github.com/repos/\(repo)", nil)
-        let branch = info.default_branch ?? "main"
-        let prefix = "Start from \(template.repo)@"
-        guard let start = try await secondCommit(repo: repo, branch: branch), start.commit.message.hasPrefix(prefix) else { return nil }
-        let short = String(start.commit.message.dropFirst(prefix.count).prefix { $0.isHexDigit }).lowercased()
-        guard short.count >= 7 else { return nil }
-        let found = GitHubPR.Start(commit: start.sha, branch: branch, head: "mux/\(Self.slug(botName))")
-        if template.ref.lowercased().hasPrefix(short) { return (found, template.ref) }
-        // An older pin: only a commit the template's default branch has.
-        let source = "https://api.github.com/repos/\(template.repo)"
-        guard let full: SHA = try await sendOptional("GET", "\(source)/commits/\(short)"),
-              full.sha.lowercased().hasPrefix(short) else { return nil }
-        let templateInfo: Repo = try await send("GET", source, nil)
-        guard let compared: Compared = try await sendOptional("GET", "\(source)/compare/\(full.sha)...\(templateInfo.default_branch ?? "main")"),
-              ["ahead", "identical"].contains(compared.status) else { return nil }
-        return (found, full.sha)
-    }
-
-    struct ListedCommit: Decodable, Sendable {
-        struct Inner: Decodable, Sendable { var message: String }
-        struct Parent: Decodable, Sendable { var sha: String }
-        var sha: String
-        var commit: Inner
-        var parents: [Parent]?
-    }
-
-    /// Pages of 100 followed when GitHub doesn't name the list's last page.
-    static let commitPageCap = 50
-
-    /// The commit on `branch` whose only parent is a first commit of the
-    /// repo. GitHub lists commits newest first, so it's on the list's last
-    /// page (or the one before it); nil when there's none, or more than one.
-    func secondCommit(repo: String, branch: String) async throws -> ListedCommit? {
-        var components = URLComponents(string: "https://api.github.com/repos/\(repo)/commits")
-        components?.queryItems = [URLQueryItem(name: "sha", value: branch), URLQueryItem(name: "per_page", value: "100")]
-        guard let first = components?.string else { return nil }
-        var (commits, link) = try await commitsPage(first)
-        if let last = GitHubAuth.linkedPage(link, rel: "last") {
-            (commits, link) = try await commitsPage(last)
-        } else {
-            var pages = 1
-            while let next = GitHubAuth.linkedPage(link, rel: "next") {
-                guard pages < Self.commitPageCap else { return nil }
-                (commits, link) = try await commitsPage(next)
-                pages += 1
-            }
-        }
-        if let found = Self.secondCommit(in: commits) { return found }
-        // The first commit alone on the last page: the start is on the one before.
-        guard let previous = GitHubAuth.linkedPage(link, rel: "prev") else { return nil }
-        let (earlier, _) = try await commitsPage(previous)
-        return Self.secondCommit(in: earlier + commits)
-    }
-
-    private func commitsPage(_ url: String) async throws -> ([ListedCommit], String?) {
-        try await page(url)
-    }
-
-    static func secondCommit(in commits: [ListedCommit]) -> ListedCommit? {
-        let roots = Set(commits.filter { $0.parents?.isEmpty == true }.map(\.sha))
-        let second = commits.filter { $0.parents?.count == 1 && roots.contains($0.parents?.first?.sha ?? "") }
-        return second.count == 1 ? second.first : nil
-    }
-
     /// Your login.
     func login() async throws -> String {
         struct User: Decodable { var login: String }
@@ -202,108 +111,23 @@ struct GitHubRepoMaker: Sendable {
         throw Failure.noFreeName(name)
     }
 
-    /// Makes the repo and fills it with `template` at its pinned commit.
-    /// The template is read and checked first, so one that can't be copied
-    /// leaves no empty repo behind; a name GitHub says is taken (one that
-    /// appeared since `freeName` looked, or one it couldn't see) moves on to
-    /// the next.
-    func make(name: String, isPrivate: Bool, description: String, from template: TemplateEntry) async throws -> Made {
-        struct Created: Decodable { var full_name: String; var html_url: String; var default_branch: String? }
-        let tree = try await templateTree(template)
+    /// Makes the empty repo. A name GitHub says is taken (one that appeared
+    /// since `freeName` looked, or one it couldn't see) moves on to the next.
+    func make(name: String, isPrivate: Bool, description: String) async throws -> Made {
+        struct Created: Decodable { var full_name: String; var html_url: String }
         var candidate = name
-        var made: Created?
         for _ in 0...Self.nameTries {
             do {
-                made = try await send("POST", "https://api.github.com/user/repos",
-                                      ["name": candidate, "private": isPrivate, "description": Self.describe(description), "auto_init": true])
-                break
+                let created: Created = try await send("POST", "https://api.github.com/user/repos",
+                                                      ["name": candidate, "private": isPrivate, "description": Self.describe(description), "auto_init": false])
+                return Made(repo: created.full_name, url: URL(string: created.html_url) ?? URL(string: "https://github.com/\(created.full_name)")!)
             } catch Failure.refused(let status, _) where status == 403 || status == 404 {
                 throw Failure.cantCreate
             } catch Failure.refused(422, let why) where why.localizedCaseInsensitiveContains("already exists") {
                 candidate = Self.nextName(candidate)
             }
         }
-        guard let created = made else { throw Failure.noFreeName(name) }
-        let repo = created.full_name
-        do {
-            let branch = created.default_branch ?? "main"
-            let start = try await fill(repo: repo, branch: branch, tree: tree, from: template)
-            return Made(repo: repo, url: URL(string: created.html_url) ?? URL(string: "https://github.com/\(repo)")!,
-                        defaultBranch: branch, startCommit: start)
-        } catch {
-            throw Failure.madeButNotFilled(repo: repo, why: error.localizedDescription)
-        }
-    }
-
-    /// The template's file list at its pinned commit, refused when it can't
-    /// be copied whole (GitHub cut the list short, or a submodule).
-    struct TemplateTree: Decodable, Sendable {
-        struct Entry: Decodable, Sendable { var path: String; var mode: String; var type: String; var sha: String }
-        var tree: [Entry]
-        var truncated: Bool?
-    }
-
-    func templateTree(_ template: TemplateEntry) async throws -> TemplateTree {
-        let tree: TemplateTree = try await send("GET", "https://api.github.com/repos/\(template.repo)/git/trees/\(template.ref)?recursive=1", nil)
-        if tree.truncated == true { throw Failure.template(String(localized: "it has more files than GitHub lists at once")) }
-        if let sub = tree.tree.first(where: { $0.type == "commit" }) {
-            throw Failure.template(String(localized: "it has a submodule (\(sub.path))"))
-        }
-        return tree
-    }
-
-    /// The template's files at its pinned commit, as one commit on top of
-    /// the new repo's first one. Returns that commit.
-    func fill(repo: String, branch: String, tree: TemplateTree, from template: TemplateEntry) async throws -> String {
-        struct Blob: Decodable { var content: String; var encoding: String }
-        struct SHA: Decodable { var sha: String }
-        struct Ref: Decodable { struct Object: Decodable { var sha: String }; var object: Object }
-
-        let source = "https://api.github.com/repos/\(template.repo)"
-        let api = "https://api.github.com/repos/\(repo)"
-        var entries: [[String: Any]] = []
-        for file in tree.tree where file.type == "blob" {
-            let blob: Blob = try await send("GET", "\(source)/git/blobs/\(file.sha)", nil)
-            let copied: SHA = try await settling { try await send("POST", "\(api)/git/blobs",
-                                                                   ["content": blob.content.replacingOccurrences(of: "\n", with: ""), "encoding": blob.encoding]) }
-            entries.append(["path": file.path, "mode": file.mode, "type": "blob", "sha": copied.sha])
-        }
-        // No base tree: the repo holds exactly the template's files.
-        let newTree: SHA = try await settling { try await send("POST", "\(api)/git/trees", ["tree": entries]) }
-        let head: Ref = try await settling { try await send("GET", "\(api)/git/ref/heads/\(branch)", nil) }
-        let short = String(template.ref.prefix(7))
-        let commit: SHA = try await send("POST", "\(api)/git/commits",
-                                         ["message": "Start from \(template.repo)@\(short)", "tree": newTree.sha, "parents": [head.object.sha]])
-        let _: [String: AnyCodable] = try await send("PATCH", "\(api)/git/refs/heads/\(branch)", ["sha": commit.sha, "force": false])
-        return commit.sha
-    }
-
-    /// A new repo's first commit (auto_init) lands a moment after the repo:
-    /// until then GitHub answers 409 ("empty") or 404 on its branch. Tried
-    /// again a few times, waiting longer each time.
-    private func settling<T>(_ operation: () async throws -> T) async throws -> T {
-        var wait = 0.5
-        for _ in 0..<4 {
-            do {
-                return try await operation()
-            } catch Failure.refused(let status, _) where status == 409 || status == 404 {
-                await pause(wait)
-                wait *= 2
-            }
-        }
-        return try await operation()
-    }
-
-    /// Fills a repo made earlier that couldn't be filled then (Put it on
-    /// GitHub again): the template's files on its default branch.
-    func refill(repo: String, from template: TemplateEntry) async throws -> Made {
-        struct Repo: Decodable { var default_branch: String?; var html_url: String? }
-        let info: Repo = try await send("GET", "https://api.github.com/repos/\(repo)", nil)
-        let branch = info.default_branch ?? "main"
-        let tree = try await templateTree(template)
-        let start = try await fill(repo: repo, branch: branch, tree: tree, from: template)
-        return Made(repo: repo, url: URL(string: info.html_url ?? "https://github.com/\(repo)") ?? URL(string: "https://github.com/\(repo)")!,
-                    defaultBranch: branch, startCommit: start)
+        throw Failure.noFreeName(name)
     }
 
     // MARK: - Requests

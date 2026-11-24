@@ -23,7 +23,10 @@ struct StartSweepTests {
         #expect(RunBlocker.check(paired: true, crew: .coder, bot: bot, deviceRuns: false) == .projectNotMade("Tides", here: false))
     }
 
-    @Test func itsWorkCopyComesFromTheTemplateAndItsGitHubStartIsFound() async {
+    /// On GitHub already: its work copy here is a clone of its repo, whose
+    /// history is the project's own (darkmux #3681), never a second project
+    /// from the template.
+    @Test func itsWorkCopyIsACloneOfItsRepo() async {
         let store = TestStore.fresh()
         let bot = templateBotWithRepo(store)
         let runs = RunCoordinator()
@@ -31,93 +34,14 @@ struct StartSweepTests {
         let bodies = BodyLog()
         runs.workspaceMaker = { body in
             bodies.add(body)
-            return DarkmuxClient.Workspace(workspace: "tides-1", branch: "main", head: "h", repo: nil, created: true, fetchError: nil)
-        }
-        runs.startFinder = { repo, entry in
-            #expect(repo == "kain/tides")
-            return (GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"), entry.ref)
+            return DarkmuxClient.Workspace(workspace: "tides-1", branch: "mux/tides-1", head: "h", repo: "github.com/kain/tides", created: true, fetchError: nil)
         }
         await runs.setUpWorkCopy(for: bot, store: store)
         let body = bodies.values.first
-        #expect(body?.template == true, "a fresh project from the template, never a clone")
-        #expect(body?.ref == Self.template.ref)
+        #expect(body?.template != true)
+        #expect(body?.repoURL == "https://github.com/kain/tides")
         #expect(bot.workspaceName == "tides-1")
         #expect(bot.repoSlugs == ["kain/tides"])
-        #expect(bot.githubStart == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"), "backups go on")
-    }
-
-    @Test func theGitHubStartIsTheStartFromCommit() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200,
-                      #"[{"sha":"w2","parents":[{"sha":"start1"}],"commit":{"message":"Back up Tides's work"}},{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found?.start == GitHubPR.Start(commit: "start1", branch: "main", head: "mux/tides"))
-        #expect(found?.ref == Self.template.ref, "the pinned commit the repo started from")
-    }
-
-    private static let olderPinStart = #"[{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@aaaaaaa"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#
-
-    @Test func aRepoFromAnOlderPinStartsFromThatPin() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200, Self.olderPinStart)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/commits/aaaaaaa", 200, #"{"sha":"aaaaaaa1111111111111111111111111111111111"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/compare/aaaaaaa1111111111111111111111111111111111...main", 200, #"{"status":"ahead"}"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found?.ref == "aaaaaaa1111111111111111111111111111111111")
-    }
-
-    @Test func aCommitTheTemplateNeverHadIsNoStart() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200, Self.olderPinStart)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/commits/aaaaaaa", 200, #"{"sha":"aaaaaaa1111111111111111111111111111111111"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book", 200, #"{"default_branch":"main"}"#)
-        // On a branch of the template that its default branch doesn't have.
-        GitHubStub.on("GET /repos/kstrat2001/muxbot-template-book/compare/aaaaaaa1111111111111111111111111111111111...main", 200, #"{"status":"diverged"}"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found == nil, "never a ref the registry or the template's history doesn't vouch for")
-    }
-
-    @Test func aLaterStartFromCommitIsIgnored() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200,
-                      #"[{"sha":"fake9","parents":[{"sha":"start1"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@bbbbbbb"}},{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found?.start.commit == "start1", "the repo's second commit, never a later one that says the same")
-        #expect(found?.ref == Self.template.ref)
-        #expect(!GitHubStub.seen.contains { $0.path.contains("bbbbbbb") }, "the later commit's ref is never looked up")
-    }
-
-    @Test func aSecondCommitThatIsntAStartIsNoStart() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        GitHubStub.on("GET /repos/kain/tides/commits", 200,
-                      #"[{"sha":"fake9","parents":[{"sha":"c1"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}},{"sha":"c1","parents":[{"sha":"init0"}],"commit":{"message":"Add a README"}},{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found == nil)
-    }
-
-    @Test func aLongHistoryStillFindsTheStart() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kain/tides", 200, #"{"default_branch":"main"}"#)
-        // 201 commits: the newest 100, then (the list's last page) the first one alone.
-        let work = (0..<100).map { #"{"sha":"w\#($0)","parents":[{"sha":"p\#($0)"}],"commit":{"message":"Back up Tides's work"}}"# }.joined(separator: ",")
-        let api = "https://api.github.com/repos/kain/tides/commits?sha=main&per_page=100"
-        GitHubStub.on("GET /repos/kain/tides/commits", 200, "[\(work)]",
-                      headers: ["Link": "<\(api)&page=2>; rel=\"next\", <\(api)&page=3>; rel=\"last\""])
-        GitHubStub.on("GET /repos/kain/tides/commits", 200, #"[{"sha":"init0","parents":[],"commit":{"message":"Initial commit"}}]"#,
-                      headers: ["Link": "<\(api)&page=2>; rel=\"prev\", <\(api)&page=1>; rel=\"first\""])
-        let older = (0..<99).map { #"{"sha":"o\#($0)","parents":[{"sha":"q\#($0)"}],"commit":{"message":"Back up Tides's work"}}"# }.joined(separator: ",")
-        GitHubStub.on("GET /repos/kain/tides/commits", 200,
-                      "[\(older)," + #"{"sha":"start1","parents":[{"sha":"init0"}],"commit":{"message":"Start from kstrat2001/muxbot-template-book@e044900"}}]"#)
-        let found = try await GitHubRepoMaker(session: GitHubStub.session, token: "t").findStart(repo: "kain/tides", template: Self.template, botName: "Tides")
-        #expect(found?.start.commit == "start1")
-        let pages = GitHubStub.seen.filter { $0.path == "/repos/kain/tides/commits" }.compactMap(\.query)
-        #expect(pages.count == 3 && pages[1].contains("page=3") && pages[2].contains("page=2"), "\(pages)")
     }
 
     @Test func aPageLinkToAnotherHostIsNeverFollowed() {
@@ -171,14 +95,13 @@ struct StartSweepTests {
         let store = TestStore.fresh()
         let bot = templateBotWithRepo(store)
         bot.workspaceName = "tides-1"
-        bot.githubStart = GitHubPR.Start(commit: "s1", branch: "main", head: "mux/tides")
         let runs = RunCoordinator()
         runs.githubToken = { nil }
-        runs.changesFetcher = { _ in DarkmuxClient.Changes(base: "b", baseBranch: "main", head: "h", branch: "main", files: []) }
+        runs.gitPusher = { _, _, _ in Issue.record("nothing pushed signed out"); throw CancellationError() }
         await runs.backUp(bot, store: store)
         await runs.backUp(bot, store: store)
         let notes = (store.conversation(for: .bot(bot.id)).messages ?? []).map(\.content).filter { $0.contains("Not backed up") }
-        #expect(notes == ["Not backed up: sign in with GitHub (Settings › GitHub) to back up to mux/tides."])
+        #expect(notes == ["Not backed up: sign in with GitHub (Settings › GitHub) to back up this project's work."])
     }
 
     // 15: no lockfile, still an install.

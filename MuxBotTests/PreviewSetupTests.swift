@@ -131,83 +131,44 @@ struct PreviewSetupOfferTests {
         #expect(messages.filter { $0.content.contains("only from your own checkout") }.count == 1)
     }
 
-    @Test func approvingKeepsTheExactFileForTheNextPR() async throws {
+    @Test func approvingSavesTheExactFileWithTheProjectsChanges() async throws {
         let store = TestStore.fresh()
         let bot = botWithCheckout(store)
+        bot.workspaceName = "de-1"
         let brain = brain(checkout: URL(fileURLWithPath: "/tmp/darklyenergized"))
+        let saved = DataBox()
+        brain.runs.fileAdder = { _, path, data in saved.set(path, data); return .init(path: path, workId: "w-1", commit: "abc1234", branch: "mux/de-1") }
         brain.offerPreviewSetup(for: bot, store: store)
         let card = try #require((store.conversation(for: .bot(bot.id)).messages ?? []).first { $0.kind == .actionCard })
         guard case let .setUpPreview(setup)? = card.action else { Issue.record("no card"); return }
         brain.resolve(card, approve: true, store: store)
         #expect(card.actionState == .approved)
-        #expect(LocalBotState.shared[bot.id]?.prFiles?[PreviewSetup.path] == setup.recipeData)
+        for _ in 0..<100 where saved.path == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(saved.path == PreviewSetup.path)
+        #expect(saved.data == setup.recipeData, "exactly the approved bytes")
     }
 
-    @Test func cancelingKeepsNothing() throws {
+    @Test func cancelingKeepsNothing() async throws {
         let store = TestStore.fresh()
         let bot = botWithCheckout(store)
+        bot.workspaceName = "de-1"
         let brain = brain(checkout: URL(fileURLWithPath: "/tmp/darklyenergized"))
+        let saved = DataBox()
+        brain.runs.fileAdder = { _, path, data in saved.set(path, data); return .init(path: path, workId: "w-1", commit: nil, branch: nil) }
         brain.offerPreviewSetup(for: bot, store: store)
         let card = try #require((store.conversation(for: .bot(bot.id)).messages ?? []).first { $0.kind == .actionCard })
         brain.resolve(card, approve: false, store: store)
-        #expect(LocalBotState.shared[bot.id]?.prFiles == nil)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(saved.path == nil)
     }
 }
 
-/// Approved files ride along in the PR's commit, exactly, but never over
-/// the bot's own change to that path or one the base branch already has.
-@Suite(.serialized) @MainActor
-struct PRApprovedFileTests {
-    private let changes = DarkmuxClient.Changes(
-        base: "b0b0", baseBranch: "main", head: "h1h1", branch: "mux/de-1",
-        files: [.init(path: "src/app.ts", mode: "100644", content: "Y2hhbmdlZAo=", deleted: nil)])
-
-    private func stubTheRest() {
-        GitHubStub.on("POST /repos/kstrat2001/de/git/blobs", 201, #"{"sha":"blob1"}"#)
-        GitHubStub.on("POST /repos/kstrat2001/de/git/blobs", 201, #"{"sha":"blob2"}"#)
-        GitHubStub.on("GET /repos/kstrat2001/de/git/commits/b0b0", 200, #"{"sha":"b0b0","tree":{"sha":"tree0"}}"#)
-        GitHubStub.on("POST /repos/kstrat2001/de/git/trees", 201, #"{"sha":"tree1"}"#)
-        GitHubStub.on("POST /repos/kstrat2001/de/git/commits", 201, #"{"sha":"commit1"}"#)
-        GitHubStub.on("POST /repos/kstrat2001/de/git/refs", 201, #"{"ref":"refs/heads/mux/de-1"}"#)
-        GitHubStub.on("POST /repos/kstrat2001/de/pulls", 201, #"{"number":5,"html_url":"https://github.com/kstrat2001/de/pull/5"}"#)
-    }
-
-    private func client() -> GitHubPR { GitHubPR(session: GitHubStub.session, token: "t", local: LocalBotState(fileURL: nil)) }
-
-    @Test func theApprovedFileGoesInExactly() async throws {
-        GitHubStub.reset()
-        stubTheRest()
-        let recipe = Data("{\"schema_version\":\"1.0\",\"command\":\"npm run dev\"}\n".utf8)
-        let pr = try await client().open(changes, repo: "kstrat2001/de", title: "x", body: "y", bot: UUID(),
-                                         extraFiles: [PreviewSetup.path: recipe])
-        #expect(pr.added == [PreviewSetup.path])
-        let blobs = GitHubStub.seen.filter { $0.method == "POST" && $0.path.hasSuffix("/git/blobs") }.compactMap { $0.body?["content"] as? String }
-        #expect(blobs.contains(recipe.base64EncodedString()))
-        let tree = GitHubStub.seen.first { $0.path.hasSuffix("/git/trees") }?.body?["tree"] as? [[String: Any]] ?? []
-        #expect(tree.contains { $0["path"] as? String == PreviewSetup.path })
-        let asked = GitHubStub.seen.first { $0.path.hasSuffix("/contents/.darkmux/preview.json") }
-        #expect(asked?.query == "ref=b0b0", "checked against the base, not guessed")
-    }
-
-    @Test func oneTheBaseHasIsLeftOut() async throws {
-        GitHubStub.reset()
-        GitHubStub.on("GET /repos/kstrat2001/de/contents/.darkmux/preview.json", 200, #"{"name":"preview.json"}"#)
-        stubTheRest()
-        let pr = try await client().open(changes, repo: "kstrat2001/de", title: "x", body: "y", bot: UUID(),
-                                         extraFiles: [PreviewSetup.path: Data("{}".utf8)])
-        #expect(pr.added.isEmpty)
-        #expect(pr.skipped[PreviewSetup.path] == .inBase)
-        let tree = GitHubStub.seen.first { $0.path.hasSuffix("/git/trees") }?.body?["tree"] as? [[String: Any]] ?? []
-        #expect(!tree.contains { $0["path"] as? String == PreviewSetup.path })
-    }
-
-    @Test func oneTheBotChangedIsLeftOut() async throws {
-        GitHubStub.reset()
-        stubTheRest()
-        let pr = try await client().open(changes, repo: "kstrat2001/de", title: "x", body: "y", bot: UUID(),
-                                         extraFiles: ["src/app.ts": Data("mine".utf8)])
-        #expect(pr.skipped["src/app.ts"] == .inChanges)
-        let blobs = GitHubStub.seen.filter { $0.path.hasSuffix("/git/blobs") }.compactMap { $0.body?["content"] as? String }
-        #expect(!blobs.contains(Data("mine".utf8).base64EncodedString()))
-    }
+/// The approved bytes a test saw.
+final class DataBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _path: String?
+    private var _data: Data?
+    var path: String? { lock.withLock { _path } }
+    var data: Data? { lock.withLock { _data } }
+    func set(_ path: String, _ data: Data) { lock.withLock { _path = path; _data = data } }
 }

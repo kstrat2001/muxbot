@@ -103,19 +103,18 @@ struct ReviewFindingsRunTests {
     @Test func theSlotIsFreeBeforeTheBackupFinishes() async {
         let (store, bot, runs) = setUp()
         store.addResource(.repo, "https://github.com/kain/site", to: bot)
-        bot.githubStart = GitHubPR.Start(commit: "start1", branch: "main", head: "mux/site")
+        bot.useCaseId = "website"
         runs.githubToken = { "ghu_abc" }
         runs.noticePoster = { _, _ in }
-        runs.changesFetcher = { _ in
-            DarkmuxClient.Changes(base: "local0", baseBranch: "main", head: "h", branch: "main",
-                                  files: [.init(path: "a.css", mode: "100644", content: "YQo=", deleted: nil)])
+        runs.gitStatusSource = { _ in
+            try JSONDecoder().decode(DarkmuxClient.GitStatus.self, from: Data(#"{"branch":"mux/site-1","head":"c1","origin":"github.com/kain/site","pending":1,"dirty":false}"#.utf8))
         }
         let started = Counter(), finished = Counter()
-        runs.prPusher = { _, _, _, _, _ in
+        runs.gitPusher = { _, _, _ in
             started.add()
             try? await Task.sleep(for: .milliseconds(400))
             finished.add()
-            return GitHubPR.Pushed(commit: "c1")
+            return .init(branch: "mux/site-1", head: "c1", remote: "github.com/kain/site", addedOrigin: false)
         }
         let run = running(store, bot, runs, workId: "w-1")
         runs.workStatusFetcher = { [self] _ in
@@ -394,11 +393,13 @@ struct ReviewFindingsLocalStateTests {
 struct ReviewFindingsCopyTests {
     private let steps = ["push that commit", "git push", "checkout's remote", "in the app's settings", "permission, then"]
 
-    @Test func gitHubNotHavingTheBaseAsksForNoPush() {
-        let said = GitHubPR.Failure.baseMissing("abc1234def").localizedDescription
-        #expect(said.contains("GitHub doesn't have yet"), "\(said)")
-        #expect(!said.contains("abc1234"), "the commit's id isn't up front: \(said)")
-        for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(said)") }
+    /// darkmux's git route refusals (darkmux #3681) ask for no git step.
+    @Test func theGitRoutesRefusalsAskForNoGitStep() {
+        for code in ["work_copy_busy", "remote_moved", "merge_conflict", "dirty", "no_origin", "remote_not_empty", "token_host_refused", "no_upstream", "push_failed"] {
+            let said = DarkmuxPlain.sentence(DarkmuxClient.ClientError(message: "git: refusing", status: 409, code: code))
+            for step in steps { #expect(!said.localizedCaseInsensitiveContains(step), "\(code): \(said)") }
+            for word in ["branch", "commit", "rebase", "worktree"] { #expect(!said.localizedCaseInsensitiveContains(word), "\(code): \(said)") }
+        }
     }
 
     @Test func aMissingDefaultBranchAsksForNoGitStep() {

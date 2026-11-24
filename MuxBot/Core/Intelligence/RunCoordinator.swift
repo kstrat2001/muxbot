@@ -448,9 +448,9 @@ final class RunCoordinator {
             if !readOnlyRuns.contains(run.id) { Task { await self.revertUnasked(run, store: store) } }
             return
         }
-        if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
-        // A change saved while the task is in review joins the review.
-        if status.commit != nil, let bot = run.bot, bot.githubStart == nil, review(for: bot) != nil { Task { await self.updateReview(bot, store: store) } }
+        // A backed-up project's work, or a change saved while its task is in
+        // review, goes to GitHub.
+        if status.commit != nil, let bot = run.bot { Task { await self.sendToGitHub(bot, store: store) } }
     }
 
     /// A use case's template, from the registry (or the test seam).
@@ -474,19 +474,14 @@ final class RunCoordinator {
         }
     }
 
-    /// Pushes a GitHub-started project's committed work to its `mux/<bot>`
-    /// branch on your repo, through the same path as Open PR. Says so only
-    /// when it fails.
     /// Pushes waiting behind this bot's GitHub push, which runs one at a
-    /// time so a backup and an Open PR never race for the same branch.
+    /// time so a backup and a review update never overlap.
     @ObservationIgnored private var pushTails: [UUID: Task<Void, Never>] = [:]
     /// Bots being put on GitHub (`PutOnGitHub`): kept here, not in the view,
     /// so closing bot info never lets a second Put start.
     var puttingOnGitHub: Set<UUID> = []
     /// Bots told their work isn't backed up because you're signed out.
     private var saidNotBackedUp: Set<UUID> = []
-    /// Names tried after a branch someone else pushed to.
-    static let branchTries = 5
 
     /// Runs `work` after every earlier GitHub push for `bot` has finished.
     func oneAtATime(_ bot: UUID, _ work: @escaping @MainActor () async -> Void) async {
@@ -503,56 +498,21 @@ final class RunCoordinator {
     /// A GitHub push for `bot` is going or waiting.
     func isPushing(_ bot: UUID) -> Bool { pushTails[bot] != nil }
 
-    /// Where this Mac pushes the bot's work on GitHub: its GitHub start, or
-    /// the branch it moved to after someone else pushed to darkmux's.
-    func pushStart(_ bot: Bot, changes: DarkmuxClient.Changes) -> GitHubPR.Start? {
-        if let start = bot.githubStart { return start }
-        guard bot.useCaseId.isEmpty else { return nil }
-        if let head = LocalBotState.shared[bot.id]?.pushHead { return GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: head) }
-        // A clone works on the default branch itself (darkmux #3489): its
-        // work goes to mux/<bot>, never on top of the default branch.
-        if changes.branch == changes.baseBranch {
-            return GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: "mux/\(GitHubRepoMaker.slug(bot.name))")
-        }
-        return nil
-    }
+    /// A project the app put on GitHub for you (made from a template, with
+    /// a repo): its saved work is backed up there after every change.
+    func isBackedUp(_ bot: Bot) -> Bool { !bot.useCaseId.isEmpty && !bot.repoSlugs.isEmpty }
 
-    /// Pushes through `push`. When someone else pushed to the bot's branch,
-    /// it's never overwritten: the work goes to the next free name
-    /// (`mux/<bot>-2`) from then on, and the thread says so.
-    func pushMovingOn<T>(_ bot: Bot, changes: DarkmuxClient.Changes, store: BotStore,
-                         _ push: (GitHubPR.Start?) async throws -> T) async throws -> T {
-        var start = pushStart(bot, changes: changes)
-        for _ in 0..<Self.branchTries {
-            do {
-                return try await push(start)
-            } catch GitHubPR.Failure.branchMoved(let moved) {
-                let next = GitHubPR.nextBranch(moved)
-                if var kept = bot.githubStart {
-                    kept.head = next
-                    bot.githubStart = kept
-                    start = kept
-                } else {
-                    LocalBotState.shared.update(bot.id) { $0.pushHead = next }
-                    start = GitHubPR.Start(commit: changes.base, branch: changes.baseBranch, head: next)
-                }
-                store.append(.system, String(localized: "Someone else pushed to \(moved) on GitHub, so I left it as it is. This bot's work goes to \(next) from now on."),
-                             to: store.conversation(for: .bot(bot.id)))
-            }
-        }
-        throw GitHubPR.Failure.branchMoved(start?.head ?? changes.branch)
-    }
-
+    /// Backs up a project the app put on GitHub: the task's work goes to
+    /// its branch there through darkmux's own push. Says so only when it
+    /// fails.
     func backUp(_ bot: Bot, store: BotStore) async {
-        if bot.githubStart == nil { await recoverStart(bot) }
-        guard bot.githubStart != nil, let repo = bot.repoSlugs.first, let workspace = bot.workspaceName,
-              LocalBotState.shared[bot.id]?.putPending != true,
-              changesFetcher != nil || connection?.token != nil else { return }
+        guard isBackedUp(bot), bot.workspaceName != nil, LocalBotState.shared[bot.id]?.putPending != true,
+              gitPusher != nil || connection?.token != nil else { return }
         guard let token = githubToken?() else {
             // Said once per bot, until a backup goes through again.
-            if !saidNotBackedUp.contains(bot.id), let head = bot.githubStart?.head {
+            if !saidNotBackedUp.contains(bot.id) {
                 saidNotBackedUp.insert(bot.id)
-                store.append(.system, String(localized: "Not backed up: sign in with GitHub (Settings › GitHub) to back up to \(head)."),
+                store.append(.system, String(localized: "Not backed up: sign in with GitHub (Settings › GitHub) to back up this project's work."),
                              to: store.conversation(for: .bot(bot.id)))
             }
             return
@@ -560,18 +520,10 @@ final class RunCoordinator {
         saidNotBackedUp.remove(bot.id)
         await oneAtATime(bot.id) { [self] in
             do {
-                let changes = try await changes(for: workspace)
-                guard !nothingToPush(bot, changes) else { return }
-                let session = githubSession ?? .shared
-                // Files you approved stay in every push (#137).
-                let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
-                let pusher = prPusher ?? { try await GitHubPR(session: session, token: token).push($0, repo: $1, message: $2, bot: $3, extraFiles: approved, start: $4) }
-                _ = try await pushMovingOn(bot, changes: changes, store: store) {
-                    try await pusher(changes, repo, String(localized: "Back up \(bot.name)'s work"), bot.id, $0)
-                }
+                _ = try await pushTask(bot, store: store, github: token)
             } catch {
                 let said = Self.plain(error)
-                let line = store.append(.system, String(localized: "Couldn't back up this work to \(bot.githubStart?.head ?? "its branch") on GitHub: \(said.sentence)"),
+                let line = store.append(.system, String(localized: "Couldn't back up this work to GitHub: \(said.sentence)"),
                                         to: store.conversation(for: .bot(bot.id)))
                 messageDetails[line.id] = said.details
             }
@@ -1181,10 +1133,6 @@ final class RunCoordinator {
     }
     /// Work copies being set up (or that failed), by bot.
     var workCopySetup: [UUID: WorkCopySetup] = [:]
-    /// Finds a backed-up template bot's start on GitHub (tests); else
-    /// `GitHubRepoMaker.findStart` with your sign-in.
-    var startFinder: ((String, TemplateEntry) async -> (GitHubPR.Start, String)?)?
-
     /// Asks darkmux for the bot's workspace on this Mac: a worktree of the
     /// folder you picked (on its own branch, from the fetched default
     /// branch), else a clone of its GitHub repo. Stores only the name.
@@ -1198,29 +1146,15 @@ final class RunCoordinator {
         }
         var template = template
         // A template bot made while unpaired or on iPhone: its project is
-        // made here from the same template, at its pinned commit.
-        // Backed up to GitHub from there, it keeps its repo: the project is
-        // still made from the template, at the commit its repo started from,
-        // and its GitHub start (only on the device that made it) is found
-        // again, so backups go on.
-        if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil {
+        // made here from the same template, at its pinned commit. One that
+        // is on GitHub already is the copy there (`workspaceRequest` clones
+        // its repo), whose history is the project's own (darkmux #3681).
+        if template == nil, sourcePath == nil, !bot.useCaseId.isEmpty, bot.folderBookmark == nil, bot.repoSlugs.isEmpty {
             workCopySetup[bot.id] = .settingUp
             let id = bot.useCaseId
-            guard var entry = await (templateSource ?? Self.registryTemplate)(id) else {
+            guard let entry = await (templateSource ?? Self.registryTemplate)(id) else {
                 workCopySetup[bot.id] = .failed(String(localized: "its template (\(id)) isn't in the template list anymore"))
                 return
-            }
-            // Backed up to GitHub: made only once its start there is known,
-            // or it could never be backed up or opened as a PR.
-            if let repo = bot.repoSlugs.first, bot.githubStart == nil {
-                guard let found = await findStart(repo: repo, template: entry, botName: bot.name) else {
-                    workCopySetup[bot.id] = .failed(startFinder == nil && githubToken?() == nil
-                        ? String(localized: "Sign in with GitHub (Settings › GitHub) so I can find where this project starts on GitHub, then make the project again.")
-                        : String(localized: "I couldn't find where this project starts on GitHub (its “Start from …” commit), so I didn't make it here. Try again in a moment."))
-                    return
-                }
-                bot.githubStart = found.0
-                entry.ref = found.1
             }
             template = entry
         }
@@ -1266,13 +1200,6 @@ final class RunCoordinator {
             workCopySetup[bot.id] = .failed(DarkmuxPlain.sentence(error))
             workCopyDetails[bot.id] = DarkmuxPlain.details(error)
         }
-    }
-
-    private func findStart(repo: String, template: TemplateEntry, botName: String) async -> (GitHubPR.Start, String)? {
-        if let startFinder { return await startFinder(repo, template) }
-        guard let token = githubToken?() else { return nil }
-        guard let found = try? await GitHubRepoMaker(token: token).findStart(repo: repo, template: template, botName: botName) else { return nil }
-        return (found.start, found.ref)
     }
 
     /// Tests stand in for darkmux's work API here; nil uses the client.
@@ -1435,20 +1362,12 @@ final class RunCoordinator {
         Task { await self.sendToGitHub(bot, store: store) }
     }
 
-    /// A change made outside a run's finish (a hand edit, an Undo) reaches
-    /// GitHub the way a run's does: the backup of a project the app made
-    /// there, else the open review's branch, so GitHub never keeps work
-    /// that was undone here, and Merge never takes it (#137).
+    /// A change (a run's, a hand edit, an Undo) reaches GitHub the same
+    /// way: the backup of a project the app put there, else the open
+    /// review's branch, so GitHub never keeps work that was undone here, and
+    /// Merge never takes it (#137).
     func sendToGitHub(_ bot: Bot, store: BotStore) async {
-        if bot.githubStart != nil { await backUp(bot, store: store) } else if review(for: bot) != nil { await updateReview(bot, store: store) }
-    }
-
-    /// Nothing to push: no changes, and no earlier push from this Mac that
-    /// an Undo has since taken back (then the branch goes back to the base).
-    func nothingToPush(_ bot: Bot, _ changes: DarkmuxClient.Changes) -> Bool {
-        guard changes.files.isEmpty else { return false }
-        let head = pushStart(bot, changes: changes)?.head ?? changes.branch
-        return LocalBotState.shared[bot.id]?.pushedHeads?[head] == nil
+        if review(for: bot) != nil { await updateReview(bot, store: store) } else if isBackedUp(bot) { await backUp(bot, store: store) }
     }
 
     /// What the thread says when darkmux couldn't place the text.
@@ -1821,7 +1740,18 @@ final class RunCoordinator {
     /// darkmux's branch changes for a workspace (tests); else darkmux.
     var changesFetcher: ((String) async throws -> DarkmuxClient.Changes)?
     /// Pushes a backup (tests); else `GitHubPR.push`.
-    var prPusher: ((DarkmuxClient.Changes, String, String, UUID, GitHubPR.Start?) async throws -> GitHubPR.Pushed)?
+    /// darkmux's `status` of each bot's work copy, as last read (this launch).
+    var taskStatuses: [UUID: DarkmuxClient.GitStatus] = [:]
+    /// Bots whose work copy's darkmux didn't answer the last status read.
+    var taskStatusUnreachable: Set<UUID> = []
+    /// Bots offered "Start again from GitHub" this launch.
+    @ObservationIgnored var offeredStartFromGitHub: Set<UUID> = []
+    /// Tests stand in for darkmux's git route here (`status`, `push`):
+    /// nil uses the client.
+    var gitStatusSource: ((String) async throws -> DarkmuxClient.GitStatus)?
+    var gitPusher: ((_ workspace: String, _ github: String?, _ repo: String?) async throws -> DarkmuxClient.GitPushed)?
+    /// Tests stand in for darkmux's file route here (darkmux #3688).
+    var fileAdder: ((_ workspace: String, _ path: String, _ data: Data) async throws -> DarkmuxClient.FileResult)?
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
     /// Finds a use case's template by id (tests); else the template registry.
     var templateSource: ((String) async -> TemplateEntry?)?
@@ -2300,21 +2230,6 @@ final class RunCoordinator {
     /// (Show details; on this Mac, for this launch).
     var messageDetails: [UUID: String] = [:]
 
-    /// A template project goes to GitHub only on top of its start there:
-    /// never to darkmux's local branch name.
-    func canPush(_ bot: Bot) -> Bool { bot.githubStart != nil || bot.useCaseId.isEmpty }
-
-    /// Finds a template project's GitHub start when this Mac doesn't know it
-    /// (made on another device, or the sign-in was missing then).
-    @discardableResult
-    func recoverStart(_ bot: Bot) async -> Bool {
-        guard bot.githubStart == nil, !bot.useCaseId.isEmpty, let repo = bot.repoSlugs.first,
-              let entry = await template(for: bot.useCaseId),
-              let found = await findStart(repo: repo, template: entry, botName: bot.name) else { return bot.githubStart != nil }
-        bot.githubStart = found.0
-        return true
-    }
-
     /// A failure in a plain sentence: darkmux's by status, GitHub's already
     /// are; the raw text goes behind Show details.
     static func plain(_ error: any Error) -> (sentence: String, details: String?) {
@@ -2363,30 +2278,23 @@ final class RunCoordinator {
         github.token != nil && bot.workspaceName != nil && !bot.repoSlugs.isEmpty && !unshippedRuns(bot, store: store).isEmpty
     }
 
-    /// Opens (or updates) the PR for the bot's branch: darkmux hands over the
-    /// committed changes; the app creates the branch and PR with your GitHub
-    /// sign-in. The link goes in the thread.
+    /// Opens (or updates) the PR for the task: darkmux pushes the task's
+    /// branch from the work copy (darkmux #3681), and the app opens the PR
+    /// with your GitHub sign-in. The link goes in the thread.
     @discardableResult
     func openPR(for bot: Bot, store: BotStore, github: GitHubAuth, title: String? = nil) async -> GitHubPR.PR? {
         let thread = store.conversation(for: .bot(bot.id))
         guard let token = github.token else {
             store.append(.system, "Sign in with GitHub (Settings › GitHub) to start a review.", to: thread); return nil
         }
-        guard let workspace = bot.workspaceName, let repo = bot.repoSlugs.first, let connection, let darkmux = connection.token else {
+        guard bot.workspaceName != nil, let repo = bot.repoSlugs.first, gitPusher != nil || connection?.token != nil else {
             store.append(.system, "This bot needs a work copy and a GitHub repo to start a review.", to: thread); return nil
-        }
-        // A template project needs its start on GitHub (never its local
-        // branch name): found again if this Mac doesn't know it.
-        if !canPush(bot), !(await recoverStart(bot)) {
-            store.append(.system, String(localized: "I don't know where this project starts on GitHub on this Mac, so I can't open a pull request for it yet. Sign in with GitHub (Settings › GitHub), then try again."), to: thread)
-            return nil
         }
         openingPR.insert(bot.id)
         defer { openingPR.remove(bot.id) }
         let opened = OpenedPR()
         await oneAtATime(bot.id) { [self] in
-            opened.pr = await openPR(bot, workspace: workspace, repo: repo, token: token, darkmux: darkmux, connection: connection,
-                                     store: store, github: github, thread: thread, title: title)
+            opened.pr = await openPR(bot, repo: repo, token: token, store: store, github: github, thread: thread, title: title)
         }
         return opened.pr
     }
@@ -2394,35 +2302,23 @@ final class RunCoordinator {
     /// The PR a push in `oneAtATime` opened, handed back to its caller.
     @MainActor private final class OpenedPR { var pr: GitHubPR.PR? }
 
-    private func openPR(_ bot: Bot, workspace: String, repo: String, token: String, darkmux: String, connection: FleetConnection,
-                        store: BotStore, github: GitHubAuth, thread: ChatConversation, title: String?) async -> GitHubPR.PR? {
+    private func openPR(_ bot: Bot, repo: String, token: String, store: BotStore, github: GitHubAuth,
+                        thread: ChatConversation, title: String?) async -> GitHubPR.PR? {
         do {
             let readAt = Date()
-            let changes = try await changes(for: workspace)
-            guard !changes.files.isEmpty else {
+            let status = try await taskStatus(bot)
+            guard status.pending > 0 else {
                 store.append(.system, String(localized: "Nothing to review: this task has no saved changes that the project's main version doesn't already have."), to: thread); return nil
             }
+            let pushed = try await pushTask(bot, store: store, github: token, force: true)
             let runs = unshippedRuns(bot, store: store)
             var text = PRText.make(bot: bot, runs: runs, machine: FleetConnection.machineName)
             if let title { text.title = title }
-            let approved = LocalBotState.shared[bot.id]?.prFiles ?? [:]
-            let pr = try await pushMovingOn(bot, changes: changes, store: store) {
-                try await GitHubPR(session: githubSession ?? .shared, token: token).open(changes, repo: repo, title: text.title, body: text.body, bot: bot.id,
-                                                      extraFiles: approved, start: $0)
-            }
+            let pr = try await GitHubPR(session: githubSession ?? .shared, token: token)
+                .open(repo: repo, head: pushed?.branch ?? status.branch, base: status.defaultBranch ?? "main", title: text.title, body: text.body)
             store.append(.system, String(localized: "In review: pull request #\(pr.number), \(pr.url.absoluteString)"), kind: .prCard, runId: runs.last?.id, to: thread)
             // Its runs are in this PR now, even after the thread is cleared.
             LocalBotState.shared.update(bot.id) { $0.shippedThrough = max($0.shippedThrough ?? .distantPast, readAt) }
-            for path in pr.added { store.append(.system, String(localized: "Added \(path), which you approved, to the pull request."), to: thread) }
-            for (path, why) in pr.skipped.sorted(by: { $0.key < $1.key }) {
-                switch why {
-                case .inChanges: store.append(.system, String(localized: "Left out \(path) you approved: the bot's changes already have one, and I don't write over it."), to: thread)
-                case .inBase:
-                    // It's in the repo now: nothing more to carry.
-                    LocalBotState.shared.update(bot.id) { $0.prFiles?[path] = nil }
-                    store.append(.system, String(localized: "Left out \(path) you approved: the repo already has one, and I don't write over it."), to: thread)
-                }
-            }
             return pr
         } catch GitHubPR.Failure.cantWrite(let repo) {
             let install = await github.installState(for: repo)
