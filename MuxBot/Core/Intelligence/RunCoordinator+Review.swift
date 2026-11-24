@@ -104,6 +104,11 @@ extension RunCoordinator {
         facts.head = status?.head
         facts.pending = status?.pending ?? unshippedRuns(bot, store: store).count
         facts.ahead = status.map { $0.ahead ?? $0.pending } ?? 0
+        // Just merged: nothing in this task until its next run starts fresh.
+        if LocalBotState.shared[bot.id]?.startFresh == true {
+            facts.pending = 0
+            facts.ahead = 0
+        }
         if review(for: bot) != nil, let standing = reviewStandings[bot.id] {
             let head = reviewHeads[bot.id]
             let reviewStatus: TaskState.Review.Status = switch standing {
@@ -177,7 +182,7 @@ extension RunCoordinator {
         }
         do {
             let sha = try await GitHubReview(session: githubSession ?? .shared, token: token)
-                .merge(repo: repo, number: state.number, title: state.title, sha: reviewHeads[bot.id]?.sha)
+                .merge(repo: repo, number: state.number, title: state.title, sha: taskStatuses[bot.id]?.head ?? reviewHeads[bot.id]?.sha)
             await afterMerge(bot, mergeSHA: sha.isEmpty ? nil : sha, store: store)
         } catch GitHubPR.Failure.cantWrite(let repo) {
             store.append(.system, Self.cantWriteText(repo, await github.installState(for: repo)), to: thread)
@@ -190,24 +195,82 @@ extension RunCoordinator {
     }
 
     /// The task's changes joined the project: the review closes and the
-    /// next change starts a new task, in a fresh work copy from the
-    /// project's main version.
+    /// next change starts a new task from the project's main version. With
+    /// darkmux's fresh runs (darkmux #3684) the work copy stays and the next
+    /// run starts on a new branch from the merged main, fetched now;
+    /// without, a fresh work copy is made.
     func afterMerge(_ bot: Bot, mergeSHA: String?, store: BotStore) async {
         guard review(for: bot) != nil else { return }
         let thread = store.conversation(for: .bot(bot.id))
+        let canStartFresh = gitFetcher != nil ? true : (await capabilities()).contains("fresh_branch")
+        let fresh = bot.workspaceName != nil && canStartFresh
         LocalBotState.shared.update(bot.id) {
             $0.review = nil
-            $0.task = ($0.task ?? 1) + 1
             $0.shippedThrough = .now
+            if fresh { $0.startFresh = true } else { $0.task = ($0.task ?? 1) + 1 }
         }
         reviewStandings[bot.id] = nil
         reviewHeads[bot.id] = nil
         store.append(.system, TaskReview.nextTaskLine(fromMain: true), to: thread)
+        if fresh {
+            if let token = githubToken?() { _ = try? await fetchTask(bot, github: token) }
+            return
+        }
         // Until the new work copy is made, no run goes to the merged one.
         bot.workspaceName = nil
         taskStatuses[bot.id] = nil
         store.save()
         await setUpWorkCopy(for: bot, store: store)
+    }
+
+    /// Fetches the project's branches into the work copy (darkmux #3681).
+    @discardableResult
+    func fetchTask(_ bot: Bot, github: String?) async throws -> DarkmuxClient.GitStatus {
+        guard let workspace = bot.workspaceName else { throw SendRefused(sentence: RunBlocker.noCode.message) }
+        let fetch = gitFetcher ?? { [connection] workspace, github in
+            guard let connection, let token = connection.token else { throw NotPaired() }
+            return try await connection.client.gitFetch(token: token, workspace: workspace, github: github)
+        }
+        let status = try await fetch(workspace, github)
+        taskStatuses[bot.id] = status
+        return status
+    }
+
+    /// Bring in changes: the project's main version moved in a way that
+    /// blocks the merge, so darkmux fetches it, brings it into the task
+    /// (`merge_main`), and the task goes to its review again. A conflict
+    /// changes nothing and says so.
+    func bringInChanges(_ bot: Bot, store: BotStore, github: GitHubAuth) async {
+        let thread = store.conversation(for: .bot(bot.id))
+        let state = taskState(bot, store: store)
+        if let why = state.refusal(.bringInChanges, standing: reviewStandings[bot.id]) {
+            store.append(.system, why, to: thread)
+            return
+        }
+        guard state == .mainMoved else {
+            store.append(.system, String(localized: "Someone changed this review on GitHub. Mux Bot can't bring those changes in from here yet: look at them with See it on GitHub."), to: thread)
+            return
+        }
+        guard let token = github.token, let workspace = bot.workspaceName else { return }
+        await oneAtATime(bot.id) { [self] in
+            do {
+                try await fetchTask(bot, github: token)
+                let merge = gitMerger ?? { [connection] workspace in
+                    guard let connection, let token = connection.token else { throw NotPaired() }
+                    return try await connection.client.gitMergeMain(token: token, workspace: workspace)
+                }
+                let merged = try await merge(workspace)
+                if !merged.upToDate {
+                    _ = try await pushTask(bot, store: store, github: token)
+                    store.append(.system, String(localized: "Brought in the project's latest version. The review has it now."), to: thread)
+                }
+            } catch {
+                let said = Self.plain(error)
+                let line = store.append(.system, String(localized: "Couldn't bring in the latest version: \(said.sentence)"), to: thread)
+                messageDetails[line.id] = said.details
+            }
+        }
+        await refreshReview(bot, store: store, github: github)
     }
 
     /// A change saved while its task is in review joins the review: the

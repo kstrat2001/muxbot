@@ -1750,6 +1750,10 @@ final class RunCoordinator {
     /// nil uses the client.
     var gitStatusSource: ((String) async throws -> DarkmuxClient.GitStatus)?
     var gitPusher: ((_ workspace: String, _ github: String?, _ repo: String?) async throws -> DarkmuxClient.GitPushed)?
+    var gitFetcher: ((_ workspace: String, _ github: String?) async throws -> DarkmuxClient.GitStatus)?
+    var gitMerger: ((_ workspace: String) async throws -> DarkmuxClient.GitMerged)?
+    /// Runs sent as a fresh task (`fresh: true`), for tests.
+    @ObservationIgnored var submittedFresh: Set<UUID> = []
     /// Tests stand in for darkmux's file route here (darkmux #3688).
     var fileAdder: ((_ workspace: String, _ path: String, _ data: Data) async throws -> DarkmuxClient.FileResult)?
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?
@@ -1834,10 +1838,14 @@ final class RunCoordinator {
         guard let connection, let token = connection.token,
               let mapped = run.crew.darkmuxRole, let bot = run.bot,
               let workspace = bot.workspaceName else { return false }
+        // The first run after a merge starts the next task from the
+        // project's main version (darkmux #3684); a Tweak never does.
+        let fresh = continues == nil && LocalBotState.shared[bot.id]?.startFresh == true
         let submit = workSubmitter ?? { role, message, profile, workspace, continues in
             try await connection.client.submitWork(token: token, role: role, message: message, profile: profile,
-                                                   workspace: workspace, continues: continues)
+                                                   workspace: workspace, continues: continues, fresh: fresh)
         }
+        if fresh { submittedFresh.insert(run.id) }
         let thread = store.conversation(for: .bot(bot.id))
         markStartedHere(run)
         starting.insert(run.id)
@@ -1872,6 +1880,8 @@ final class RunCoordinator {
                 }
                 run.darkmuxWorkId = workId
                 saidWaiting.remove(run.id)
+                // The next task has started: later runs continue it.
+                if fresh { LocalBotState.shared.update(bot.id) { $0.startFresh = nil } }
                 recordWork(workId, for: run)
                 if let pairing = connection.pairingId { recordPairing(pairing, for: run) }
                 starting.remove(run.id)

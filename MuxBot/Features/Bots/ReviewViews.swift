@@ -243,6 +243,14 @@ struct ReviewCardView: View {
                 }
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
+            // The project moved on in a way that blocks the merge: darkmux
+            // brings it into the task (`RunCoordinator.bringInChanges`).
+            if brain.runs.taskState(bot, store: store) == .mainMoved {
+                Button("Bring in changes", systemImage: "arrow.down.to.line") {
+                    Task { await brain.runs.bringInChanges(bot, store: store, github: github) }
+                }
+                .buttonStyle(.bordered)
+            }
             Button("See it on GitHub", systemImage: "arrow.up.forward.square") { openURL(state.url) }
                 .buttonStyle(.bordered)
             if canPreview { PreviewToggle() }
