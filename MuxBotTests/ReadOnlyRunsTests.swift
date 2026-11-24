@@ -3,9 +3,9 @@ import Testing
 @testable import MuxBot
 
 /// muxbot#144 step 6 (darkmux #3682): a darkmux that runs reporting crews
-/// with a read-only work copy gets Researcher as its `researcher` role, and
-/// nothing a reporting crew left is put back, since it can't have changed
-/// anything. An older darkmux keeps `analyst` and the safety net.
+/// with a read-only work copy gets Researcher as its `researcher` role. A
+/// reporting run that committed anyway (that machine's own role file can
+/// write) is still put back; an older darkmux keeps `analyst`.
 @Suite(.serialized) @MainActor
 struct ReadOnlyRunsTests {
     private func setUp(capabilities: Set<String>) -> (BotStore, Bot, RunCoordinator) {
@@ -38,7 +38,7 @@ struct ReadOnlyRunsTests {
     /// A research run that (somehow) committed: what darkmux reports.
     private let committed = #"{"status":"done","result":{"final_assistant":"It's in main.swift."},"commit":"abc1234","branch":"mux/site-1","undone":false}"#
 
-    @Test func researcherGoesToTheReadOnlyRoleAndIsNotPutBack() async {
+    @Test func researcherGoesToTheReadOnlyRoleAndACommitIsStillPutBack() async {
         let (store, bot, runs) = setUp(capabilities: ["read_only_runs"])
         let roles = Recorder()
         let undone = Recorder()
@@ -47,10 +47,9 @@ struct ReadOnlyRunsTests {
         runs.workUndoer = { id in undone.add(id); throw DarkmuxClient.ClientError(message: "nothing to undo", status: 409) }
         let run = store.proposeRun(task: "Where is the header set?", crew: .researcher, on: bot)
         runs.decide(.approve, on: run, store: store)
-        await until { run.phase != .running && run.phase != .proposed }
-        try? await Task.sleep(for: .milliseconds(100))
+        await until { !undone.values.isEmpty }
         #expect(roles.values == ["researcher"], "\(roles.values)")
-        #expect(undone.values.isEmpty, "a read-only run is never put back: \(undone.values)")
+        #expect(undone.values == ["w-1"], "darkmux reported a commit, so it's put back: \(undone.values)")
     }
 
     @Test func anOlderDarkmuxKeepsAnalystAndTheSafetyNet() async {
@@ -72,10 +71,7 @@ struct ReadOnlyRunsTests {
         runs.darkmuxCapabilities = ["read_only_runs"]
         #expect(runs.role(for: .reviewer) == "code-reviewer")
         #expect(runs.role(for: .coder) == "coder")
-        #expect(runs.runsReadOnly(.reviewer))
-        #expect(!runs.runsReadOnly(.coder))
         runs.darkmuxCapabilities = []
         #expect(runs.role(for: .researcher) == "analyst")
-        #expect(!runs.runsReadOnly(.researcher))
     }
 }

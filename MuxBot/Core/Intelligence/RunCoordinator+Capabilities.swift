@@ -33,11 +33,4 @@ extension RunCoordinator {
         if crew == .researcher, darkmuxCan("read_only_runs") { return "researcher" }
         return crew.darkmuxRole
     }
-
-    /// A crew that only reports, on a darkmux that runs it with a read-only
-    /// work copy: it can't change the project, so its results need no
-    /// putting back (`revertUnasked`).
-    func runsReadOnly(_ crew: CrewRole) -> Bool {
-        !crew.changesFiles && darkmuxCan("read_only_runs") && role(for: crew) != nil
-    }
 }
