@@ -25,9 +25,6 @@ final class RunCoordinator {
     var darkmuxCapabilities: Set<String>?
     /// Tests answer whoami's capabilities here.
     @ObservationIgnored var capabilitiesSource: (() async throws -> Set<String>)?
-    /// Runs that went to a role darkmux runs with a read-only work copy
-    /// (darkmux #3682): they can't change the project, so nothing is put back.
-    @ObservationIgnored var readOnlyRuns: Set<UUID> = []
     /// Posts "result ready" / "didn't finish" notifications.
     var notifier: NotificationService?
     var recipes = RecipeStore()
@@ -445,7 +442,10 @@ final class RunCoordinator {
         // A crew that only reports never changes the project: its files are
         // put back, and nothing goes to GitHub.
         if status.commit != nil, !run.crew.changesFiles {
-            if !readOnlyRuns.contains(run.id) { Task { await self.revertUnasked(run, store: store) } }
+            // Even on a darkmux that runs these crews read-only (darkmux
+            // #3682): a commit means this machine's role could write (its
+            // own role file), so it's put back all the same.
+            Task { await self.revertUnasked(run, store: store) }
             return
         }
         if status.commit != nil, let bot = run.bot, bot.githubStart != nil { Task { await self.backUp(bot, store: store) } }
@@ -1770,7 +1770,7 @@ final class RunCoordinator {
         recordWork(workId, for: run)
         store.save()
         // A crew that only reports never leaves edits behind either.
-        if !run.crew.changesFiles, !readOnlyRuns.contains(run.id) { Task { await self.revertUnasked(run, store: store) } }
+        if !run.crew.changesFiles { Task { await self.revertUnasked(run, store: store) } }
     }
 
     static func leftBehindLine(_ files: [String?], tweak: Bool) -> String {
@@ -1924,7 +1924,6 @@ final class RunCoordinator {
                 // gets them as its read-only roles.
                 _ = await capabilities()
                 let role = role(for: run.crew) ?? mapped
-                if runsReadOnly(run.crew) { readOnlyRuns.insert(run.id) }
                 let brief = Self.workBrief(message, crew: run.crew, recipe: recipes.recipe(for: bot), skills: BotSkill.relevant(bot.skills, to: run.task))
                 let workId: String, profile: String?
                 do {
