@@ -142,7 +142,8 @@ struct DarkmuxClient: Sendable {
     /// way `darkmux dispatch <role>` would; the reply names the profile used.
     func submitWork(token: String, role: String, message: String, profile: String?, workspace: String, continues: String? = nil) async throws -> (workId: String, profile: String?) {
         struct Reply: Decodable { var work_id: String; var profile: String? }
-        let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace, continues: continues),
+        let data = try await send("POST", "/client/work", body: WorkBody(role: role, message: message, profile: profile, workspace: workspace,
+                                                                         continues: continues),
                                   headers: ["Authorization": "Bearer \(token)"])
         let reply = try JSONDecoder().decode(Reply.self, from: data)
         return (reply.work_id, reply.profile)

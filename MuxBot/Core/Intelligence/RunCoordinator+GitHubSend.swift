@@ -131,6 +131,9 @@ extension RunCoordinator {
         do {
             let pushed = try await whileBusy { try await self.renewingSignIn(github) { try await push(workspace, $0, repo) } }
             remoteMoved.remove(bot.id)
+            // A push just made counts as the minute's send: the status read
+            // right after it may not show it yet.
+            lastResend[bot.id] = Date()
             await refreshTaskStatus(bot)
             return pushed
         } catch let error as DarkmuxClient.ClientError where error.code == "remote_moved" {

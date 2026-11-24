@@ -243,6 +243,14 @@ struct ReviewCardView: View {
                 }
                 .buttonStyle(.borderedProminent).tint(Color.brandGreen)
             }
+            // The project moved on in a way that blocks the merge: darkmux
+            // brings it into the task (`RunCoordinator.bringInChanges`).
+            if brain.runs.taskState(bot, store: store) == .mainMoved {
+                Button("Bring in changes", systemImage: "arrow.down.to.line") {
+                    Task { await brain.runs.bringInChanges(bot, store: store, github: github) }
+                }
+                .buttonStyle(.bordered)
+            }
             // Changes GitHub doesn't have yet: they're sent on their own,
             // and this sends them now (`TaskState.Action.send`).
             if brain.runs.taskState(bot, store: store) == .notSent, !brain.runs.isPushing(bot.id) {

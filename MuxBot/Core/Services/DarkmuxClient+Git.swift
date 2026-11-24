@@ -58,6 +58,15 @@ extension DarkmuxClient {
         enum CodingKeys: String, CodingKey { case head, upToDate = "up_to_date", fastForward = "fast_forward" }
     }
 
+    /// (darkmux #3684) `new_task`: whether the work copy moved onto the
+    /// next task, and how many changes made after the merge came along.
+    struct GitNewTask: Decodable, Sendable, Equatable {
+        var moved: Bool
+        var branch: String
+        var head: String?
+        var carried: Int
+    }
+
     struct FileResult: Decodable, Sendable, Equatable {
         var path: String
         var workId: String?
@@ -97,6 +106,13 @@ extension DarkmuxClient {
     /// Brings the project's main version (as last fetched) into the task.
     func gitMergeMain(token: String, workspace: String) async throws -> GitMerged {
         try await git("merge_main", token: token, workspace: workspace, timeout: 120)
+    }
+
+    /// After GitHub merged the task (`mergedHead`, by merge commit
+    /// `mergeSHA`): the work copy moves onto the next task, from the merged
+    /// main, as last fetched (darkmux #3684).
+    func gitNewTask(token: String, workspace: String, mergedHead: String, mergeSHA: String) async throws -> GitNewTask {
+        try await git("new_task", token: token, workspace: workspace, args: ["merged_head": mergedHead, "merge_sha": mergeSHA], timeout: 120)
     }
 
     /// Commits a file you approved into the work copy (darkmux #3688).

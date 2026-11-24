@@ -1771,6 +1771,14 @@ final class RunCoordinator {
     /// nil uses the client.
     var gitStatusSource: ((String) async throws -> DarkmuxClient.GitStatus)?
     var gitPusher: ((_ workspace: String, _ github: String?, _ repo: String?) async throws -> DarkmuxClient.GitPushed)?
+    var gitFetcher: ((_ workspace: String, _ github: String?) async throws -> DarkmuxClient.GitStatus)?
+    var gitNewTasker: ((_ workspace: String, _ mergedHead: String, _ mergeSHA: String) async throws -> DarkmuxClient.GitNewTask)?
+    /// Bots whose merged task is being ended (`afterMerge`), so it ends once.
+    @ObservationIgnored var endingTasks: Set<UUID> = []
+    /// How long the next task waits for a run in the merged one to end.
+    @ObservationIgnored var runWaitInterval: Duration = .seconds(5)
+    var gitMerger: ((_ workspace: String) async throws -> DarkmuxClient.GitMerged)?
+
     /// Tests stand in for darkmux's file route here (darkmux #3688).
     var fileAdder: ((_ workspace: String, _ path: String, _ data: Data) async throws -> DarkmuxClient.FileResult)?
     var workspaceMaker: ((DarkmuxClient.WorkspaceBody) async throws -> DarkmuxClient.Workspace)?

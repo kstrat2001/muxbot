@@ -187,10 +187,8 @@ enum TaskReview {
     /// The task's line when the next one starts after a merge. A project
     /// whose work copy starts again from main says its preview won't show
     /// changes still in review elsewhere.
-    static func nextTaskLine(fromMain: Bool) -> String {
-        fromMain
-            ? String(localized: "Merged. Your next change starts a new task from the project's main version, so the preview won't show changes still in review elsewhere until they're merged.")
-            : String(localized: "Merged. Your next change starts a new task.")
+    static var nextTaskLine: String {
+        String(localized: "Merged. Your next change starts a new task from the project's main version, so the preview won't show changes still in review elsewhere until they're merged.")
     }
 }
 

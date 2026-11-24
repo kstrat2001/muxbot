@@ -75,7 +75,7 @@ struct TaskReviewTests {
 
     @Test func theCardNeverSaysGitWords() {
         let lines = [TaskReview.Standing.checking, .needsReview, .conflict, .behind, .notAllowed, .closed].compactMap(\.sentence)
-            + [TaskReview.nextTaskLine(fromMain: true), TaskReview.nextTaskLine(fromMain: false)]
+            + [TaskReview.nextTaskLine]
         for line in lines {
             for word in ["branch", "worktree", "commit", "rebase"] {
                 #expect(!line.lowercased().contains(word), "\(line)")
